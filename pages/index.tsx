@@ -1,0 +1,1031 @@
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { CopyBtn, Empty, ConfirmSheet, SkelList, AmtInput, OfflineBar, usePullRefresh, PullIndicator, confetti } from "@/components/Ui";
+import { api, cachedApi, errText, fmtTf, fmtUsd, openLink, openTgLink, tg, haptic, tick, getUi } from "@/lib/client";
+import { ReceiptSheet, NextReward } from "@/components/Extras";
+import { BRAND } from "@/lib/brand";
+import Logo from "@/components/Logo";
+import Icon from "@/components/Icons";
+import Market from "@/components/Market";
+import { RewardsPage, LevelPill } from "@/components/Retention";
+import { DepositPage, WithdrawPage, DepositHistory, PayoutHistory, PageHead } from "@/components/Cashier";
+import { Bell, Onboarding, CurrencyPick, TermsGate } from "@/components/Inbox";
+import { PaySheet, ShopsPage, SupportPage, InviteCard } from "@/components/Shops";
+import { SendPage } from "@/components/Send";
+import { SettingsPanel, useAccount, PinField, AddrPicker } from "@/components/Settings";
+import { BoostTab, DailyCard } from "@/components/Growth";
+import { SpinCard, PromoCard, AdBonus, AdRefill, Leaderboard, InAppAds } from "@/components/Engage";
+
+interface Me {
+  banned?: boolean;
+  maintenance?: boolean;
+  message?: string;
+  user: { id: string; name?: string; balance: number; energy: number; energyCost: number; refillAt: number | null; refillHours: number; maxEnergy: number; regen: number; perTap: number };
+  tasks: Task[];
+  sites: Site[];
+  run: { site_id: string; step_done: number; total: number; status: string } | null;
+  withdrawals: { id: string; amount: number; method: string; status: string; created_at: number }[];
+  announcement: { text: string; kind: "info" | "warn" | "success" } | null;
+  price?: number | null;
+  unread?: number;
+  showIntro?: boolean;
+  terms?: { version: number; text: string; url: string } | null;
+  cur?: "tfuel" | "usdt" | null;
+  ret?: any;
+  faq?: { q: string; a: string }[];
+  cfg: { send?: boolean; minWithdraw: number; methods: string[]; coinsPerUnit: number; unitLabel: string; withdrawEnabled: boolean; coinsPerTfuel: number; shops?: boolean; bdtRate?: number };
+}
+interface Task {
+  id: string;
+  type: "telegram_join" | "timer_visit";
+  title: string;
+  url?: string;
+  reward: number;
+  min_wait_seconds?: number;
+  done: boolean;
+}
+interface Site {
+  id: string;
+  name: string;
+  reward: number;
+  cooldown_minutes: number;
+  total: number;
+  ready_at: number;
+  in_progress: boolean;
+}
+type Say = (t: string, ok?: boolean) => void;
+type Tab = "tap" | "tasks" | "boost" | "tfuel" | "profile";
+
+const MAX_TAPS_PER_FLUSH = 14; // server limit is 15/sec
+const fmt = (n: number) => Math.floor(n).toLocaleString("en-US");
+const mins = (ms: number) => {
+  const m = Math.max(1, Math.ceil(ms / 60000));
+  return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`;
+};
+
+const hm = (ms: number) => {
+  const sec = Math.max(0, Math.ceil(ms / 1000));
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const x = sec % 60;
+  return h > 0 ? `${h}h ${m}m` : m > 0 ? `${m}m ${x}s` : `${x}s`;
+};
+
+export default function Home() {
+  const [me, setMe] = useState<Me | null>(null);
+  const [tab, setTab] = useState<Tab>("tap");
+  const [toast, setToast] = useState<{ t: string; ok: boolean } | null>(null);
+  const [floats, setFloats] = useState<{ id: number; x: number }[]>([]);
+  const [noTg, setNoTg] = useState(false);
+  const [payId, setPayId] = useState<string | null>(null);
+
+  const balance = useRef(0);
+  const energy = useRef(0);
+  const refillAt = useRef<number | null>(null);
+  const pending = useRef(0);
+  const [, force] = useState(0);
+  const rerender = () => force((n) => n + 1);
+  useEffect(() => { const t = getUi("start"); if (t === "tasks" || t === "tfuel" || t === "boost") setTab(t as Tab); }, []);
+  const [rk, setRk] = useState(0); // pull-to-refresh: tab content remounts and reloads
+  const [hide, setHide] = useState(false); // hide balances (👁)
+  const [seen, setSeen] = useState<string[] | null>(null); // task ids already seen (for the red dot)
+  useEffect(() => { try { setHide(localStorage.getItem("hide_bal") === "1"); setSeen(JSON.parse(localStorage.getItem("seen_tasks") || "[]")); } catch { setSeen([]); } }, []);
+  useEffect(() => { try { document.body.classList.toggle("hide-bal", hide); localStorage.setItem("hide_bal", hide ? "1" : "0"); } catch {} }, [hide]);
+
+  const say = useCallback<Say>((t, ok = false) => {
+    setToast({ t, ok });
+    if (!ok) haptic("error");
+    setTimeout(() => setToast(null), 2800);
+  }, []);
+
+  const prevUnread = useRef<number | null>(null);
+  const load = useCallback(async () => {
+    try {
+      const d = await api<Me>("me");
+      setMe(d);
+      // new notification arrived (reward, deposit, transfer…) → small popup
+      const un = d.unread || 0;
+      if (prevUnread.current !== null && un > prevUnread.current) {
+        api<any>("inbox", { action: "get" }).then((r) => { const m = r.items?.[0]?.m; if (m) say(String(m).replace(/^[^\w$]+/, "").slice(0, 140), true); }).catch(() => {});
+      }
+      prevUnread.current = un;
+      if (d.user) {
+        balance.current = d.user.balance + pending.current;
+        energy.current = Math.max(0, d.user.energy - pending.current * d.user.energyCost);
+        refillAt.current = d.user.refillAt;
+      }
+      rerender();
+    } catch (e: any) {
+      say(errText(e));
+    }
+  }, [say]);
+
+  const { pull, busy: pulling } = usePullRefresh(async () => { await load(); setRk((k) => k + 1); try { window.dispatchEvent(new Event("app:refresh")); } catch {} });
+
+  useEffect(() => {
+    const w = tg();
+    try { (w as any)?.disableVerticalSwipes?.(); } catch {} // so pulling down refreshes instead of closing the app
+    if (!w?.initData) {
+      setNoTg(true);
+      return;
+    }
+    w.ready();
+    w.expand();
+    try { const sp = String(w.initDataUnsafe?.start_param || ""); if (/^pay_[\w-]{1,64}$/.test(sp)) setPayId(sp.slice(4)); } catch {}
+    try {
+      w.setHeaderColor?.("#f4f6fb");
+      w.setBackgroundColor?.("#f4f6fb");
+    } catch {}
+    load();
+    const onVis = () => document.visibilityState === "visible" && load();
+    document.addEventListener("visibilitychange", onVis);
+    const poll = setInterval(() => document.visibilityState === "visible" && load(), 90000); // pick up new notifications
+    return () => { document.removeEventListener("visibilitychange", onVis); clearInterval(poll); };
+  }, [load]);
+
+  // every second: flush queued taps + show energy refill
+  useEffect(() => {
+    const iv = setInterval(async () => {
+      if (me?.user) {
+        const cost = me.user.energyCost;
+        if (me.user.regen > 0 && energy.current < me.user.maxEnergy) {
+          energy.current = Math.min(me.user.maxEnergy, energy.current + me.user.regen);
+        }
+        // empty → waits until the refill time, then reloads (server refills to full)
+        if (energy.current < cost && refillAt.current && Date.now() >= refillAt.current) {
+          refillAt.current = null;
+          load();
+        }
+        rerender();
+      }
+      const n = pending.current;
+      if (n > 0) {
+        pending.current = 0;
+        try {
+          const r = await api<{ balance: number; energy: number; refillAt: number | null }>("tap", { tapCount: n });
+          balance.current = r.balance + pending.current;
+          energy.current = Math.max(0, r.energy - pending.current * me!.user.energyCost);
+          refillAt.current = r.refillAt ?? null;
+          rerender();
+        } catch (e: any) {
+          say(errText(e));
+          pending.current = 0;
+          load();
+        }
+      }
+    }, 1000);
+    return () => clearInterval(iv);
+  }, [me, load, say]);
+
+  const onTap = (e: React.PointerEvent) => {
+    if (!me?.user || energy.current + 1e-9 < me.user.energyCost || pending.current >= MAX_TAPS_PER_FLUSH) return;
+    pending.current += 1;
+    energy.current -= me.user.energyCost;
+    balance.current += me.user.perTap;
+    haptic("light");
+    tick();
+    const id = Date.now() + Math.random();
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setFloats((f) => [...f.slice(-8), { id, x: e.clientX - rect.left }]);
+    setTimeout(() => setFloats((f) => f.filter((p) => p.id !== id)), 800);
+    rerender();
+  };
+
+  const [mkSub, setMkSub] = useState<string | undefined>(undefined);
+  const go = (t: Tab, sub?: string) => {
+    setMkSub(t === "tfuel" ? sub : undefined);
+    setTab(t);
+    if (t === "tasks" && me) { const ids = me.tasks.filter((x) => !x.done).map((x) => x.id); setSeen(ids); try { localStorage.setItem("seen_tasks", JSON.stringify(ids)); } catch {} }
+    if (t !== "tap") load();
+  };
+
+  if (noTg)
+    return (
+      <div className="splash">
+        <Logo size={72} />
+        <div>Please open this app from Telegram.</div>
+      </div>
+    );
+  if (!me)
+    return (
+      <div className="splash">
+        <Logo size={84} className="spin" />
+        <div>Loading…</div>
+      </div>
+    );
+  if (me.banned)
+    return (
+      <div className="splash">
+        <Logo size={64} />
+        <div className="title" style={{ color: "var(--text)" }}>Account suspended</div>
+        <div className="small" style={{ maxWidth: 280, textAlign: "center" }}>
+          Your account has been suspended. If you think this is a mistake, please contact support.
+        </div>
+      </div>
+    );
+  if (me.maintenance)
+    return (
+      <div className="splash">
+        <Logo size={64} />
+        <div className="title" style={{ color: "var(--text)" }}>Under maintenance</div>
+        <div className="small" style={{ maxWidth: 280, textAlign: "center" }}>{me.message}</div>
+      </div>
+    );
+
+  const pct = Math.max(0, Math.min(100, (energy.current / me.user.maxEnergy) * 100));
+  const empty = energy.current + 1e-9 < me.user.energyCost;
+  const left = refillAt.current ? Math.max(0, refillAt.current - Date.now()) : 0;
+  const bal = Math.floor(balance.current);
+  const cpt = me.cfg.coinsPerTfuel || 1000;
+  const T = (n: number) => fmtTf(n, cpt);
+
+  const items: [Tab, string, string][] = [
+    ["tap", "Tap", "tap"],
+    ["tasks", "Tasks", "tasks"],
+    ["boost", "Boost", "zap"],
+    ["tfuel", "TFUEL", "trend"],
+    ["profile", "Profile", "user"],
+  ];
+
+  const taskIds = me.tasks.filter((x) => !x.done).map((x) => x.id);
+  const dots: Partial<Record<Tab, boolean>> = {
+    tasks: tab !== "tasks" && seen !== null && taskIds.some((id) => !seen.includes(id)),
+    boost: tab !== "boost" && !!(me as any).dailyReady,
+    profile: tab !== "profile" && (me.unread || 0) > 0,
+  };
+
+  return (
+    <div className="app">
+      <OfflineBar />
+      <PullIndicator pull={pull} busy={pulling} />
+      {toast && <div className={`toast ${toast.ok ? "ok" : "err"}`}>{toast.t}</div>}
+
+      <div className="topbar">
+        <div className="brand">
+          <Logo size={28} />
+          {BRAND}
+        </div>
+        <div className="gap">
+          <Bell unread={me.unread || 0} onRead={() => setMe((m) => (m ? { ...m, unread: 0 } : m))} />
+          <div className="avatar">{(me.user.name || "U").slice(0, 1).toUpperCase()}</div>
+        </div>
+      </div>
+
+      {me.announcement && (
+        <div className={`banner ${me.announcement.kind}`}>
+          <Icon name="megaphone" size={18} />
+          <span>{me.announcement.text}</span>
+        </div>
+      )}
+
+      {tab !== "tfuel" && tab !== "profile" && (
+      <div className="balance-card">
+        <div className="lbl" style={{ display: "flex", justifyContent: "space-between" }}>Total balance <button type="button" aria-label="Hide balance" style={{ opacity: .7, fontSize: 15 }} onClick={() => setHide(!hide)}>{hide ? "🙈" : "👁"}</button></div>
+        <div className="amt num balv">
+          <Logo size={26} />
+          {T(bal)}
+          <span className="unit">TFUEL</span>
+        </div>
+        {(() => {
+          const ap = getUi("approx", "usdt"); const usd = (bal / cpt) * (me.price || 0);
+          if (ap === "off") return null;
+          if (ap === "bdt" && (me.cfg.bdtRate || 0) > 0) return <div className="eq num balv">≈ ৳{Math.round(usd * (me.cfg.bdtRate || 0)).toLocaleString("en-US")} BDT</div>;
+          return <div className="eq num balv">≈ {fmtUsd(usd)} USDT</div>;
+        })()}
+      </div>
+      )}
+
+      {tab === "tap" && (
+        <>
+          <div className="coin-wrap">
+            <button className="coin" onPointerDown={onTap} disabled={empty} aria-label="Tap to earn">
+              <Logo size={140} style={{ pointerEvents: "none" }} />
+            </button>
+            {floats.map((f) => (
+              <span key={f.id} className="float" style={{ left: f.x, top: 70 }}>
+                +{T(me.user.perTap)}
+              </span>
+            ))}
+          </div>
+          <div className="card energy">
+            <div className="t">
+              <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <Icon name="bolt" size={16} /> Energy
+              </span>
+              <span className="num">
+                {Math.max(0, Math.floor(energy.current))} / {me.user.maxEnergy}
+              </span>
+            </div>
+            <div className="bar">
+              <div style={{ width: `${pct}%` }} />
+            </div>
+            <div className="small" style={{ marginTop: 8, textAlign: "center" }}>
+              {empty
+                ? refillAt.current
+                  ? `Energy empty — full refill in ${hm(left)}`
+                  : "Energy empty — refilling soon…"
+                : `Each tap uses ${me.user.energyCost} energy`}
+            </div>
+            {empty && <AdRefill say={say} reload={load} />}
+          </div>
+          <NextReward me={me} cpt={cpt} onGo={() => go("tasks")} />
+        </>
+      )}
+
+      {tab === "boost" && <BoostTab key={rk} cpt={cpt} price={me.price || 0} say={say} reload={load} />}
+      {tab === "tfuel" && <Market key={(mkSub || "m") + rk} startSub={mkSub} say={say} reload={load} cpt={cpt} />}
+      {tab === "tasks" && <TasksWrap key={rk} me={me} cpt={cpt} say={say} reload={load} />}
+      {tab === "profile" && <Profile me={me} cpt={cpt} balance={bal} go={go} say={say} reload={load} onCur={(c) => setMe((m) => (m ? { ...m, cur: c } : m))} />}
+
+      <InAppAds />
+      {payId && <PaySheet id={payId} cpt={cpt} say={say} reload={load} onClose={() => setPayId(null)} />}
+      {me.terms && <TermsGate terms={me.terms} onDone={() => setMe((m) => (m ? { ...m, terms: null } : m))} />}
+      {!me.terms && !me.showIntro && me.cur === null && !payId && <CurrencyPick onDone={(c) => setMe((m) => (m ? { ...m, cur: c } : m))} />}
+      {!me.terms && me.showIntro && <Onboarding onDone={() => setMe((m) => (m ? { ...m, showIntro: false } : m))} />}
+      <div className="nav">
+        <div className="nav-in">
+          {items.map(([k, label, icon]) => (
+            <button key={k} className={tab === k ? "on" : ""} onClick={() => go(k)}>
+              <Icon name={icon} size={22} />
+              {label}
+              {dots[k] && <span className="dot" />}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TasksWrap({ me, cpt, say, reload }: { me: Me; cpt: number; say: Say; reload: () => void }) {
+  const [view, setView] = useState<"earn" | "top">("earn");
+  return (
+    <>
+      <div className="seg">
+        <button className={view === "earn" ? "on" : ""} onClick={() => setView("earn")}>Earn</button>
+        <button className={view === "top" ? "on" : ""} onClick={() => setView("top")}>Leaderboard</button>
+      </div>
+      {view === "earn" ? (
+        <>
+          <Tasks me={me} cpt={cpt} say={say} reload={reload} />
+          <PromoCard cpt={cpt} say={say} reload={reload} />
+        </>
+      ) : (
+        <Leaderboard cpt={cpt} say={say} />
+      )}
+    </>
+  );
+}
+
+/** Tasks: article site cards on top, then join / timer tasks */
+function Tasks({ me, cpt, say, reload }: { me: Me; cpt: number; say: Say; reload: () => void }) {
+  const T = (n: number) => fmtTf(n, cpt);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [started, setStarted] = useState<Record<string, number>>({});
+  const [now, setNow] = useState(Date.now());
+  const [code, setCode] = useState("");
+  const [msg, setMsg] = useState<{ t: string; ok: boolean } | null>(null);
+
+  useEffect(() => {
+    const iv = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(iv);
+  }, []);
+
+  const run = async (key: string, fn: () => Promise<void>) => {
+    setBusy(key);
+    try {
+      await fn();
+    } catch (e: any) {
+      say(errText(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const startSite = (s: Site) =>
+    run(s.id, async () => {
+      try {
+        const r = await api<{ url: string; total: number; resumed: boolean }>("start-chain", { siteId: s.id });
+        say(r.resumed ? "Continuing where you left off" : `Opening article 1 of ${r.total}`, true);
+        openLink(r.url);
+        reload();
+      } catch (e: any) {
+        if (e.message === "cooldown") reload();
+        throw e;
+      }
+    });
+
+  const claim = async () => {
+    setBusy("claim");
+    try {
+      const r = await api<{ reward: number }>("claim-reward", { inputCode: code });
+      setCode("");
+      setMsg({ t: `You earned +${T(r.reward)} TFUEL!`, ok: true });
+      say(`+${T(r.reward)} TFUEL`, true);
+      confetti();
+      reload();
+    } catch (e: any) {
+      let t = errText(e);
+      if (e.message === "wrong_code" && e.data?.attempts_left !== undefined) t += ` (${e.data.attempts_left} tries left)`;
+      setMsg({ t, ok: false });
+      if (e.message === "locked") reload();
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const openTask = (t: Task) =>
+    run(t.id, async () => {
+      if (t.type === "timer_visit") {
+        await api("start-task", { taskId: t.id });
+        setStarted((s) => ({ ...s, [t.id]: Date.now() }));
+      }
+      if (t.url) (t.type === "telegram_join" ? openTgLink : openLink)(t.url);
+    });
+
+  const verify = (t: Task) =>
+    run(t.id, async () => {
+      const r = await api<{ reward: number }>("verify-telegram", { taskId: t.id });
+      say(`+${T(r.reward)} TFUEL`, true);
+      confetti();
+      reload();
+    });
+
+  const finish = (t: Task) =>
+    run(t.id, async () => {
+      const r = await api<{ reward: number }>("complete-task", { taskId: t.id });
+      say(`+${T(r.reward)} TFUEL`, true);
+      confetti();
+      reload();
+    });
+
+  const readyTasks = me.tasks.filter((t) => !t.done && t.type !== "telegram_join" && started[t.id] && started[t.id] + (t.min_wait_seconds || 10) * 1000 <= now);
+  const claimAll = () =>
+    run("all", async () => {
+      let total = 0;
+      for (const t of readyTasks) { try { total += (await api<{ reward: number }>("complete-task", { taskId: t.id })).reward; } catch {} }
+      if (total > 0) { say(`+${T(total)} TFUEL`, true); confetti(); } else say("Nothing to claim yet");
+      reload();
+    });
+
+  const r = me.run;
+  const runSite = r ? me.sites.find((s) => s.id === r.site_id) : null;
+
+  return (
+    <>
+      <DailyCard cpt={cpt} say={say} reload={reload} />
+      <SpinCard cpt={cpt} say={say} reload={reload} />
+      <AdBonus cpt={cpt} say={say} reload={reload} />
+
+      <div className="section">
+        <h2>Article sites</h2>
+        <span className="pill info">{me.sites.filter((s) => s.ready_at <= now).length} available</span>
+      </div>
+
+      {r && (
+        <div className="card" style={{ borderColor: "#f5d58a" }}>
+          <div className="row">
+            <div className="title">Enter your code</div>
+            <span className="pill warn">
+              {r.step_done}/{r.total} read
+            </span>
+          </div>
+          <div className="sub">
+            {r.status === "code_issued"
+              ? `You reached the last article${runSite ? ` of ${runSite.name}` : ""}. Enter the 6-digit code shown there.`
+              : "Read every article in order, tap “Next article” each time. The code appears on the last one."}
+          </div>
+          <div className="code-row">
+            <input
+              inputMode="numeric"
+              maxLength={6}
+              placeholder="······"
+              value={code}
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+            />
+            <button className="btn" disabled={code.length !== 6 || busy === "claim"} onClick={claim}>
+              Claim
+            </button>
+          </div>
+          {msg && <div className={`banner ${msg.ok ? "success" : "err"}`}>{msg.t}</div>}
+        </div>
+      )}
+
+      {me.sites.length === 0 && <Empty icon="article" title="No article sites yet" hint="New ways to earn will show up here. Check back soon." />}
+      {me.sites.map((s) => {
+        const wait = s.ready_at - now;
+        const ready = wait <= 0;
+        return (
+          <div className="card" key={s.id}>
+            <div className="row">
+              <div className="left">
+                <div className="ico">
+                  <Icon name="article" />
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <div className="title">{s.name}</div>
+                  <div className="sub">
+                    {s.total} articles · <span className="reward">+{T(s.reward)}</span>
+                  </div>
+                </div>
+              </div>
+              {s.in_progress ? (
+                <button className="btn sm" disabled={busy === s.id} onClick={() => startSite(s)}>
+                  Continue
+                </button>
+              ) : ready ? (
+                <button className="btn sm" disabled={busy === s.id} onClick={() => startSite(s)}>
+                  Start
+                </button>
+              ) : (
+                <span className="pill">
+                  <Icon name="clock" size={13} /> {mins(wait)}
+                </span>
+              )}
+            </div>
+            {s.in_progress && r && (
+              <div className="progress">
+                <div style={{ width: `${(r.step_done / r.total) * 100}%` }} />
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      <div className="section">
+        <h2>Quick tasks</h2>
+        {readyTasks.length > 1 && <button className="btn sm" disabled={busy === "all"} onClick={claimAll}>Claim all ({readyTasks.length})</button>}
+      </div>
+      {me.tasks.filter((t) => !t.done).length === 0 && <Empty icon="tasks" title="All caught up" hint="You've finished every task for now. New ones appear here." />}
+      {me.tasks.filter((t) => !t.done).map((t) => {
+        const st = started[t.id];
+        const wait = (t.min_wait_seconds || 10) * 1000;
+        const left = st ? Math.max(0, Math.ceil((st + wait - now) / 1000)) : 0;
+        return (
+          <div className="card" key={t.id}>
+            <div className="row">
+              <div className="left">
+                <div className={`ico ${t.type === "telegram_join" ? "blue" : ""}`}>
+                  <Icon name={t.type === "telegram_join" ? "send" : "clock"} />
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <div className="title">{t.title}</div>
+                  <div className="sub">
+                    <span className="reward">+{T(t.reward)}</span>
+                  </div>
+                </div>
+              </div>
+              {t.done ? (
+                <span className="pill ok">
+                  <Icon name="check" size={13} /> Done
+                </span>
+              ) : t.type === "telegram_join" ? (
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button className="btn sec sm" disabled={busy === t.id} onClick={() => openTask(t)}>
+                    Join
+                  </button>
+                  <button className="btn sm" disabled={busy === t.id} onClick={() => verify(t)}>
+                    Verify
+                  </button>
+                </div>
+              ) : !st ? (
+                <button className="btn sm" disabled={busy === t.id} onClick={() => openTask(t)}>
+                  Open
+                </button>
+              ) : (
+                <button className="btn sm" disabled={left > 0 || busy === t.id} onClick={() => finish(t)}>
+                  {left > 0 ? `${left}s` : "Claim"}
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+/** Profile: balance in TFUEL + USDT value, shortcuts, optional legacy payout methods, history */
+type Page = null | "rewards" | "send" | "deposit" | "deposits" | "withdraw" | "payouts" | "assets" | "history" | "settings" | "other" | "shops" | "support";
+
+function Profile({ me, cpt, balance, go, say, reload, onCur }: { me: Me; cpt: number; balance: number; go: (t: Tab, sub?: string) => void; say: Say; reload: () => void; onCur: (c: "tfuel" | "usdt") => void }) {
+  const [page, setPage] = useState<Page>(null);
+  const [from, setFrom] = useState<Page>(null);
+  const [w, setW] = useState<Wallet | null>(null);
+  const loadW = useCallback(() => { cachedApi<Wallet>("wallet", {}, setW).catch(() => {}); }, []);
+  useEffect(() => { loadW(); }, [loadW]);
+  useEffect(() => { const h = () => loadW(); window.addEventListener("app:refresh", h); return () => window.removeEventListener("app:refresh", h); }, [loadW]);
+  useEffect(() => { try { window.scrollTo(0, 0); } catch {} }, [page]);
+  const nav = (p: Page, f: Page = null) => { setPage(p); setFrom(f); };
+  const back = () => nav(from);
+  useEffect(() => {
+    const b = (tg() as any)?.BackButton;
+    if (!b || !page) return;
+    const h = () => { setPage(from); setFrom(null); };
+    b.show(); b.onClick(h);
+    return () => { b.offClick(h); b.hide(); };
+  }, [page, from]);
+  const refresh = () => { reload(); loadW(); };
+  const T = (n: number) => fmtTf(n, cpt);
+
+  if (page === "rewards") return <RewardsPage say={say} onBack={back} cpt={cpt} reload={refresh} />;
+  if (page === "send") return <SendPage say={say} onBack={back} cpt={cpt} reload={refresh} />;
+  if (page === "deposit") return <DepositPage say={say} reload={refresh} onBack={back} onHistory={() => nav("deposits", "deposit")} onBuy={() => { nav(null); go("tfuel", "trade"); }} />;
+  if (page === "deposits") return <DepositHistory say={say} onBack={back} />;
+  if (page === "withdraw") return <WithdrawPage say={say} reload={refresh} onBack={back} onHistory={() => nav("payouts", "withdraw")} />;
+  if (page === "payouts") return <PayoutHistory say={say} onBack={back} legacy={me.withdrawals} cpt={cpt} fmtTf={fmtTf} />;
+  if (page === "shops") return <ShopsPage say={say} onBack={back} cpt={cpt} />;
+  if (page === "support") return <SupportPage say={say} onBack={back} faq={me.faq || []} />;
+  if (page === "settings") return <SettingsPage say={say} onBack={back} userId={me.user.id} onCur={onCur} />;
+  if (page === "other") return (<><PageHead title="Other payout methods" onBack={back} /><LegacyWithdraw me={me} cpt={cpt} balance={balance} say={say} reload={refresh} /></>);
+  if (page === "assets") return (<><PageHead title="Portfolio & assets" onBack={back} />{w ? <AssetsPage w={w} balance={balance} cpt={cpt} go={go} /> : <SkelList />}</>);
+  if (page === "history") return (<><PageHead title="Transaction history" onBack={back} />{w ? <div className="card"><ActivityList first={w.activity} cpt={cpt} /></div> : <SkelList />}</>);
+
+  const price = w?.price || me.price || 0;
+  const tf = Math.max(balance, 0);
+  const tfUsd = (tf / cpt) * price;
+  const usdt = w?.usdt.balance || 0;
+  const Row = ({ icon, t, s, onClick }: { icon: string; t: string; s: string; onClick: () => void }) => (
+    <button className="mrow" onClick={onClick}>
+      <span className="mi"><Icon name={icon as any} size={20} /></span>
+      <span className="mt">{t}<div className="ms">{s}</div></span>
+      <span className="mc"><Icon name="chevron" size={18} /></span>
+    </button>
+  );
+
+  return (
+    <>
+      <div className="section">
+        <h2>{me.user.name || "Profile"}</h2>
+        <span className="pill">ID {me.user.id}</span>
+        <LevelPill ret={me.ret} />
+      </div>
+
+      <div className="balance-card" style={{ marginTop: 0 }}>
+        <div className="lbl">Total balance</div>
+        {me.cur === "usdt" ? (
+          <>
+            <div className="amt num balv"><Logo kind="usdt" size={32} />{fmtUsd(tfUsd + usdt)}<span className="unit">USDT</span></div>
+            <div className="eq num">{T(tf)} TFUEL{usdt > 0 ? ` + ${fmtUsd(usdt)} USDT cash` : ""}</div>
+          </>
+        ) : (
+          <>
+            <div className="amt num balv"><Logo size={32} />{T(tf)}<span className="unit">TFUEL</span></div>
+            <div className="eq num">≈ {fmtUsd(tfUsd)} USDT{usdt > 0 ? ` · + ${fmtUsd(usdt)} USDT cash` : ""}</div>
+          </>
+        )}
+      </div>
+
+      <div className="grid3b">
+        <button className="btn" onClick={() => nav("deposit")}>Deposit</button>
+        <button className="btn sec" onClick={() => nav("withdraw")}>Withdraw</button>
+        <button className="btn sec" onClick={() => go("tfuel", "trade")}>Trade</button>
+      </div>
+
+      <div className="mhead">Progress</div>
+      <div className="menu">
+        <Row icon="gift" t="Rewards & progress" s="Level, weekly challenge, achievements, streak freeze" onClick={() => nav("rewards")} />
+      </div>
+
+      <div className="mhead">Wallet</div>
+      <div className="menu">
+        <Row icon="wallet" t="Portfolio & assets" s="Balances, value and where your TFUEL came from" onClick={() => nav("assets")} />
+        <Row icon="clock" t="Transaction history" s="Everything that moved in your wallet" onClick={() => nav("history")} />
+        {me.cfg.send && <Row icon="send" t="Send TFUEL" s="Send to a friend with their transfer code" onClick={() => nav("send")} />}
+        <Row icon="download" t="Deposit history" s="Your USDT deposits and their status" onClick={() => nav("deposits")} />
+        <Row icon="send" t="Payout history" s="USDT and TFUEL withdrawals" onClick={() => nav("payouts")} />
+      </div>
+
+      <div className="mhead">Account</div>
+      <div className="menu">
+        {me.cfg.methods.length > 0 && <Row icon="gift" t="Other payout methods" s="Withdraw TFUEL to other accounts" onClick={() => nav("other")} />}
+        {me.cfg.shops && <Row icon="gift" t="Partner shops" s="Sign in automatically and pay with TFUEL or USDT" onClick={() => nav("shops")} />}
+        <Row icon="info" t="Help & support" s="Message us and see replies" onClick={() => nav("support")} />
+        <Row icon="settings" t="Settings" s="Appearance, security, addresses, notifications" onClick={() => nav("settings")} />
+      </div>
+    </>
+  );
+}
+
+/** TFUEL → other payout methods (older flow) */
+function LegacyWithdraw({ me, cpt, balance, say, reload }: { me: Me; cpt: number; balance: number; say: Say; reload: () => void }) {
+  const [amount, setAmount] = useState("");
+  const [method, setMethod] = useState("");
+  const [account, setAccount] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [pin, setPin] = useState("");
+  const [ecode, setEcode] = useState("");
+  const [ask, setAsk] = useState(false);
+  const { a: acct } = useAccount();
+  const [msg, setMsg] = useState<{ t: string; ok: boolean } | null>(null);
+  const { minWithdraw, methods, withdrawEnabled } = me.cfg;
+  const T = (n: number) => fmtTf(n, cpt);
+  const submit = async () => {
+    setBusy(true);
+    try {
+      await api("withdraw", { amount: Math.round((Number(amount) || 0) * cpt), method, account, pin, email_code: ecode });
+      setPin(""); setEcode("");
+      setMsg({ t: "Request sent. We'll review it and pay out soon.", ok: true });
+      setAmount("");
+      reload();
+    } catch (e: any) {
+      let t = errText(e);
+      if (e.message === "below_minimum" && e.data?.min) t = `Minimum withdrawal is ${T(e.data.min)} TFUEL.`;
+      setMsg({ t, ok: false });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="card">
+      <div className="sub">Minimum {T(minWithdraw)} TFUEL</div>
+      {!withdrawEnabled ? (
+        <div className="banner warn"><Icon name="alert" size={18} /><span>Withdrawals are paused for now. Please check back later.</span></div>
+      ) : (
+        <>
+          <label>Amount (TFUEL)</label>
+          <AmtInput placeholder={`Min ${T(minWithdraw)}`} value={amount} onChange={setAmount} />
+          <div className="small muted" style={{ marginTop: 4 }}>
+            {Number(amount) > 0 ? `≈ ${fmtUsd(Number(amount) * (me.price || 0))} USDT` : `Available: ${T(balance)} TFUEL`}
+          </div>
+          <label>Method</label>
+          <select value={method} onChange={(e) => setMethod(e.target.value)}>
+            <option value="">Select a method</option>
+            {methods.map((m) => (<option key={m} value={m}>{m}</option>))}
+          </select>
+          <label>Account / wallet address</label>
+          <AddrPicker acc={acct} onPick={setAccount} />
+          <input placeholder="Enter your account or address" maxLength={100} value={account} onChange={(e) => setAccount(e.target.value)} />
+          <PinField acc={acct} value={pin} onChange={setPin} ecode={ecode} onEcode={setEcode} say={say} details={{ amount: Math.round((Number(amount) || 0) * cpt) / cpt, asset: "TFUEL", network: method, address: account.replace(/[\u0000-\u001f\u007f\s]/g, "") }} />
+          <div style={{ marginTop: 14 }}>
+            <button className="btn block" disabled={busy || !(Number(amount) > 0) || !method || account.trim().length < 4} onClick={() => setAsk(true)}>Request withdrawal</button>
+          </div>
+          {msg && <div className={`banner ${msg.ok ? "success" : "err"}`}>{msg.t}</div>}
+          {ask && <ConfirmSheet title="Confirm withdrawal" busy={busy} confirmLabel="Confirm & request" warn="Double-check the account. Payouts can't be reversed." rows={[["Amount", `${T(Math.round((Number(amount) || 0) * cpt))} TFUEL`], ["Method", method], ["Account", account.trim()]]} onConfirm={async () => { await submit(); setAsk(false); }} onCancel={() => setAsk(false)} />}
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Settings page: everything in labelled sections */
+function SettingsPage({ say, onBack, userId, onCur }: { say: Say; onBack: () => void; userId: string; onCur: (c: "tfuel" | "usdt") => void }) {
+  return (
+    <>
+      <PageHead title="Settings" onBack={onBack} />
+      <SettingsPanel say={say} onCur={onCur} notify={<NotifyToggle />} account={
+        <><InviteCard say={say} /><div className="row" style={{ marginTop: 14 }}>
+          <div><div className="title">Your ID</div><div className="sub num">{userId}</div></div>
+          <CopyBtn text={userId} />
+        </div></>
+      } />
+    </>
+  );
+}
+
+
+const EARN_LABEL: Record<string, string> = {
+  tap: "Tapping", articles: "Article sites", tasks: "Tasks", daily: "Daily rewards", referral: "Referrals",
+  mining: "Auto-mining", staking: "Staking rewards", bought: "Bought with USDT", adjust: "Admin credit", received: "Received from friends",
+};
+const SPEND_LABEL: Record<string, string> = { boosts: "Boosts", sold: "Sold for USDT", withdrawn: "Withdrawn", shop: "Shops", sent: "Sent to friends" };
+const USDT_LABEL: Record<string, string> = {
+  deposited: "Deposited", sold: "From selling TFUEL", bought: "Spent buying TFUEL", withdrawn: "Withdrawn", adjusted: "Admin adjustment",
+};
+const ACT_LABEL: Record<string, string> = {
+  article: "Article reward", task: "Task reward", daily: "Daily reward", referral: "Referral bonus", mining: "Mining collected",
+  stake_paid: "Staking payout", boost: "Boost purchased", sell: "Sold TFUEL", buy: "Bought TFUEL", deposit: "USDT deposit",
+  deposit_rejected: "Deposit rejected", usdt_withdraw: "USDT withdrawal", usdt_paid: "Withdrawal paid", usdt_rejected: "Withdrawal refunded", adjust: "Balance adjustment",
+  spin: "Lucky Spin", promo: "Promo code", prize: "Leaderboard prize", ads: "Ad reward", limit_buy: "Limit buy filled", limit_sell: "Limit sell filled", send: "Sent to a friend", receive: "Received from a friend", shop: "Shop payment", shop_refund: "Shop refund",
+};
+
+interface Wallet {
+  price: number | null;
+  tfuel: { balance: number; locked: number; mining: number; earn: Record<string, number>; spent: Record<string, number> };
+  usdt: { balance: number; tot: Record<string, number> };
+  activity: { id: string; t: string; c: number; u: number; n: string; at: number }[];
+  portfolio: [number, number][];
+}
+
+function AssetsPage({ w, balance, cpt, go }: { w: Wallet; balance: number; cpt: number; go: (t: Tab, sub?: string) => void }) {
+  const T = (n: number) => fmtTf(n, cpt);
+  const price = w.price || 0;
+  const tf = Math.max(balance, 0);
+  const tfUsd = (tf / cpt) * price;
+  const total = tfUsd + w.usdt.balance;
+  const earnRows = Object.entries(w.tfuel.earn).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+  const earnSum = earnRows.reduce((a, [, v]) => a + v, 0) || 1;
+  const spentRows = Object.entries(w.tfuel.spent).filter(([, v]) => v > 0);
+  const usdtRows = Object.entries(w.usdt.tot).filter(([, v]) => v !== 0);
+  return (
+    <div className="card">
+
+        <Portfolio pts={w.portfolio || []} total={total} />
+        <div className="title" style={{ margin: "8px 0 4px" }}>My assets</div>
+        <div className="row hist">
+          <div className="left">
+            <Logo size={34} />
+            <div>
+              <div className="title">TFUEL</div>
+              <div className="sub num">{price ? `@ ${fmtUsd(price)} USDT` : "price unavailable"}</div>
+            </div>
+          </div>
+          <div style={{ textAlign: "right" }}>
+            <div className="title num">{T(tf)}</div>
+            <div className="sub num">≈ {fmtUsd(tfUsd)} USDT</div>
+          </div>
+        </div>
+        <div className="row hist">
+          <div className="left">
+            <Logo kind="usdt" size={34} />
+            <div>
+              <div className="title">USDT</div>
+              <div className="sub">Tether</div>
+            </div>
+          </div>
+          <div style={{ textAlign: "right" }}>
+            <div className="title num">{fmtUsd(w.usdt.balance)}</div>
+            <div className="sub num">1 USDT = $1.00</div>
+          </div>
+        </div>
+        {(w.tfuel.locked > 0 || w.tfuel.mining > 0) && (
+          <div className="small muted num" style={{ marginTop: 8 }}>
+            {w.tfuel.locked > 0 && <>Staked (locked): {T(w.tfuel.locked)} TFUEL · </>}
+            {w.tfuel.mining > 0 && <>Mining waiting: {T(w.tfuel.mining)} TFUEL</>}
+          </div>
+        )}
+        <div className="title" style={{ margin: "14px 0 8px" }}>All TFUEL sources</div>
+        {earnRows.length === 0 && <div className="small muted">Nothing yet — start tapping!</div>}
+        {earnRows.map(([k, v]) => (
+          <div key={k} style={{ marginBottom: 10 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
+              <span>{EARN_LABEL[k] || k}</span>
+              <span className="num">{T(v)} <span className="muted">· {Math.round((v / earnSum) * 100)}%</span></span>
+            </div>
+            <div className="bar"><div style={{ width: `${(v / earnSum) * 100}%` }} /></div>
+          </div>
+        ))}
+        {spentRows.length > 0 && (
+          <div className="small muted" style={{ marginTop: 6 }}>
+            Used: {spentRows.map(([k, v]) => `${SPEND_LABEL[k] || k} ${T(v)}`).join(" · ")}
+          </div>
+        )}
+        <div className="title" style={{ margin: "14px 0 4px" }}>USDT history</div>
+        {usdtRows.length === 0 && <div className="small muted">No USDT activity yet. Deposit USDT or sell some TFUEL.</div>}
+        {usdtRows.map(([k, v]) => (
+          <div className="hist" key={k}>
+            <div className="title" style={{ fontSize: 14 }}>{USDT_LABEL[k] || k}</div>
+            <div className="num" style={{ fontWeight: 700 }}>{v < 0 ? "−" : ""}{fmtUsd(Math.abs(v))} USDT</div>
+          </div>
+        ))}
+        <div className="grid2" style={{ marginTop: 12 }}>
+          <button className="btn sec" onClick={() => go("boost")}>Boost &amp; Stake</button>
+          <button className="btn sec" onClick={() => go("tfuel", "orders")}>Orders &amp; alerts</button>
+        </div>
+      
+    </div>
+  );
+}
+
+
+/** Portfolio value over time (USDT) */
+function Portfolio({ pts, total }: { pts: [number, number][]; total: number }) {
+  const gid = "pf" + useId().replace(/[^a-zA-Z0-9]/g, "");
+  const data = pts.length ? [...pts.slice(0, -1), [Date.now(), total] as [number, number]] : [];
+  if (data.length < 2) {
+    return (
+      <div className="card">
+        <div className="title">Portfolio</div>
+        <div className="small muted" style={{ marginTop: 4 }}>Your wallet value chart builds up as you come back. Check again later.</div>
+      </div>
+    );
+  }
+  const W = 320, H = 110;
+  const ys = data.map((d) => d[1]);
+  let lo = Math.min(...ys), hi = Math.max(...ys);
+  const pad = (hi - lo) * 0.15 || hi * 0.05 || 0.01;
+  lo -= pad; hi += pad;
+  const t0 = data[0][0], t1 = data[data.length - 1][0] || t0 + 1;
+  const x = (t: number) => ((t - t0) / Math.max(1, t1 - t0)) * W;
+  const y = (v: number) => (1 - (v - lo) / (hi - lo)) * (H - 6) + 3;
+  const line = data.map((d, i) => `${i ? "L" : "M"}${x(d[0]).toFixed(1)},${y(d[1]).toFixed(1)}`).join(" ");
+  const first = data[0][1];
+  const pct = first > 0 ? (total / first - 1) * 100 : 0;
+  const col = pct >= 0 ? "#16a34a" : "#e5484d";
+  return (
+    <div className="card">
+      <div className="row">
+        <div className="title">Portfolio</div>
+        <span className={`pill ${pct >= 0 ? "ok" : "err"}`}>{pct >= 0 ? "+" : ""}{pct.toFixed(1)}%</span>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: "block", marginTop: 6 }}>
+        <defs>
+          <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor={col} stopOpacity=".22" />
+            <stop offset="1" stopColor={col} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path d={`${line} L${W},${H} L0,${H} Z`} fill={`url(#${gid})`} />
+        <path d={line} fill="none" stroke={col} strokeWidth="2" strokeLinejoin="round" />
+      </svg>
+      <div className="row xs muted" style={{ marginTop: 2 }}>
+        <span>{new Date(t0).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>
+        <span>Now · {fmtUsd(total)}</span>
+      </div>
+    </div>
+  );
+}
+
+type ActItem = { id: string; t: string; c: number; u: number; n: string; at: number };
+const FILTERS: [string, string, string[] | null][] = [
+  ["all", "All", null],
+  ["earn", "Earned", ["article", "task", "daily", "referral", "mining", "stake_paid", "spin", "promo", "prize", "ads", "adjust", "receive"]],
+  ["spend", "Spent", ["boost", "send", "shop"]],
+  ["trade", "Trades", ["buy", "sell", "limit_buy", "limit_sell"]],
+  ["dep", "Deposits", ["deposit", "deposit_rejected"]],
+  ["wd", "Withdrawals", ["usdt_withdraw", "usdt_paid", "usdt_rejected"]],
+  ["xfer", "Transfers", ["send", "receive"]],
+];
+
+/** Recent activity with "load more" and filters */
+function ActivityList({ first, cpt }: { first: ActItem[]; cpt: number }) {
+  const [items, setItems] = useState<ActItem[]>(first);
+  const [more, setMore] = useState(first.length >= 30);
+  const [busy, setBusy] = useState(false);
+  const [f, setF] = useState("all");
+  const [rc, setRc] = useState<ActItem | null>(null);
+  const paged = useRef(false);
+  useEffect(() => { if (!paged.current) { setItems(first); setMore(first.length >= 30); } }, [first]); // cache → fresh data
+  const T = (n: number) => fmtTf(n, cpt);
+  const load = async () => {
+    paged.current = true;
+    setBusy(true);
+    try {
+      const r = await api<{ items: ActItem[]; more: boolean }>("history", { before: items[items.length - 1]?.id });
+      setItems((cur) => [...cur, ...r.items]);
+      setMore(r.more);
+    } catch {} finally {
+      setBusy(false);
+    }
+  };
+  const allow = FILTERS.find((x) => x[0] === f)?.[2];
+  const shown = allow ? items.filter((a) => allow.includes(a.t)) : items;
+  if (!items.length) return <Empty icon="list" title="No transactions yet" hint="Tap, complete tasks or trade — your activity shows up here." />;
+  return (
+    <div>
+      <div className="chips2">
+        {FILTERS.map(([k, l]) => (
+          <button key={k} className={f === k ? "on" : ""} onClick={() => setF(k)}>{l}</button>
+        ))}
+      </div>
+      {shown.length === 0 && <div className="small muted" style={{ padding: "8px 0" }}>Nothing here yet.</div>}
+      {shown.map((a) => (
+        <div className="hist" key={a.id} role="button" style={{ cursor: "pointer" }} onClick={() => setRc(a)}>
+          <div>
+            <div className="title" style={{ fontSize: 14 }}>{ACT_LABEL[a.t] || a.t}</div>
+            <div className="sub">
+              {a.n ? `${a.n} · ` : ""}
+              {new Date(a.at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+            </div>
+          </div>
+          <div style={{ textAlign: "right" }} className="num">
+            {a.c !== 0 && <div style={{ fontWeight: 700 }}>{a.c > 0 ? "+" : "−"}{T(Math.abs(a.c))} TFUEL</div>}
+            {a.u !== 0 && <div style={{ fontWeight: 700 }}>{a.u > 0 ? "+" : "−"}{fmtUsd(Math.abs(a.u))} USDT</div>}
+          </div>
+        </div>
+      ))}
+      {more && (
+        <button className="btn sec block" style={{ marginTop: 10 }} disabled={busy} onClick={load}>{busy ? "Loading…" : "Load more"}</button>
+      )}
+      {rc && <ReceiptSheet item={rc} label={ACT_LABEL[rc.t] || rc.t} cpt={cpt} onClose={() => setRc(null)} />}
+    </div>
+  );
+}
+
+/** Telegram bot messages on/off */
+function NotifyToggle() {
+  const [on, setOn] = useState<boolean | null>(null);
+  useEffect(() => {
+    api<any>("engage").then((d) => setOn(d.notify.available ? d.notify.on : null)).catch(() => {});
+  }, []);
+  if (on === null) return <div className="small muted">Open the bot in Telegram and press Start to turn notifications on.</div>;
+  const flip = async () => {
+    const next = !on;
+    setOn(next);
+    try {
+      await api("notify-pref", { on: next });
+    } catch {
+      setOn(!next);
+    }
+  };
+  return (
+    <div>
+      <div className="row">
+        <div>
+          <div className="title">Telegram notifications</div>
+          <div className="sub">Energy full, deposits, payouts, stakes and price alerts. Make sure you've started the bot.</div>
+        </div>
+        <button className={`switch ${on ? "on" : ""}`} onClick={flip} aria-label="Toggle notifications" style={{ flexShrink: 0 }} />
+      </div>
+    </div>
+  );
+}
