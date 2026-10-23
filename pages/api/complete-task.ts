@@ -2,6 +2,7 @@ import { authenticate, HttpError } from "@/lib/auth";
 import { route, rateLimit } from "@/lib/api";
 import { db } from "@/lib/firebase";
 import { earn, activity, lbAdd } from "@/lib/wallet";
+import { reserveSlot, releaseSlot, slotDone } from "@/lib/sponsor";
 import { ensureUser, qualifyReferral, newUser, UserRecord, MAX_AUTH_AGE_MONEY } from "@/lib/user";
 
 /** timer_visit: server-এ মাপা সময় পার হলে পুরস্কার */
@@ -16,6 +17,8 @@ export default route(async (req, res) => {
   if (!task || task.type !== "timer_visit") throw new HttpError(404, "Task not found");
 
   await ensureUser(user);
+  if ((await db().ref(`users/${user.id}/completed_tasks/${taskId}/claimed`).get()).val()) throw new HttpError(409, "Already completed");
+  await reserveSlot(taskId, task);
 
   let failure: { status: number; msg: string } | null = null;
   const result = await db()
@@ -49,11 +52,13 @@ export default route(async (req, res) => {
     });
 
   if (!result.committed) {
+    await releaseSlot(taskId);
     const f = failure as { status: number; msg: string } | null;
     throw new HttpError(f?.status || 400, f?.msg || "Rejected");
   }
   await lbAdd(user.id, Number(task.reward) || 0);
   await activity(user.id, "task", { coins: Number(task.reward) || 0, note: String(task.title || "").slice(0, 60) });
+  await slotDone(taskId, task);
   await qualifyReferral(user.id);
   const u = result.snapshot.val() as UserRecord;
   res.json({ success: true, reward: task.reward, newBalance: u.balance });

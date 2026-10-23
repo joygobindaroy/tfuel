@@ -41,7 +41,7 @@ export async function processTriggers(price: number | null, now = Date.now()) {
           const al = (await db().ref(`users/${a.uid}/alerts/${a.id}`).get()).val();
           if (!al) continue;
           await db().ref(`users/${a.uid}/alerts/${a.id}`).remove();
-          await notify(a.uid, `🔔 TFUEL price alert: $${price} (your target ${path === "alert_above" ? "≥" : "≤"} $${al.price})`);
+          await notify(a.uid, `🔔 TFUEL price alert: $${price} (your target ${path === "alert_above" ? "≥" : "≤"} $${al.price})`, false, s.referral_link ? [[{ text: "📈 Trade now", url: `${s.referral_link}?startapp=go_trade` }]] : undefined);
           out.alerts++;
         }
       }

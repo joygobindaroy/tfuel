@@ -5,6 +5,7 @@ import { notify } from "./notify";
 import { reqCtx, ctxRows } from "./reqctx";
 import { mailUser } from "./emailcode";
 import { secLog } from "./seclog";
+import { trackIp } from "./geo";
 
 function label(ua: string) {
   const os = /Android/i.test(ua) ? "Android" : /iPhone|iPad|iOS/i.test(ua) ? "iPhone / iPad" : /Windows/i.test(ua) ? "Windows" : /Mac OS X|Macintosh/i.test(ua) ? "Mac" : /Linux/i.test(ua) ? "Linux" : "Unknown device";
@@ -31,6 +32,7 @@ export async function trackLogin(uid: string, req: NextApiRequest) {
     const cc = String(req.headers["x-vercel-ip-country"] || "").toUpperCase().slice(0, 2);
     const gip = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim().slice(0, 64);
     if ((cc || gip) && (!p.geo || p.geo.cc !== cc || p.geo.ip !== gip || now - (p.geo.at || 0) > 6 * 3600000)) await db().ref(`${base}/geo`).set({ cc, ip: gip, at: now }).catch(() => {});
+    if (gip) await trackIp(uid, gip);
     const cur = devs[h];
     if (cur) {
       if (now - cur.last > 3600000) await db().ref(`${base}/devices/${h}/last`).set(now);

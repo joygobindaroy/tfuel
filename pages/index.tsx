@@ -2,6 +2,8 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { CopyBtn, Empty, ConfirmSheet, SkelList, AmtInput, OfflineBar, usePullRefresh, PullIndicator, confetti } from "@/components/Ui";
 import { api, cachedApi, errText, fmtTf, fmtUsd, openLink, openTgLink, tg, haptic, tick, getUi } from "@/lib/client";
 import { ReceiptSheet, NextReward } from "@/components/Extras";
+import { ClanPage, RigsPage, PuzzlePage, CollectPage } from "@/components/Games";
+import { InvitePlusPage, ReportPage, AutoConvertCard, PlCard } from "@/components/More";
 import { BRAND } from "@/lib/brand";
 import Logo from "@/components/Logo";
 import Icon from "@/components/Icons";
@@ -32,7 +34,7 @@ interface Me {
   cur?: "tfuel" | "usdt" | null;
   ret?: any;
   faq?: { q: string; a: string }[];
-  cfg: { send?: boolean; minWithdraw: number; methods: string[]; coinsPerUnit: number; unitLabel: string; withdrawEnabled: boolean; coinsPerTfuel: number; shops?: boolean; bdtRate?: number };
+  cfg: { send?: boolean; minWithdraw: number; methods: string[]; coinsPerUnit: number; unitLabel: string; withdrawEnabled: boolean; coinsPerTfuel: number; shops?: boolean; bdtRate?: number; games?: { clans: boolean; rigs: boolean; puzzle: boolean; collect: boolean; autoconv: boolean; invite?: boolean } };
 }
 interface Task {
   id: string;
@@ -41,6 +43,8 @@ interface Task {
   url?: string;
   reward: number;
   min_wait_seconds?: number;
+  sponsor?: string;
+  left?: number;
   done: boolean;
 }
 interface Site {
@@ -198,6 +202,19 @@ export default function Home() {
     if (t !== "tap") load();
   };
 
+  // bot buttons open the app on a specific screen: ?startapp=go_<screen>
+  const [deep, setDeep] = useState<string | null>(null);
+  const deepDone = useRef(false);
+  useEffect(() => { try { const sp = String(tg()?.initDataUnsafe?.start_param || ""); const m = /^go_(tasks|boost|trade|deposit|withdraw|history|settings|clan|support)$/.exec(sp); if (m) setDeep(m[1]); } catch {} }, []);
+  useEffect(() => {
+    if (!deep || !me || deepDone.current) return;
+    deepDone.current = true;
+    if (deep === "tasks" || deep === "boost") go(deep as Tab);
+    else if (deep === "trade") go("tfuel", "trade");
+    else setTab("profile");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deep, me]);
+
   if (noTg)
     return (
       <div className="splash">
@@ -334,7 +351,7 @@ export default function Home() {
       {tab === "boost" && <BoostTab key={rk} cpt={cpt} price={me.price || 0} say={say} reload={load} />}
       {tab === "tfuel" && <Market key={(mkSub || "m") + rk} startSub={mkSub} say={say} reload={load} cpt={cpt} />}
       {tab === "tasks" && <TasksWrap key={rk} me={me} cpt={cpt} say={say} reload={load} />}
-      {tab === "profile" && <Profile me={me} cpt={cpt} balance={bal} go={go} say={say} reload={load} onCur={(c) => setMe((m) => (m ? { ...m, cur: c } : m))} />}
+      {tab === "profile" && <Profile initPage={deep && !["tasks", "boost", "trade"].includes(deep) ? (deep as Page) : null} me={me} cpt={cpt} balance={bal} go={go} say={say} reload={load} onCur={(c) => setMe((m) => (m ? { ...m, cur: c } : m))} />}
 
       <InAppAds />
       {payId && <PaySheet id={payId} cpt={cpt} say={say} reload={load} onClose={() => setPayId(null)} />}
@@ -570,7 +587,7 @@ function Tasks({ me, cpt, say, reload }: { me: Me; cpt: number; say: Say; reload
                 <div style={{ minWidth: 0 }}>
                   <div className="title">{t.title}</div>
                   <div className="sub">
-                    <span className="reward">+{T(t.reward)}</span>
+                    <span className="reward">+{T(t.reward)}</span>{t.sponsor && <span className="pill info" style={{ marginLeft: 6 }}>Sponsored · {t.sponsor}</span>}
                   </div>
                 </div>
               </div>
@@ -605,10 +622,10 @@ function Tasks({ me, cpt, say, reload }: { me: Me; cpt: number; say: Say; reload
 }
 
 /** Profile: balance in TFUEL + USDT value, shortcuts, optional legacy payout methods, history */
-type Page = null | "rewards" | "send" | "deposit" | "deposits" | "withdraw" | "payouts" | "assets" | "history" | "settings" | "other" | "shops" | "support";
+type Page = null | "rewards" | "send" | "deposit" | "deposits" | "withdraw" | "payouts" | "assets" | "history" | "settings" | "other" | "shops" | "support" | "invite" | "clan" | "rigs" | "puzzle" | "collect" | "report";
 
-function Profile({ me, cpt, balance, go, say, reload, onCur }: { me: Me; cpt: number; balance: number; go: (t: Tab, sub?: string) => void; say: Say; reload: () => void; onCur: (c: "tfuel" | "usdt") => void }) {
-  const [page, setPage] = useState<Page>(null);
+function Profile({ initPage, me, cpt, balance, go, say, reload, onCur }: { initPage?: Page; me: Me; cpt: number; balance: number; go: (t: Tab, sub?: string) => void; say: Say; reload: () => void; onCur: (c: "tfuel" | "usdt") => void }) {
+  const [page, setPage] = useState<Page>(initPage || null);
   const [from, setFrom] = useState<Page>(null);
   const [w, setW] = useState<Wallet | null>(null);
   const loadW = useCallback(() => { cachedApi<Wallet>("wallet", {}, setW).catch(() => {}); }, []);
@@ -634,10 +651,16 @@ function Profile({ me, cpt, balance, go, say, reload, onCur }: { me: Me; cpt: nu
   if (page === "withdraw") return <WithdrawPage say={say} reload={refresh} onBack={back} onHistory={() => nav("payouts", "withdraw")} />;
   if (page === "payouts") return <PayoutHistory say={say} onBack={back} legacy={me.withdrawals} cpt={cpt} fmtTf={fmtTf} />;
   if (page === "shops") return <ShopsPage say={say} onBack={back} cpt={cpt} />;
+  if (page === "invite") return <InvitePlusPage say={say} onBack={back} cpt={cpt} reload={refresh} />;
+  if (page === "clan") return <ClanPage say={say} onBack={back} cpt={cpt} reload={refresh} />;
+  if (page === "rigs") return <RigsPage say={say} onBack={back} cpt={cpt} reload={refresh} />;
+  if (page === "puzzle") return <PuzzlePage say={say} onBack={back} cpt={cpt} reload={refresh} />;
+  if (page === "collect") return <CollectPage say={say} onBack={back} cpt={cpt} reload={refresh} />;
+  if (page === "report") return <ReportPage say={say} onBack={back} cpt={cpt} reload={refresh} />;
   if (page === "support") return <SupportPage say={say} onBack={back} faq={me.faq || []} />;
   if (page === "settings") return <SettingsPage say={say} onBack={back} userId={me.user.id} onCur={onCur} />;
   if (page === "other") return (<><PageHead title="Other payout methods" onBack={back} /><LegacyWithdraw me={me} cpt={cpt} balance={balance} say={say} reload={refresh} /></>);
-  if (page === "assets") return (<><PageHead title="Portfolio & assets" onBack={back} />{w ? <AssetsPage w={w} balance={balance} cpt={cpt} go={go} /> : <SkelList />}</>);
+  if (page === "assets") return (<><PageHead title="Portfolio & assets" onBack={back} />{w ? <><AssetsPage w={w} balance={balance} cpt={cpt} go={go} /><PlCard pl={w.pl} />{me.cfg.games?.autoconv && <AutoConvertCard say={say} />}</> : <SkelList />}</>);
   if (page === "history") return (<><PageHead title="Transaction history" onBack={back} />{w ? <div className="card"><ActivityList first={w.activity} cpt={cpt} /></div> : <SkelList />}</>);
 
   const price = w?.price || me.price || 0;
@@ -686,6 +709,16 @@ function Profile({ me, cpt, balance, go, say, reload, onCur }: { me: Me; cpt: nu
         <Row icon="gift" t="Rewards & progress" s="Level, weekly challenge, achievements, streak freeze" onClick={() => nav("rewards")} />
       </div>
 
+      {(me.cfg.games?.clans || me.cfg.games?.rigs || me.cfg.games?.puzzle || me.cfg.games?.collect) && (<>
+        <div className="mhead">Play & collect</div>
+        <div className="menu">
+          {me.cfg.games?.clans && <Row icon="users" t="Clan & raid boss" s="Team up, beat the boss, win weekly prizes" onClick={() => nav("clan")} />}
+          {me.cfg.games?.rigs && <Row icon="zap" t="Mining rigs" s="Buy rigs that earn TFUEL for you" onClick={() => nav("rigs")} />}
+          {me.cfg.games?.puzzle && <Row icon="star" t="Daily word" s="One free puzzle a day, small reward" onClick={() => nav("puzzle")} />}
+          {me.cfg.games?.collect && <Row icon="gift" t="Collectibles" s="Collect items and share the season pool" onClick={() => nav("collect")} />}
+        </div>
+      </>)}
+
       <div className="mhead">Wallet</div>
       <div className="menu">
         <Row icon="wallet" t="Portfolio & assets" s="Balances, value and where your TFUEL came from" onClick={() => nav("assets")} />
@@ -699,6 +732,8 @@ function Profile({ me, cpt, balance, go, say, reload, onCur }: { me: Me; cpt: nu
       <div className="menu">
         {me.cfg.methods.length > 0 && <Row icon="gift" t="Other payout methods" s="Withdraw TFUEL to other accounts" onClick={() => nav("other")} />}
         {me.cfg.shops && <Row icon="gift" t="Partner shops" s="Sign in automatically and pay with TFUEL or USDT" onClick={() => nav("shops")} />}
+        {me.cfg.games?.invite !== false && <Row icon="users" t="Invite & earn" s="Tiers, invite leaderboard and contest" onClick={() => nav("invite")} />}
+        <Row icon="alert" t="Report a problem" s="Tell us what went wrong — details are attached" onClick={() => nav("report")} />
         <Row icon="info" t="Help & support" s="Message us and see replies" onClick={() => nav("support")} />
         <Row icon="settings" t="Settings" s="Appearance, security, addresses, notifications" onClick={() => nav("settings")} />
       </div>
@@ -804,6 +839,7 @@ interface Wallet {
   usdt: { balance: number; tot: Record<string, number> };
   activity: { id: string; t: string; c: number; u: number; n: string; at: number }[];
   portfolio: [number, number][];
+  pl?: any;
 }
 
 function AssetsPage({ w, balance, cpt, go }: { w: Wallet; balance: number; cpt: number; go: (t: Tab, sub?: string) => void }) {

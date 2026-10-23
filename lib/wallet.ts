@@ -3,6 +3,7 @@ import { sortableId } from "./crypto";
 import { dayKey } from "./log";
 import { ServerValue } from "firebase-admin/database";
 import type { UserRecord } from "./user";
+import { clanAdd } from "./clan";
 
 /** "কীভাবে পেল / কীভাবে খরচ হলো" — user-এর TFUEL ও USDT-র উৎসের হিসাব */
 export type EarnKey = "spin" | "promo" | "prize" | "ads" | "tap" | "articles" | "tasks" | "daily" | "referral" | "mining" | "staking" | "bought" | "adjust" | "received";
@@ -48,5 +49,6 @@ export async function lbAdd(uid: string, coins: number) {
   try {
     const inc = ServerValue.increment(Math.floor(coins));
     await db().ref().update({ [`lb/d_${dayKey()}/${uid}`]: inc, [`lb/w_${weekIndex()}/${uid}`]: inc, [`lb/all/${uid}`]: inc });
+    await clanAdd(uid, Math.floor(coins));
   } catch {}
 }

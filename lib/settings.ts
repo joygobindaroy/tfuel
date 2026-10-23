@@ -4,6 +4,26 @@ import { COINS_PER_UNIT, MIN_WITHDRAW, UNIT_LABEL, WITHDRAW_METHODS } from "./co
 
 export interface DepositNet { id: string; name: string; address: string; min: number; note: string; binance_network?: string }
 export interface BotButton { text: string; url: string }
+export interface BotMenuItem { k: string; text: string; on: boolean }
+export const BOT_MENU_DEFAULT: BotMenuItem[] = [
+  { k: "profile", text: "👤 My Profile", on: true }, { k: "tasks", text: "✅ Tasks", on: true },
+  { k: "daily", text: "🎁 Daily Reward", on: true }, { k: "wallet", text: "💰 Wallet", on: true },
+  { k: "leaderboard", text: "🏆 Leaderboard", on: true }, { k: "price", text: "📈 Price", on: true },
+  { k: "clan", text: "🛡 Clan", on: true }, { k: "invite", text: "👥 Invite Friends", on: true },
+  { k: "help", text: "❓ Help", on: true }, { k: "settings", text: "⚙️ Settings", on: true },
+];
+/** known keys only, keep admin order + labels, append any missing key (so new buttons never vanish) */
+export function normMenu(v: any): BotMenuItem[] {
+  const raw = (Array.isArray(v) ? v : Object.values(v || {})) as any[];
+  const out: BotMenuItem[] = [];
+  for (const x of raw) {
+    const d = BOT_MENU_DEFAULT.find((y) => y.k === x?.k);
+    if (!d || out.some((o) => o.k === d.k)) continue;
+    out.push({ k: d.k, text: String(x.text ?? d.text).replace(/[\u0000-\u001f]/g, " ").trim().slice(0, 24) || d.text, on: x.on !== false });
+  }
+  for (const d of BOT_MENU_DEFAULT) if (!out.some((o) => o.k === d.k)) out.push({ ...d });
+  return out;
+}
 export interface PayoutNet { id: string; name: string; min: number; fee: number; regex: string }
 
 export interface Settings {
@@ -59,6 +79,12 @@ export interface Settings {
   daily_withdraw_limit: number; // প্রতিদিন সর্বোচ্চ কয়টা অনুরোধ (০ = সীমা নেই)
   bot_welcome: string; // /start বার্তা
   bot_start_label: string; // প্রথম বাটনের লেখা
+  bot_menu: BotMenuItem[]; // /start-এর বাটন (চালু/বন্ধ, ক্রম, লেখা)
+  bot_photo: string; // /start-এর ওপরে ছবি (https)
+  bot_returning: boolean; // পুরনো user-কে সংক্ষিপ্ত স্বাগত (ব্যালেন্স, streak)
+  bot_inline: boolean; // @bot inline invite card
+  bot_groups: boolean; // গ্রুপে /top /price
+  autopost_winners: boolean; // সাপ্তাহিক বিজয়ীদের channel-এ পোস্ট
   bot_buttons: BotButton[]; // Channel / Chat / Twitter ইত্যাদি লিংক বাটন
   hold_new_hours: number; // নতুন account-এর withdraw এত ঘণ্টা HOLD (০ = বন্ধ)
   hold_amount_usdt: number; // এর সমান/বেশি amount HOLD (০ = বন্ধ)
@@ -189,6 +215,12 @@ export const DEFAULTS: Settings = {
   daily_withdraw_limit: 0,
   bot_welcome: "👋 Welcome to TFUEL — Let's Start Mining! ⛏\n\nHey Miner! We're so happy you're here! 🚀\n\nYour TFUEL mining adventure starts right now! 💎\nMine tokens, boost your power, invite friends and earn amazing rewards every day! ⚡\n\nWhat you can do inside:\n⛏ Tap to Mine TFUEL effortlessly\n🚀 Boost your mining power & earn faster\n👥 Invite friends & get bonus rewards\n🎁 Claim daily rewards & surprises\n\n👇 Tap ⛏ Start Mining below to open the TFUEL App and begin earning!",
   bot_start_label: "⛏ Start Mining 🚀",
+  bot_menu: BOT_MENU_DEFAULT,
+  bot_photo: "",
+  bot_returning: true,
+  bot_inline: true,
+  bot_groups: true,
+  autopost_winners: true,
   bot_buttons: [],
   hold_new_hours: 0,
   hold_amount_usdt: 0,
@@ -297,6 +329,7 @@ function merge(stored: any): Settings {
     daily_rewards: Array.isArray(s.daily_rewards) ? s.daily_rewards : Object.values(s.daily_rewards || {}).length ? Object.values(s.daily_rewards) : DEFAULTS.daily_rewards,
     deposit_networks: arr(s.deposit_networks),
     bot_buttons: arr(s.bot_buttons),
+    bot_menu: normMenu(s.bot_menu),
     faq: s.faq === undefined ? DEFAULTS.faq : arr(s.faq),
     payout_networks: arr(s.payout_networks),
     events: arr(s.events),
@@ -469,6 +502,12 @@ export function parseSettings(b: any, cur: Settings): Settings {
     bot_welcome: (() => { const v = b.bot_welcome === undefined ? cur.bot_welcome : String(b.bot_welcome).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "").trim().slice(0, 1500); return v || cur.bot_welcome; })(),
     bot_start_label: str(b.bot_start_label, 40, cur.bot_start_label) || cur.bot_start_label,
     bot_buttons: bbtn,
+    bot_menu: b.bot_menu === undefined ? cur.bot_menu : normMenu(b.bot_menu),
+    bot_photo: (() => { if (b.bot_photo === undefined) return cur.bot_photo; const v = txt(b.bot_photo, 300); if (v && !/^https:\/\/[^\s]+$/.test(v)) throw new HttpError(400, "Banner must be an https:// image link"); return v; })(),
+    bot_returning: bool("bot_returning"),
+    bot_inline: bool("bot_inline"),
+    bot_groups: bool("bot_groups"),
+    autopost_winners: bool("autopost_winners"),
     hold_new_hours: num(b.hold_new_hours, "hold_new_hours", 0, 8760, cur.hold_new_hours),
     hold_amount_usdt: num(b.hold_amount_usdt, "hold_amount_usdt", 0, 1e7, cur.hold_amount_usdt),
     hold_first_withdraw: bool("hold_first_withdraw"),

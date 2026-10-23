@@ -6,6 +6,8 @@ import { dayKey, adminLog } from "./log";
 import { earn, activity, lbAdd } from "./wallet";
 import { resolveRef } from "./refcode";
 import { notify } from "./notify";
+import { getCfg2 } from "./cfg2";
+import { tierPct, refBoardAdd } from "./growth2";
 
 export const MAX_BATCH_LIMIT = 50; // এক request-এ সর্বোচ্চ tap
 export const MAX_TAPS_PER_SEC = 15; // সর্বোচ্চ tap/sec
@@ -199,7 +201,8 @@ export async function ensureUser(
     // সুরক্ষা: আগে এই user-এর index থাকলে তার record হারিয়ে গেছে — নতুন বানিয়ে "০ ব্যালেন্স + intro" দেখানো নয়, শেষ snapshot থেকে ফেরত আনি
     const idx = (await db().ref(`user_index/${user.id}`).get()).val() as { created_at?: number } | null;
     const snap = idx ? ((await db().ref(`bal_snap/${user.id}`).get()).val() as { b?: number; u?: number; earn?: any; spent?: any; usdt_tot?: any } | null) : null;
-    const base: any = { ...newUser(now), name, username, created_at: idx?.created_at || now, last_seen: now, ...(referred_by && !idx ? { referred_by } : {}) };
+    const cm = /^cmp_([a-z0-9]{2,20})$/.exec(String(user.start_param || ''));
+    const base: any = { ...newUser(now), name, username, created_at: idx?.created_at || now, last_seen: now, ...(referred_by && !idx ? { referred_by } : {}), ...(cm && !idx ? { campaign: cm[1] } : {}) };
     if (idx) {
       base.onboarded = true;
       base.recovered = now;
@@ -213,6 +216,7 @@ export async function ensureUser(
         .ref()
         .update({
           [`user_index/${user.id}`]: { name, username, created_at: now },
+          ...(base.campaign && !idx ? { [`campaigns/${base.campaign}/${user.id}`]: now } : {}),
           "stats/users_total": ServerValue.increment(1),
           [`stats/new_users/${dayKey(now)}`]: ServerValue.increment(1),
         })
@@ -281,6 +285,7 @@ export async function qualifyReferral(uid: string) {
       });
     await lbAdd(uid, s.invitee_bonus);
     await lbAdd(refId, paid);
+    if (paid) await refBoardAdd(refId);
     await activity(uid, "referral", { coins: s.invitee_bonus, note: "Welcome bonus" });
     if (paid) {
       await activity(refId, "referral", { coins: paid, note: `${u.name || "A friend"} joined` });
@@ -309,12 +314,13 @@ export async function settleCommission(refId: string, force = false): Promise<nu
     const now = Date.now();
     const me = (await db().ref(`users/${refId}`).get()).val() as UserRecord | null;
     if (!me || me.banned) return 0;
+    const pct = tierPct((await getCfg2()).tiers, me.ref_count || 0, s.referral_commission_pct);
     if (!force && now - (me.ref_comm_at || 0) < 10 * 60000) return 0;
     const list = ((await db().ref(`referrals/${refId}`).get()).val() || {}) as Record<string, any>;
     let total = 0;
     for (const uid of Object.keys(list).slice(0, Math.max(0, s.referral_max))) {
       const e = (await db().ref(`users/${uid}/earn`).get()).val() as Record<string, number> | null;
-      const target = Math.floor((commissionBase(e || undefined) * s.referral_commission_pct) / 100);
+      const target = Math.floor((commissionBase(e || undefined) * pct) / 100);
       let prev = 0;
       const r = await db().ref(`referrals/${refId}/${uid}/comm`).transaction((cur: number | null) => {
         prev = cur || 0;
@@ -332,7 +338,7 @@ export async function settleCommission(refId: string, force = false): Promise<nu
       cur.ref_comm = (cur.ref_comm || 0) + total;
       return cur;
     });
-    await activity(refId, "referral", { coins: total, note: `${s.referral_commission_pct}% friends' earnings` });
+    await activity(refId, "referral", { coins: total, note: `${pct}% friends' earnings` });
     return total;
   } catch (e) {
     console.error("settleCommission failed", e);

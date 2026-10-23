@@ -1,126 +1,141 @@
-import { db } from "./firebase";
+import { faqReply } from "./faqbot";
 import { tgCall } from "./telegram";
 import { getSettings, Settings } from "./settings";
 import { getRefCode } from "./refcode";
-import { peekPrice, fromU } from "./market";
 import { claimJoin } from "./taskclaim";
 import { rateLimit } from "./api";
 import { HttpError } from "./auth";
+import {
+  View, Kb, esc, openBtn, tf, welcomeView, profileView, inviteView, tasksView, dailyView, walletView, leaderboardView, boardText,
+  priceView, priceText, clanBotView, helpView, faqAnswerView, settingsView, toggleSetting, receiptView, deepLink,
+} from "./botviews";
 
-type Kb = { text: string; url?: string; callback_data?: string; web_app?: { url: string } }[][];
-const esc = (s: unknown) => String(s ?? "").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c] as string));
-const appUrl = () => (process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/+$/, "");
-const tf = (coins: number, cpt: number) => {
-  const d = Math.min(6, Math.max(0, Math.round(Math.log10(Math.max(1, cpt)))));
-  return (coins / cpt).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
-};
+/** Commands shown in Telegram's "Menu" (set by Admin → Connect Telegram) */
+export const BOT_COMMANDS = [
+  { command: "start", description: "Open TFUEL" },
+  { command: "daily", description: "Claim your daily reward" },
+  { command: "balance", description: "My wallet" },
+  { command: "profile", description: "My profile & invite link" },
+  { command: "tasks", description: "Tasks you can do" },
+  { command: "top", description: "Leaderboard" },
+  { command: "price", description: "TFUEL price" },
+  { command: "clan", description: "My clan & raid boss" },
+  { command: "invite", description: "Invite friends" },
+  { command: "settings", description: "Notifications" },
+  { command: "help", description: "Help & FAQ" },
+];
 
-/** "Open app" বাটন: t.me লিংক থাকলে সেটা (referral param সহ), নইলে সরাসরি web_app */
-function openBtn(s: Settings, label: string, param?: string) {
-  if (s.referral_link) return { text: label, url: s.referral_link + (param ? `?startapp=${param}` : "") };
-  const u = appUrl();
-  return u ? { text: label, web_app: { url: u } } : { text: label, callback_data: "m" };
-}
-
-export function startView(s: Settings, param?: string): { text: string; kb: Kb } {
-  const kb: Kb = [
-    [openBtn(s, s.bot_start_label, param)],
-    [{ text: "👤 My Profile", callback_data: "p" }, { text: "✅ Tasks", callback_data: "t" }],
-    [{ text: "👥 Invite Friends", callback_data: "i" }],
-    ...s.bot_buttons.map((b) => [{ text: b.text, url: b.url }]),
-  ];
-  return { text: s.bot_welcome, kb };
-}
-
-async function profileView(uid: string, s: Settings): Promise<{ text: string; kb: Kb }> {
-  const u = (await db().ref(`users/${uid}`).get()).val();
-  if (!u) return { text: "Open the app once to create your account, then come back here.", kb: [[openBtn(s, s.bot_start_label)], [{ text: "⬅ Back", callback_data: "m" }]] };
-  const price = await peekPrice(s).catch(() => null);
-  const cpt = s.coins_per_tfuel;
-  const code = await getRefCode(uid).catch(() => "");
-  const link = s.referral_link && code ? `${s.referral_link}?startapp=${code}` : "";
-  const bal = Number(u.balance) || 0;
-  const lines = [
-    `👤 <b>${esc(u.name || "My profile")}</b>`,
-    "",
-    `💰 TFUEL: <b>${tf(bal, cpt)}</b>${price ? ` (≈ $${((bal / cpt) * price).toFixed(2)})` : ""}`,
-    `💵 USDT: <b>${fromU(u.usdt_u || 0).toFixed(2)}</b>`,
-    `👥 Friends invited: <b>${u.ref_count || 0}</b> · earned <b>${tf(u.ref_earned || 0, cpt)}</b> TFUEL`,
-  ];
-  if (link) lines.push("", "🔗 Your invite link:", `<code>${esc(link)}</code>`);
-  const kb: Kb = [[openBtn(s, "📱 Open app")], [{ text: "✅ Tasks", callback_data: "t" }, { text: "👥 Invite", callback_data: "i" }], [{ text: "⬅ Back", callback_data: "m" }]];
-  return { text: lines.join("\n"), kb };
-}
-
-async function inviteView(uid: string, s: Settings): Promise<{ text: string; kb: Kb }> {
-  const code = await getRefCode(uid).catch(() => "");
-  const link = s.referral_link && code ? `${s.referral_link}?startapp=${code}` : "";
-  if (!link || !s.referral_enabled) return { text: "Invites are not available right now.", kb: [[{ text: "⬅ Back", callback_data: "m" }]] };
-  const share = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent("Join me on TFUEL — tap, earn and invite friends!")}`;
-  return {
-    text: `👥 <b>Invite friends</b>\n\nYou get <b>${tf(s.referrer_bonus, s.coins_per_tfuel)} TFUEL</b> for each friend who joins and completes a task, plus <b>${s.referral_commission_pct}%</b> of their earnings — for life.\n\n🔗 <code>${esc(link)}</code>`,
-    kb: [[{ text: "📤 Share link", url: share }], [{ text: "⬅ Back", callback_data: "m" }]],
-  };
-}
-
-async function tasksView(uid: string, s: Settings): Promise<{ text: string; kb: Kb }> {
-  const [tSnap, uSnap] = await Promise.all([db().ref("tasks").get(), db().ref(`users/${uid}/completed_tasks`).get()]);
-  const done = (uSnap.val() || {}) as Record<string, any>;
-  const all = Object.entries((tSnap.val() || {}) as Record<string, any>).filter(([id]) => !done[id]?.claimed);
-  const join = all.filter(([, t]) => t.type === "telegram_join").slice(0, 6);
-  const rest = all.length - join.length;
-  const cpt = s.coins_per_tfuel;
-  const kb: Kb = [];
-  const lines = ["✅ <b>Tasks</b>", ""];
-  if (!all.length) lines.push("You've completed everything for now. New tasks appear here — check back soon!");
-  for (const [id, t] of join) {
-    lines.push(`• ${esc(t.title)} — <b>+${tf(Number(t.reward) || 0, cpt)} TFUEL</b>`);
-    const ch = String(t.channel_id || "");
-    const url = t.url || (ch.startsWith("@") ? `https://t.me/${ch.slice(1)}` : "");
-    kb.push([...(url ? [{ text: "📢 Join", url }] : []), { text: "✅ Verify", callback_data: `v:${id}` }]);
+const mk = (v: View) => JSON.stringify({ inline_keyboard: v.kb });
+const send = (chat: number | string, v: View, html = true) =>
+  tgCall("sendMessage", { chat_id: chat, text: v.text, ...(html ? { parse_mode: "HTML" } : {}), disable_web_page_preview: "true", reply_markup: mk(v) });
+/** /start (and "back"): banner photo on top when the admin set one */
+async function sendHome(chat: number | string, v: View, s: Settings) {
+  if (s.bot_photo) {
+    if (v.text.length <= 1000) { const r = await tgCall("sendPhoto", { chat_id: chat, photo: s.bot_photo, caption: v.text, reply_markup: mk(v) }); if (r.ok) return; }
+    else { const r = await tgCall("sendPhoto", { chat_id: chat, photo: s.bot_photo }); void r; }
   }
-  if (rest > 0) lines.push("", `…and ${rest} more task${rest > 1 ? "s" : ""} (articles, visits, daily reward) inside the app.`);
-  kb.push([openBtn(s, "📱 Open app")], [{ text: "⬅ Back", callback_data: "m" }]);
-  return { text: lines.join("\n"), kb };
+  await send(chat, v, false);
 }
+const edit = (chat: number | string, mid: number, v: View, html: boolean, photo: boolean) =>
+  photo
+    ? tgCall("editMessageCaption", { chat_id: chat, message_id: mid, caption: v.text.slice(0, 1000), ...(html ? { parse_mode: "HTML" } : {}), reply_markup: mk(v) })
+    : tgCall("editMessageText", { chat_id: chat, message_id: mid, text: v.text, ...(html ? { parse_mode: "HTML" } : {}), disable_web_page_preview: "true", reply_markup: mk(v) });
 
-const send = (chat: number | string, v: { text: string; kb: Kb }, html = true) =>
-  tgCall("sendMessage", { chat_id: chat, text: v.text, ...(html ? { parse_mode: "HTML" } : {}), disable_web_page_preview: "true", reply_markup: JSON.stringify({ inline_keyboard: v.kb }) });
-const edit = (chat: number | string, mid: number, v: { text: string; kb: Kb }, html = true) =>
-  tgCall("editMessageText", { chat_id: chat, message_id: mid, text: v.text, ...(html ? { parse_mode: "HTML" } : {}), disable_web_page_preview: "true", reply_markup: JSON.stringify({ inline_keyboard: v.kb }) });
-
-/** message / callback_query — Stars আলাদা (tg-webhook) */
+/** message / callback_query / inline_query — Stars are handled separately (tg-webhook) */
 export async function handleBot(u: any): Promise<boolean> {
   const s = await getSettings();
-  if (u.message?.text && u.message.chat?.type === "private") {
-    const m = /^\/(start|profile|tasks|invite|help|menu)(?:@\w+)?(?:\s+(\S+))?/i.exec(u.message.text);
-    if (!m) return false;
+
+  // ---- inline mode: @bot → "Invite friends" card with the user's own link ----
+  if (u.inline_query) {
+    const q = u.inline_query;
+    if (!s.bot_inline || !s.referral_enabled) { await tgCall("answerInlineQuery", { inline_query_id: q.id, results: "[]", cache_time: 60 }); return true; }
+    try { await rateLimit(String(q.from?.id), "botinline", 20); } catch { return true; }
+    const code = await getRefCode(String(q.from?.id)).catch(() => "");
+    const link = s.referral_link ? `${s.referral_link}${code ? `?startapp=${code}` : ""}` : "";
+    if (!link) { await tgCall("answerInlineQuery", { inline_query_id: q.id, results: "[]", cache_time: 60 }); return true; }
+    const msg = `${s.invite_msg || "Join me on TFUEL and start mining!"}\n\n👉 ${link}`;
+    const results = [{ type: "article", id: "invite", title: "📤 Invite friends to TFUEL", description: "Send your personal invite link", input_message_content: { message_text: msg, disable_web_page_preview: true }, reply_markup: { inline_keyboard: [[{ text: "⛏ Start Mining", url: link }]] } }];
+    await tgCall("answerInlineQuery", { inline_query_id: q.id, results: JSON.stringify(results), cache_time: 30, is_personal: "true" });
+    return true;
+  }
+
+  if (u.message?.text) {
+    const chatType = u.message.chat?.type;
+    const m = /^\/(start|profile|tasks|invite|help|menu|balance|wallet|daily|top|price|clan|settings)(?:@\w+)?(?:\s+(\S+))?/i.exec(u.message.text);
     const chat = u.message.chat.id;
+
+    // ---- groups: only /top and /price (public info) ----
+    if (chatType === "group" || chatType === "supergroup") {
+      if (!s.bot_groups || !m) return false;
+      const cmd = m[1].toLowerCase();
+      if (cmd !== "top" && cmd !== "price") return false;
+      try { await rateLimit(String(chat), "botgrp", 8); } catch { return true; }
+      const text = cmd === "top" ? await boardText(null, s, "d") : await priceText(s);
+      await tgCall("sendMessage", { chat_id: chat, text, parse_mode: "HTML", disable_web_page_preview: "true", reply_markup: JSON.stringify({ inline_keyboard: [[openBtn(s, "⛏ Open TFUEL")]] }) });
+      return true;
+    }
+    if (chatType !== "private") return false;
+
+    if (!m) {
+      // free text → FAQ auto-reply (commands that aren't ours are ignored)
+      const txt = String(u.message.text || "").trim();
+      if (txt.startsWith("/") || txt.length < 4) return false;
+      const fid = String(u.message.from?.id || chat);
+      try { await rateLimit(fid, "botfaq", 6); } catch { return true; }
+      const r = await faqReply(txt, s);
+      if (!r) return false;
+      await tgCall("sendMessage", { chat_id: chat, text: r.text.slice(0, 1500), disable_web_page_preview: "true", reply_markup: JSON.stringify({ inline_keyboard: [[openBtn(s, r.found ? "📱 Open app" : "💬 Open Support", r.found ? undefined : "go_support")]] }) });
+      return true;
+    }
     const uid = String(u.message.from?.id || chat);
+    try { await rateLimit(uid, "botcmd", 20); } catch { return true; }
     const cmd = m[1].toLowerCase();
     if (cmd === "profile") await send(chat, await profileView(uid, s));
     else if (cmd === "tasks") await send(chat, await tasksView(uid, s));
-    else if (cmd === "invite") await send(chat, await inviteView(uid, s));
+    else if (cmd === "invite") {
+      const v = await inviteView(uid, s);
+      if (s.bot_photo && v.text.length <= 1000) { const r = await tgCall("sendPhoto", { chat_id: chat, photo: s.bot_photo, caption: v.text, parse_mode: "HTML", reply_markup: mk(v) }); if (!r.ok) await send(chat, v); }
+      else await send(chat, v);
+    }
+    else if (cmd === "balance" || cmd === "wallet") await send(chat, await walletView(uid, s));
+    else if (cmd === "daily") await send(chat, await dailyView(uid, s));
+    else if (cmd === "top") await send(chat, await leaderboardView(uid, s, "d"));
+    else if (cmd === "price") await send(chat, await priceView(s));
+    else if (cmd === "clan") await send(chat, await clanBotView(uid, s));
+    else if (cmd === "settings") await send(chat, await settingsView(uid, s));
+    else if (cmd === "help" && !m[2]) await send(chat, helpView(s));
     else {
       const param = m[2] && /^[\w-]{1,64}$/.test(m[2]) ? m[2] : undefined;
-      await send(chat, startView(s, param), false);
+      await sendHome(chat, await welcomeView(uid, s, u.message.from?.first_name, param), s);
     }
     return true;
   }
+
   const q = u.callback_query;
   if (q?.data && q.message) {
     const chat = q.message.chat.id;
     const mid = q.message.message_id;
     const uid = String(q.from?.id);
+    const photo = !!q.message.photo;
     try { await rateLimit(uid, "botcb", 30); } catch { await tgCall("answerCallbackQuery", { callback_query_id: q.id, text: "Slow down a little." }); return true; }
     const d = String(q.data);
     let note = "";
-    let view: { text: string; kb: Kb } | null = null;
+    let view: View | null = null;
     let html = true;
-    if (d === "m") { view = startView(s); html = false; }
+    if (d === "m") { view = await welcomeView(uid, s, q.from?.first_name); html = false; }
     else if (d === "p") view = await profileView(uid, s);
     else if (d === "i") view = await inviteView(uid, s);
     else if (d === "t") view = await tasksView(uid, s);
+    else if (d === "d") view = await dailyView(uid, s);
+    else if (d === "w") view = await walletView(uid, s);
+    else if (d === "l" || d.startsWith("l:")) view = await leaderboardView(uid, s, (["d", "w", "a"].includes(d.slice(2)) ? d.slice(2) : "d") as "d" | "w" | "a");
+    else if (d === "x") view = await priceView(s);
+    else if (d === "c") view = await clanBotView(uid, s);
+    else if (d === "h") view = helpView(s);
+    else if (d.startsWith("q:")) view = faqAnswerView(s, Number(d.slice(2)) || 0);
+    else if (d === "s") view = await settingsView(uid, s);
+    else if (d.startsWith("st:")) { await toggleSetting(uid, d.slice(3)); view = await settingsView(uid, s); note = "Saved"; }
+    else if (d.startsWith("r:")) { const [, k, id] = d.split(":"); view = await receiptView(uid, s, k, id || ""); }
     else if (d.startsWith("v:")) {
       try {
         const r = await claimJoin({ id: uid, first_name: q.from?.first_name, username: q.from?.username }, d.slice(2));
@@ -131,8 +146,10 @@ export async function handleBot(u: any): Promise<boolean> {
       view = await tasksView(uid, s);
     }
     await tgCall("answerCallbackQuery", { callback_query_id: q.id, ...(note ? { text: note } : {}) });
-    if (view) await edit(chat, mid, view, html);
+    if (view) await edit(chat, mid, view, html, photo);
     return true;
   }
   return false;
 }
+void esc; void deepLink;
+export type { Kb };

@@ -5,6 +5,7 @@ import type { Settings } from "./settings";
 import { activity } from "./wallet";
 import { mailMoney } from "./moneymail";
 import { notify } from "./notify";
+import { recordFill } from "./position";
 
 /** limit order / price alert-এর সূচক: দাম micro (১e-৮) করে ১৪ অঙ্কে সাজানো */
 export const padPrice = (p: number) => String(Math.max(0, Math.round(p * 1e8))).padStart(14, "0");
@@ -71,6 +72,7 @@ export async function fillOrder(id: string, price: number, s: Settings) {
   up["stats/trade_volume_u"] = ServerValue.increment(gross);
   up["stats/trade_fees_u"] = ServerValue.increment(feeU);
   await db().ref().update(up);
+  await recordFill(ord.uid, ord.side, Math.abs(coinsTotal), Math.abs(usdtDelta));
   const kind = ord.side === "sell" ? "limit_sell" : "limit_buy";
   // sell: coin আগেই কাটা, তাই activity-তে coin ঋণাত্মক দেখাই; buy: USDT আগেই কাটা
   await activity(ord.uid, kind, { coins: coinsTotal, usdt_u: usdtDelta, note: `@ $${price}` });

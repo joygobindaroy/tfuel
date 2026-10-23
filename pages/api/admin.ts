@@ -1,3 +1,5 @@
+import { BOT_COMMANDS } from "@/lib/bot";
+import { announceTask } from "@/lib/taskalert";
 import { requireAdmin, HttpError } from "@/lib/auth";
 import { route } from "@/lib/api";
 import { db } from "@/lib/firebase";
@@ -157,7 +159,8 @@ export default route(async (req, res) => {
         ...v,
         stats: { started: 0, finished: 0, claimed: 0, ...(stats[id] || {}) },
       }));
-      const tasks = Object.entries((t.val() || {}) as Record<string, any>).map(([id, v]) => ({ id, ...v }));
+      const tst = ((await db().ref("task_stats").get()).val() || {}) as Record<string, { done?: number }>;
+      const tasks = Object.entries((t.val() || {}) as Record<string, any>).map(([id, v]) => ({ id, ...v, done_count: tst[id]?.done || 0 }));
       const withdrawals = await recentWithdrawals(300);
       return void res.json({ success: true, sites, tasks, withdrawals });
     }
@@ -627,9 +630,9 @@ export default route(async (req, res) => {
     case "starsConnect": {
       const host = String(req.headers["x-forwarded-host"] || req.headers.host || "");
       if (!host || /localhost/.test(host)) throw new HttpError(400, "Open the admin panel from your live site to connect");
-      const r = await tgCall("setWebhook", { url: `https://${host}/api/tg-webhook`, secret_token: webhookSecret(), allowed_updates: JSON.stringify(["message", "pre_checkout_query", "callback_query"]), drop_pending_updates: "false" });
+      const r = await tgCall("setWebhook", { url: `https://${host}/api/tg-webhook`, secret_token: webhookSecret(), allowed_updates: JSON.stringify(["message", "pre_checkout_query", "callback_query", "inline_query"]), drop_pending_updates: "false" });
       if (!r.ok) throw new HttpError(400, r.description || "Telegram refused the webhook");
-      await tgCall("setMyCommands", { commands: JSON.stringify([{ command: "start", description: "Open TFUEL" }, { command: "profile", description: "My balance & invite link" }, { command: "tasks", description: "Tasks you can do" }, { command: "invite", description: "Invite friends" }]) });
+      await tgCall("setMyCommands", { commands: JSON.stringify(BOT_COMMANDS) });
       await adminLog(who, "stars_webhook_connected", { host });
       return void res.json({ success: true });
     }
@@ -850,6 +853,9 @@ export default route(async (req, res) => {
         title: String(b.title || "").slice(0, 80),
         reward: posInt(b.reward, "reward"),
         one_time: true,
+        sponsor: String(b.sponsor || "").replace(/[<>]/g, "").trim().slice(0, 30) || null,
+        budget: Math.max(0, Math.min(1e7, Math.floor(Number(b.budget) || 0))) || null,
+        cpa: Math.max(0, Math.min(1000, Number(b.cpa) || 0)) || null,
       };
       if (!base.title) throw new HttpError(400, "Title required");
 
@@ -874,6 +880,7 @@ export default route(async (req, res) => {
       if (!idRe.test(id)) throw new HttpError(400, "Invalid id");
       await db().ref(`tasks/${id}`).set(data);
       await adminLog(who, "save_task", { id, title: data.title });
+      if (!b.id) announceTask(data.title, data.reward).catch(() => {}); // new task → opted-in users get a bot message
       return void res.json({ success: true, id });
     }
 

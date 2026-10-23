@@ -1,3 +1,6 @@
+import { getCfg2 } from "@/lib/cfg2";
+import { featureOn } from "@/lib/features";
+import { settleAutoConvert } from "@/lib/autoconv";
 import { authenticate } from "@/lib/auth";
 import { route } from "@/lib/api";
 import { db } from "@/lib/firebase";
@@ -19,8 +22,10 @@ export default route(async (req, res) => {
   const termsP = settings.terms_enabled ? db().ref(`user_prefs/${user.id}/terms_v`).get() : null;
   await trackLogin(user.id, req);
   await markComeback(user.id, u, settings, now);
+  { const c = await settleAutoConvert(user.id, u, settings, now); if (c) u.balance -= c; }
   if (u.ref_count) { const g = await settleCommission(user.id); if (g) u.balance += g; }
 
+  const c2 = await getCfg2();
   const cfg = {
     minWithdraw: settings.min_withdraw,
     methods: settings.withdraw_methods,
@@ -32,6 +37,7 @@ export default route(async (req, res) => {
     send: settings.send_enabled,
     shops: settings.shops_enabled,
     bdtRate: settings.bdt_rate,
+    games: { clans: c2.clan.enabled && featureOn(settings, "clans"), rigs: c2.rigs.enabled && featureOn(settings, "rigs"), puzzle: c2.puzzle.enabled && featureOn(settings, "puzzle"), collect: c2.collect.enabled && featureOn(settings, "collectibles"), autoconv: c2.autoconv.enabled && featureOn(settings, "autoconv") },
   };
   const announcement =
     settings.announcement.enabled && settings.announcement.text ? settings.announcement : null;
@@ -41,7 +47,8 @@ export default route(async (req, res) => {
     return void res.json({ success: true, maintenance: true, message: settings.maintenance_msg, cfg });
   }
 
-  const [tSnap, sSnap] = await Promise.all([db().ref("tasks").get(), db().ref("article_sites").get()]);
+  const [tSnap, sSnap, tstSnap] = await Promise.all([db().ref("tasks").get(), db().ref("article_sites").get(), db().ref("task_stats").get()]);
+  const tst = (tstSnap.val() || {}) as Record<string, { done?: number }>;
 
   const tasks = Object.entries((tSnap.val() || {}) as Record<string, any>).map(([id, t]) => ({
     id,
@@ -55,8 +62,10 @@ export default route(async (req, res) => {
     reward: t.reward,
     min_wait_seconds: t.min_wait_seconds,
     channel_id: t.type === "telegram_join" ? t.channel_id : undefined,
+    sponsor: t.sponsor || undefined,
+    left: Number(t.budget) > 0 ? Math.max(0, Number(t.budget) - (tst[id]?.done || 0)) : undefined,
     done: !!u.completed_tasks?.[id]?.claimed,
-  })).filter((t) => !t.done); // একবারের টাস্ক শেষ হলে আর দেখানো হয় না
+  })).filter((t) => !t.done && (t.left === undefined || t.left > 0)); // একবারের টাস্ক শেষ হলে আর দেখানো হয় না
 
   // চলমান run
   let run: { site_id: string; step_done: number; total: number; status: string } | null = null;

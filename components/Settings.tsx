@@ -6,7 +6,7 @@ import { CopyBtn, useCountdown } from "@/components/Ui";
 import { AppFeelCard, CheckupCard, TrustedToggle, PrivacyCard, NotifExtras } from "@/components/SettingsExtra";
 
 type Say = (t: string, ok?: boolean) => void;
-export interface Account { email?: { enabled: boolean; required: boolean; addr: string; whitelist: boolean; cooldown_h: number; money?: boolean }; pin: boolean; pin_locked: boolean; bdt?: boolean; cur: "tfuel" | "usdt" | null; login_alert: boolean; mail_money?: boolean; remind_daily?: boolean; prefs?: { nick: string; lb_hide: boolean; wl_only: boolean; def_net: string; sum_daily: boolean; notif: Record<string, boolean>; quiet: { on: boolean; from: number; to: number; tz: number } | null }; devices: { label: string; last: number; first: number }[]; addrs: { id: string; label: string; address: string; added_at?: number; fav?: boolean }[] }
+export interface Account { email?: { enabled: boolean; required: boolean; addr: string; whitelist: boolean; cooldown_h: number; money?: boolean }; pin: boolean; pin_locked: boolean; bdt?: boolean; cur: "tfuel" | "usdt" | null; login_alert: boolean; mail_money?: boolean; remind_daily?: boolean; prefs?: { nick: string; lb_hide: boolean; wl_only: boolean; def_net: string; sum_daily: boolean; task_alert?: boolean; notif: Record<string, boolean>; quiet: { on: boolean; from: number; to: number; tz: number } | null }; devices: { label: string; last: number; first: number }[]; addrs: { id: string; label: string; address: string; added_at?: number; fav?: boolean }[] }
 
 /** PIN ও Saved addresses — Settings ও withdraw ফর্ম দুই জায়গাই ব্যবহার করে */
 export function useAccount() {

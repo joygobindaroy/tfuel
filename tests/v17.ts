@@ -34,7 +34,7 @@ async function main() {
   // /start
   await handleBot({ message: { text: "/start", chat: { id: 42, type: "private" }, from: { id: 42 } } });
   const s1 = last("sendMessage");
-  assert.match(s1.p.get("text")!, /Welcome to TFUEL/);
+  assert.match(s1.p.get("text")!, /Welcome (to TFUEL|back)/); // returning users now get the short summary
   const kb1 = JSON.parse(s1.p.get("reply_markup")!).inline_keyboard;
   assert.equal(kb1[0][0].text, "⛏ Start Mining 🚀");
   assert.equal(kb1[0][0].url, "https://t.me/tfuel_bot/app");

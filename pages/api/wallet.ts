@@ -3,6 +3,7 @@ import { route } from "@/lib/api";
 import { db } from "@/lib/firebase";
 import { ensureUser, pendingMining } from "@/lib/user";
 import { peekPrice, fromU } from "@/lib/market";
+import { plSummary } from "@/lib/position";
 
 const BUCKET = 6 * 3600000; // portfolio ছবি ৬ ঘণ্টায় একটা
 
@@ -44,6 +45,8 @@ export default route(async (req, res) => {
   const tot = u.usdt_tot || {};
   res.json({
     success: true,
+    pl: await plSummary(user.id, price, cpt),
+    ac: { pct: Number((u as any).ac_pct) || 0, total: Number((u as any).ac_total) || 0 },
     price,
     cpt,
     tfuel: {

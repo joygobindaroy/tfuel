@@ -11,8 +11,9 @@ import OpsPage from "@/components/AdminOps";
 import InsightsPage from "@/components/AdminInsights";
 import CommsPage from "@/components/AdminComms";
 import ControlsPage from "@/components/AdminControls";
+import GrowthPage from "@/components/AdminGrowth";
 
-type Tab = "shops" | "support" | "rewards" | "dashboard" | "users" | "sites" | "tasks" | "withdrawals" | "usdt" | "market" | "fraud" | "settings" | "channel" | "logs" | "engage" | "health" | "ops" | "insights" | "comms" | "controls";
+type Tab = "shops" | "support" | "rewards" | "dashboard" | "users" | "sites" | "tasks" | "withdrawals" | "usdt" | "market" | "fraud" | "settings" | "channel" | "logs" | "engage" | "health" | "ops" | "insights" | "comms" | "controls" | "growth";
 const NAV: [Tab, string, IconName][] = [
   ["dashboard", "Dashboard", "grid"],
   ["users", "Users", "users"],
@@ -22,6 +23,7 @@ const NAV: [Tab, string, IconName][] = [
   ["ops", "Money desk", "wallet"],
   ["insights", "Insights", "trend"],
   ["comms", "Communication", "megaphone"],
+  ["growth", "Growth & Games", "zap"],
   ["controls", "Controls", "settings"],
   ["rewards", "Rewards & Plans", "gift"],
   ["usdt", "USDT desk", "download"],
@@ -174,6 +176,7 @@ export default function Admin() {
           {tab === "insights" && <InsightsPage call={call} />}
           {tab === "comms" && <CommsPage call={call} />}
           {tab === "controls" && <ControlsPage call={call} />}
+          {tab === "growth" && <GrowthPage call={call} />}
           {tab === "sites" && <Sites call={call} />}
           {tab === "tasks" && <Tasks call={call} />}
           {tab === "withdrawals" && <Withdrawals call={call} />}
@@ -509,7 +512,7 @@ function Sites({ call }: { call: Call }) {
 /* ---------------- Tasks ---------------- */
 function Tasks({ call }: { call: Call }) {
   const [tasks, setTasks] = useState<any[]>([]);
-  const [f, setF] = useState<any>({ type: "telegram_join", title: "", reward: 500, channel_id: "", url: "", min_wait_seconds: 10 });
+  const [f, setF] = useState<any>({ type: "telegram_join", title: "", reward: 500, channel_id: "", url: "", min_wait_seconds: 10, sponsor: "", budget: "", cpa: "" });
   const load = useCallback(async () => {
     const d: any = await call({ action: "list" });
     if (d) setTasks(d.tasks);
@@ -547,6 +550,14 @@ function Tasks({ call }: { call: Call }) {
               <input inputMode="numeric" value={f.min_wait_seconds} onChange={(e) => setF({ ...f, min_wait_seconds: e.target.value })} />
             </>
           )}
+          <div className="title" style={{ marginTop: 14, fontSize: 13 }}>Sponsored (optional)</div>
+          <div className="xs muted">Fill in when an advertiser pays you for this task. Users see a “Sponsored” label.</div>
+          <label>Sponsor name</label>
+          <input value={f.sponsor} onChange={(e) => setF({ ...f, sponsor: e.target.value })} placeholder="e.g. CoolChannel" />
+          <div className="grid2">
+            <div><label>Budget (max completions, 0 = unlimited)</label><input inputMode="numeric" value={f.budget} onChange={(e) => setF({ ...f, budget: e.target.value })} /></div>
+            <div><label>Advertiser pays per completion (USDT, for your records)</label><input inputMode="decimal" value={f.cpa} onChange={(e) => setF({ ...f, cpa: e.target.value })} /></div>
+          </div>
           <button className="btn block" style={{ marginTop: 14 }} onClick={async () => { if (await call({ action: "saveTask", ...f }, "Task added")) { setF({ ...f, title: "" }); load(); } }}>
             <Icon name="plus" size={16} /> Add task
           </button>
@@ -558,7 +569,7 @@ function Tasks({ call }: { call: Call }) {
             <div className="hist" key={t.id}>
               <div>
                 <div className="b">{t.title}</div>
-                <div className="xs muted">{t.type === "telegram_join" ? `Join ${t.channel_id}` : `Visit · ${t.min_wait_seconds}s`} · +{fmt(t.reward)}</div>
+                <div className="xs muted">{t.type === "telegram_join" ? `Join ${t.channel_id}` : `Visit · ${t.min_wait_seconds}s`} · +{fmt(t.reward)}{t.sponsor ? ` · Sponsored by ${t.sponsor}` : ""} · done {t.done_count || 0}{t.budget ? `/${t.budget}` : ""}{t.cpa ? ` · earned ≈ $${((t.done_count || 0) * t.cpa).toFixed(2)}` : ""}</div>
               </div>
               <button className="btn sec sm" onClick={async () => { if (confirm("Delete this task?") && (await call({ action: "deleteTask", taskId: t.id }, "Deleted"))) load(); }}><Icon name="trash" size={14} /></button>
             </div>
@@ -749,11 +760,30 @@ function SettingsPage({ call }: { call: Call }) {
 
       <div className="card">
         <div className="title">Telegram bot — /start message</div>
-        <div className="sub" style={{ marginBottom: 6 }}>Shown when a user presses Start in the bot. Buttons for Profile, Tasks and Invite are added automatically. After changing the webhook list, press “Connect Telegram payments” once (Market &amp; Trading) so button taps reach the bot.</div>
+        <div className="sub" style={{ marginBottom: 6 }}>Shown when a user presses Start in the bot. The menu below decides which buttons appear. After changing the webhook list, press “Connect Telegram payments” once (Market &amp; Trading) so button taps reach the bot.</div>
         <label>Welcome message</label>
         <textarea rows={9} maxLength={1500} value={s.bot_welcome} onChange={(e) => set("bot_welcome", e.target.value)} />
+        <div className="small muted" style={{ marginTop: 4 }}>Use <b>{"{name}"}</b> in the message to show the user&apos;s first name (the words “Hey Miner” are also replaced automatically).</div>
+        <label>Banner image (optional, https link — shown above the message)</label>
+        <input placeholder="https://…/banner.png" maxLength={300} value={s.bot_photo || ""} onChange={(e) => set("bot_photo", e.target.value)} />
         <label>First button text</label>
         <input maxLength={40} value={s.bot_start_label} onChange={(e) => set("bot_start_label", e.target.value)} />
+        <label>Menu buttons (order, label, on/off)</label>
+        {(s.bot_menu || []).map((m: any, i: number) => {
+          const move = (d: number) => { const a = [...s.bot_menu]; const j = i + d; if (j < 0 || j >= a.length) return; [a[i], a[j]] = [a[j], a[i]]; set("bot_menu", a); };
+          return (
+            <div key={m.k} style={{ display: "flex", gap: 6, marginBottom: 6, alignItems: "center" }}>
+              <Toggle on={m.on} onChange={(v) => set("bot_menu", s.bot_menu.map((x: any, j: number) => (j === i ? { ...x, on: v } : x)))} />
+              <input maxLength={24} value={m.text} onChange={(e) => set("bot_menu", s.bot_menu.map((x: any, j: number) => (j === i ? { ...x, text: e.target.value } : x)))} />
+              <button className="btn sec sm" type="button" onClick={() => move(-1)}>↑</button>
+              <button className="btn sec sm" type="button" onClick={() => move(1)}>↓</button>
+            </div>
+          );
+        })}
+        <div className="row" style={{ marginTop: 8 }}><div><div className="title" style={{ fontSize: 14 }}>Short welcome for returning users</div><div className="sub">Shows their balance, streak and whether today&apos;s reward is ready.</div></div><Toggle on={!!s.bot_returning} onChange={(v) => set("bot_returning", v)} /></div>
+        <div className="row" style={{ marginTop: 8 }}><div><div className="title" style={{ fontSize: 14 }}>Inline invite card</div><div className="sub">Typing @yourbot in any chat offers the user&apos;s invite link. Turn on once in @BotFather → /setinline.</div></div><Toggle on={!!s.bot_inline} onChange={(v) => set("bot_inline", v)} /></div>
+        <div className="row" style={{ marginTop: 8 }}><div><div className="title" style={{ fontSize: 14 }}>Group commands</div><div className="sub">Add the bot to your community group: /top and /price work there.</div></div><Toggle on={!!s.bot_groups} onChange={(v) => set("bot_groups", v)} /></div>
+        <div className="row" style={{ marginTop: 8 }}><div><div className="title" style={{ fontSize: 14 }}>Post weekly winners to the channel</div><div className="sub">Needs Auto-post on and a channel set (Channel tab).</div></div><Toggle on={!!s.autopost_winners} onChange={(v) => set("autopost_winners", v)} /></div>
         <label>Link buttons (Channel, Chat, Twitter…)</label>
         {(s.bot_buttons || []).map((b: any, i: number) => (
           <div key={i} className="grid2" style={{ marginBottom: 6 }}>

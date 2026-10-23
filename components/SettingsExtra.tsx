@@ -131,6 +131,10 @@ export function NotifExtras({ a, act, busy, say }: P) {
         <div><div className="title">Daily summary</div><div className="sub">Every morning: what you earned yesterday.</div></div>
         <Sw on={!!a.prefs?.sum_daily} disabled={busy} label="Toggle daily summary" onClick={() => act({ action: "setPrefs", sum_daily: !a.prefs?.sum_daily }, a.prefs?.sum_daily ? "Summary off" : "Summary on")} />
       </div>
+      <div className="row" style={{ marginTop: 14 }}>
+        <div><div className="title">New task alerts</div><div className="sub">A bot message when a new task is added.</div></div>
+        <Sw on={!!a.prefs?.task_alert} disabled={busy} label="Toggle new task alerts" onClick={() => act({ action: "setPrefs", task_alert: !a.prefs?.task_alert }, a.prefs?.task_alert ? "Task alerts off" : "Task alerts on")} />
+      </div>
       <div className="title" style={{ marginTop: 14 }}>My price alerts</div>
       {alerts === null && <div className="sub">Loading…</div>}
       {alerts?.length === 0 && <div className="sub">None. Set one from the chart in the TFUEL tab.</div>}

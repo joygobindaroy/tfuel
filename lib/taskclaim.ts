@@ -2,6 +2,7 @@ import { HttpError } from "./auth";
 import { db } from "./firebase";
 import { earn, activity, lbAdd } from "./wallet";
 import { ensureUser, qualifyReferral, newUser, UserRecord } from "./user";
+import { reserveSlot, releaseSlot, slotDone } from "./sponsor";
 import { tgCall } from "./telegram";
 import type { TgUser } from "./auth";
 
@@ -23,6 +24,7 @@ export async function claimJoin(user: TgUser, taskId: string): Promise<{ reward:
   }
   if (!OK_STATUSES.has(tg.result?.status)) throw new HttpError(403, "not_joined");
 
+  await reserveSlot(taskId, task);
   let failure = false;
   const result = await db().ref(`users/${user.id}`).transaction((cur: UserRecord | null) => {
     if (cur === null) return newUser();
@@ -34,7 +36,8 @@ export async function claimJoin(user: TgUser, taskId: string): Promise<{ reward:
     earn(cur, "tasks", Number(task.reward) || 0);
     return cur;
   });
-  if (!result.committed || failure) throw new HttpError(409, "Already claimed");
+  if (!result.committed || failure) { await releaseSlot(taskId); throw new HttpError(409, "Already claimed"); }
+  await slotDone(taskId, task);
   await lbAdd(user.id, Number(task.reward) || 0);
   await activity(user.id, "task", { coins: Number(task.reward) || 0, note: String(task.title || "").slice(0, 60) });
   await qualifyReferral(user.id);

@@ -10,6 +10,9 @@ import { healRecentStars } from "@/lib/stars";
 import { runUserJobs } from "@/lib/jobs-user";
 import { runAdminJobs } from "@/lib/jobs-admin";
 import { sendDailyReminders } from "@/lib/remind";
+import { runHealthAlerts } from "@/lib/healthalerts";
+import { payRefContest } from "@/lib/growth2";
+import { runGameJobs } from "@/lib/jobs-games";
 
 /**
  * পর্যায়ক্রমে চলে (Vercel Cron বা cron-job.org থেকে প্রতি মিনিটে/৫ মিনিটে GET)।
@@ -30,9 +33,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const stars = await healRecentStars().catch(() => null);
     const reminded = await sendDailyReminders(s).catch(() => null);
     const userJobs = await runUserJobs(s).catch(() => null);
+    const health = await runHealthAlerts(s).catch(() => null);
+    const contest = await payRefContest().catch(() => null);
+    const games = await runGameJobs(s).catch(() => null);
     const adminJobs = await runAdminJobs(s).catch(() => null);
     await db().ref("stats/cron_at").set(Date.now()).catch(() => {});
-    res.json({ success: true, ...t, leaderboard: paid, deposits: dep, stars, reminded, userJobs, adminJobs });
+    res.json({ success: true, ...t, leaderboard: paid, deposits: dep, stars, reminded, userJobs, health, contest, games, adminJobs });
   } catch (e: any) {
     console.error(e);
     res.status(500).json({ success: false, error: "Server error" });

@@ -137,6 +137,11 @@ export default route(async (req, res) => {
       up[`${base}/sum_daily`] = on ? true : null;
       up[`summary_users/${user.id}`] = on ? true : null;
     }
+    if (b.task_alert !== undefined) {
+      const on = !!b.task_alert;
+      up[`${base}/task_alert`] = on ? true : null;
+      up[`task_users/${user.id}`] = on ? true : null;
+    }
     if (b.notif && typeof b.notif === "object") for (const k of ["money", "rewards", "tasks", "news"]) if (b.notif[k] !== undefined) up[`${base}/notif/${k}`] = b.notif[k] ? null : false;
     if (b.quiet && typeof b.quiet === "object") {
       const hr = (v: any) => Math.min(23, Math.max(0, Math.floor(Number(v) || 0)));
@@ -179,7 +184,7 @@ export default route(async (req, res) => {
     remind_daily: !!p.remind_daily,
     energy_msg: !!p.energy_msg,
     bdt: s.bdt_rate > 0,
-    prefs: { nick: p.nick || "", lb_hide: !!p.lb_hide, wl_only: !!p.wl_only, def_net: p.def_net || "", sum_daily: !!p.sum_daily, notif: { money: p.notif?.money !== false, rewards: p.notif?.rewards !== false, tasks: p.notif?.tasks !== false, news: p.notif?.news !== false }, quiet: p.quiet || null },
+    prefs: { nick: p.nick || "", lb_hide: !!p.lb_hide, wl_only: !!p.wl_only, def_net: p.def_net || "", sum_daily: !!p.sum_daily, task_alert: !!p.task_alert, notif: { money: p.notif?.money !== false, rewards: p.notif?.rewards !== false, tasks: p.notif?.tasks !== false, news: p.notif?.news !== false }, quiet: p.quiet || null },
     devices: Object.entries((p.devices || {}) as Record<string, any>).sort(([, a]: any, [, b]: any) => b.last - a.last).slice(0, 9).map(([id, d]: any) => ({ id, label: d.label, last: d.last, first: d.first, current: id === deviceHash(req) })),
     addrs: Object.entries((p.addrs || {}) as Record<string, any>).map(([id, a]) => ({ id, label: a.label, address: a.address, added_at: a.added_at || 0, fav: !!a.fav })),
   });

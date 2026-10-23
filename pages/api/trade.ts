@@ -8,6 +8,7 @@ import { earn, spend, usdtTot, activity } from "@/lib/wallet";
 import { ensureUser, newUser, MAX_AUTH_AGE_MONEY, UserRecord } from "@/lib/user";
 import { mailMoney } from "@/lib/moneymail";
 import { getPrice, toU, U } from "@/lib/market";
+import { recordFill } from "@/lib/position";
 
 /**
  * Buy / Sell — বাজার-দামে। দাম সবসময় server ঠিক করে (client-এর দেখা দাম ১% এর বেশি আলাদা হলে প্রত্যাখ্যান)।
@@ -104,6 +105,7 @@ export default route(async (req, res) => {
     })
     .catch(() => {});
 
+  await recordFill(user.id, side, coins, Math.abs(usdtDelta));
   await activity(user.id, side, { coins: coinDelta, usdt_u: usdtDelta, note: `@ $${p.price}` });
   await mailMoney(user.id, "trade", [["Side", side === "sell" ? "Sell" : "Buy"], ["TFUEL", `${(coins / s.coins_per_tfuel).toLocaleString("en-US", { maximumFractionDigits: 6 })}`], ["Price", `$${p.price}`], ["USDT", `${(Math.abs(usdtDelta) / U).toFixed(2)}`], ["Fee", `${(fee_u / U).toFixed(2)} USDT`]]);
   const o = out as unknown as { balance: number; usdt_u: number };

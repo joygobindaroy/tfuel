@@ -15,7 +15,7 @@ export async function sendDailyReminders(s: Settings, now = Date.now()): Promise
       if (last.val() === today) continue;
       await db().ref(`user_prefs/${uid}/remind_last`).set(today);
       if (day.val() === today) continue; // আজ ইতিমধ্যে নিয়েছে
-      await notify(uid, "🎁 Your daily reward is waiting — open the app and claim it to keep your streak!");
+      await notify(uid, "🎁 Your daily reward is waiting — claim it to keep your streak!", false, [[{ text: "🎁 Claim now", callback_data: "d" }]]);
       n++;
     } catch {}
   }

@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { HttpError } from "./auth";
 import { db } from "./firebase";
+import { bump, dayKey } from "./log";
 
 type Handler = (req: NextApiRequest, res: NextApiResponse) => Promise<void>;
 
@@ -32,7 +33,11 @@ export async function rateLimit(uid: string, action: string, max: number) {
     if (cur.count >= max) return; // abort
     return { minute, count: cur.count + 1 };
   });
-  if (!result.committed) throw new HttpError(429, "Too many requests");
+  if (!result.committed) {
+    // count the block for Admin → Controls → Rate limits (best-effort)
+    await bump(`stats/rl_blocked/${dayKey()}/${`${uid}~${action}`.replace(/[.$#\[\]\/]/g, "_").slice(0, 120)}`);
+    throw new HttpError(429, "Too many requests");
+  }
 }
 
 export const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));

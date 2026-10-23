@@ -243,6 +243,7 @@ const ERR: Record<string, string> = {
 /** error code → friendly English message */
 export function errText(e: any): string {
   const m = String(e?.message || "");
+  try { sessionStorage.setItem("last_err", m.slice(0, 60)); } catch {}
   if (m.startsWith("feature_off:")) return m.slice(12) || "This feature is temporarily unavailable.";
   if (ERR[m]) return ERR[m];
   if (m === "network" || e?.status === 0) return "No connection. Check your internet and try again.";

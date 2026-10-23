@@ -9,6 +9,7 @@ import { checkPin } from "@/lib/prefs";
 import { requireEmailCode, mailWithdraw } from "@/lib/emailcode";
 import { reqCtx } from "@/lib/reqctx";
 import { holdReason } from "@/lib/hold";
+import { geoHold } from "@/lib/geo";
 import { secLog } from "@/lib/seclog";
 import { peekPrice } from "@/lib/market";
 import { checkAddress } from "@/lib/addrcheck";
@@ -70,7 +71,7 @@ export default route(async (req, res) => {
   if (out.error) throw new HttpError(409, out.error);
 
   const price = await peekPrice(settings).catch(() => null);
-  const hold = holdReason(rec, settings, price ? (amount / settings.coins_per_tfuel) * price : 0);
+  const hold = [holdReason(rec, settings, price ? (amount / settings.coins_per_tfuel) * price : 0), await geoHold(user.id)].filter(Boolean).join("; ");
   const id = sortableId();
   const now = Date.now();
   try {

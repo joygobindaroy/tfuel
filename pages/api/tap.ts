@@ -5,6 +5,8 @@ import { flag } from "@/lib/log";
 import { enqueue } from "@/lib/queue";
 import { earn, lbAdd } from "@/lib/wallet";
 import { tapMult } from "@/lib/retention";
+import { getCfg2 } from "@/lib/cfg2";
+import { alertAdmins } from "@/lib/adminalert";
 import {
   ensureUser,
   currentEnergy,
@@ -27,6 +29,8 @@ export default route(async (req, res) => {
 
   const { settings } = await ensureUser(user);
 
+  const botCfg = (await getCfg2()).bot;
+  let botNow = false;
   let failure: string | null = null;
   let earnedTap = 0;
   let accepted = 0;
@@ -67,6 +71,16 @@ export default route(async (req, res) => {
         failure = "Not enough energy";
         return cur;
       }
+      if (botCfg.enabled && cur.last_tap_time) {
+        const iv = (now - cur.last_tap_time) / 1000;
+        if (iv > 0.2) {
+          const rate = n / iv;
+          let sc = (cur as any).bot_score || 0;
+          if (n >= 8 && rate >= 11) sc += 1; else if (rate < 6) sc = Math.max(0, sc - 2);
+          (cur as any).bot_score = sc;
+          if (sc >= botCfg.threshold && !(cur as any).bot_flagged) { (cur as any).bot_flagged = now; botNow = true; }
+        }
+      }
       cur.last_tap_time = now;
       const per = Math.floor(eff.earn_per_tap * tapMult(settings, now));
       cur.balance += n * per;
@@ -85,6 +99,11 @@ export default route(async (req, res) => {
     throw new HttpError(429, failure || "Rejected");
   }
   const u = result.snapshot.val() as UserRecord;
+  if (botNow) {
+    await flag(user.id, "auto_tap");
+    if (botCfg.action === "freeze") await db().ref(`frozen/${user.id}`).set({ reason: "Auto-tap detected", by: "system", at: Date.now() }).catch(() => {});
+    await alertAdmins("error", `Auto-tap suspected: user ${user.id} (${u.name || "?"}) tapped at a machine-like rate for a long time.${botCfg.action === "freeze" ? " Account frozen (withdraw/send blocked)." : ""}`);
+  }
   await lbAdd(user.id, earnedTap);
   if (u.empty_at && u.energy < settings.energy_cost && settings.empty_refill_hours > 0)
     await enqueue("energy", u.empty_at + settings.empty_refill_hours * 3600000, user.id, { uid: user.id, ea: u.empty_at });

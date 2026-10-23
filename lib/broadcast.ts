@@ -5,7 +5,7 @@ import { tgCall } from "./telegram";
 import { inboxPush } from "./notify";
 import { dayKey } from "./log";
 
-export interface Audience { kind: "all" | "active" | "tag" | "country"; days?: number; tag?: string; country?: string }
+export interface Audience { kind: "all" | "active" | "tag" | "country" | "tasks"; days?: number; tag?: string; country?: string }
 export interface BroadcastJob { text: string; url?: string; btn?: string; aud: Audience; inbox?: boolean }
 export interface Progress { id: string; status: "queued" | "sending" | "done"; total: number; sent: number; failed: number; created_at: number; done_at?: number; text: string; aud: Audience; cursor: number; ids?: string[]; job: BroadcastJob }
 
@@ -15,6 +15,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** Admin-only user data other modules write: user_admin/<uid>/{tags:{VIP:true}, country:"BD"} */
 export async function audienceIds(a: Audience): Promise<string[]> {
+  if (a.kind === "tasks") return Object.keys(((await db().ref("task_users").get()).val() || {}) as Record<string, any>);
   const idx = ((await db().ref("user_index").get()).val() || {}) as Record<string, any>;
   let ids = Object.keys(idx);
   if (a.kind === "all") return ids;

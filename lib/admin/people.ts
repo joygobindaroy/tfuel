@@ -227,7 +227,11 @@ const mod: AdminMod = async (action, b, ctx) => {
     /* ---- bulk actions ---- */
     case "uBulk": {
       needWrite(ctx);
-      const uids = Array.from(new Set((Array.isArray(b.uids) ? b.uids : []).map((x: any) => String(x)))).filter((x) => uidRe.test(x as string)) as string[];
+      const allTag = tagNorm(b.allTag);
+      const srcIds: any[] = allTag
+        ? Object.keys(((await db().ref("tags_index/" + allTag).get()).val() || {}) as Record<string, any>)
+        : Array.isArray(b.uids) ? b.uids : [];
+      const uids = Array.from(new Set(srcIds.map((x: any) => String(x)))).filter((x) => uidRe.test(x as string)) as string[];
       if (!uids.length) throw new HttpError(400, "Select at least one user");
       if (uids.length > 200) throw new HttpError(400, "At most 200 users at a time");
       const op = String(b.op || "");
@@ -256,6 +260,13 @@ const mod: AdminMod = async (action, b, ctx) => {
           await db().ref().update({ [`users/${uid}/banned`]: op === "ban" ? true : null, [`users/${uid}/ban_reason`]: op === "ban" ? reason : null });
           done++;
         }
+      } else if (op === "freeze" || op === "unfreeze") {
+        if (op === "freeze" && reason.length < 3) throw new HttpError(400, "A reason is required");
+        for (const uid of uids) {
+          if ((await db().ref(`users/${uid}/balance`).get()).val() === null) continue;
+          await db().ref(`frozen/${uid}`).set(op === "freeze" ? { reason, by: ctx.who, at: Date.now() } : null);
+          done++;
+        }
       } else if (op === "message") {
         const text = clean(b.text, 300);
         if (text.length < 3) throw new HttpError(400, "Write a message");
@@ -268,7 +279,7 @@ const mod: AdminMod = async (action, b, ctx) => {
         await db().ref().update(upd);
       } else throw new HttpError(400, "Unknown bulk action");
       await adminLog(ctx.who, "bulk_" + op, { users: uids.length, done, reason, amount: b.amount });
-      return { done };
+      return { done, total: uids.length, skipped: uids.length - done };
     }
     default:
       return undefined;

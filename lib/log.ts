@@ -11,7 +11,7 @@ export async function adminLog(by: string, action: string, detail: Record<string
   }
 }
 
-export type FlagKind = "too_fast" | "bad_codes" | "locked" | "out_of_order";
+export type FlagKind = "too_fast" | "bad_codes" | "locked" | "out_of_order" | "auto_tap";
 
 /** সন্দেহজনক আচরণের কাউন্টার (best-effort, কখনো মূল কাজ আটকায় না) */
 export async function flag(uid: string, kind: FlagKind) {

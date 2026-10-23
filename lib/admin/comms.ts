@@ -112,6 +112,22 @@ const mod: AdminMod = async (action, b, ctx) => {
       }
       return { text };
     }
+    case "templateList": {
+      const v = (await db().ref("admin_cfg/support_templates").get()).val();
+      if (Array.isArray(v) || (v && typeof v === "object")) {
+        const items = (Array.isArray(v) ? v : Object.values(v)).map((x: any) => ({ title: clean(x?.title, 40), text: clean(x?.text, 800) })).filter((x) => x.title && x.text);
+        return { items };
+      }
+      const s = await getSettings();
+      return { items: (s.support_templates || []).map((x) => ({ title: x.title, text: x.text })) };
+    }
+    case "templateSave": {
+      if (!Array.isArray(b.items) || b.items.length > 30) throw new HttpError(400, "At most 30 templates");
+      const items = b.items.map((x: any) => ({ title: clean(x?.title, 40), text: String(x?.text ?? "").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, " ").trim().slice(0, 800) })).filter((x: any) => x.title && x.text);
+      await db().ref("admin_cfg/support_templates").set(items.length ? items : null);
+      await adminLog(ctx.who, "templates_save", { n: items.length });
+      return { items };
+    }
     default:
       return undefined;
   }

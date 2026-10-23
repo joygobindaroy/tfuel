@@ -10,6 +10,7 @@ import { checkPin } from "@/lib/prefs";
 import { requireEmailCode, mailWithdraw } from "@/lib/emailcode";
 import { reqCtx } from "@/lib/reqctx";
 import { holdReason } from "@/lib/hold";
+import { geoHold } from "@/lib/geo";
 import { secLog } from "@/lib/seclog";
 import { checkAddress } from "@/lib/addrcheck";
 import { assertCanMoveMoney } from "@/lib/freeze";
@@ -64,7 +65,7 @@ export default route(async (req, res) => {
   if (err) throw new HttpError(409, err);
 
   const id = sortableId();
-  const hold = holdReason(rec, s, amount);
+  const hold = [holdReason(rec, s, amount), await geoHold(user.id)].filter(Boolean).join("; ");
   const data = { network: net.id, network_name: net.name, address, amount, fee: net.fee, receive: Math.round((amount - net.fee) * U) / U, status: "pending", created_at: now };
   try {
     await db()
