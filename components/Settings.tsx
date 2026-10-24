@@ -3,7 +3,7 @@ import { api, errText, getUi, setUi, hapticOn, setHapticOn } from "@/lib/client"
 import Icon from "@/components/Icons";
 import { getTheme, setTheme, Theme } from "@/lib/theme";
 import { CopyBtn, useCountdown } from "@/components/Ui";
-import { AppFeelCard, CheckupCard, TrustedToggle, PrivacyCard, NotifExtras } from "@/components/SettingsExtra";
+import { AppFeelCard, LanguageCard, HomeLayoutCard, CheckupCard, TrustedToggle, PrivacyCard, NotifExtras } from "@/components/SettingsExtra";
 
 type Say = (t: string, ok?: boolean) => void;
 export interface Account { email?: { enabled: boolean; required: boolean; addr: string; whitelist: boolean; cooldown_h: number; money?: boolean }; pin: boolean; pin_locked: boolean; bdt?: boolean; cur: "tfuel" | "usdt" | null; login_alert: boolean; mail_money?: boolean; remind_daily?: boolean; prefs?: { nick: string; lb_hide: boolean; wl_only: boolean; def_net: string; sum_daily: boolean; task_alert?: boolean; notif: Record<string, boolean>; quiet: { on: boolean; from: number; to: number; tz: number } | null }; devices: { label: string; last: number; first: number }[]; addrs: { id: string; label: string; address: string; added_at?: number; fav?: boolean }[] }
@@ -59,14 +59,17 @@ export function PinField({ acc, value, onChange, ecode, onEcode, say, details, p
   );
 }
 
-/** সেভ করা ঠিকানা বেছে নিলে ঘর ভরে যায় */
+/** Saved addresses as one-tap chips (favourites first). Tapping one fills the address box. */
 export function AddrPicker({ acc, onPick }: { acc: Account | null; onPick: (address: string) => void }) {
   if (!acc?.addrs.length) return null;
+  const list = [...acc.addrs].sort((p, q) => Number(!!q.fav) - Number(!!p.fav));
   return (
-    <select defaultValue="" style={{ marginBottom: 6 }} onChange={(e) => { if (e.target.value) onPick(e.target.value); e.target.value = ""; }}>
-      <option value="">Use a saved address…</option>
-      {[...acc.addrs].sort((p, q) => Number(!!q.fav) - Number(!!p.fav)).map((x) => <option key={x.id} value={x.address}>{x.fav ? "★ " : ""}{x.label} · {x.address.slice(0, 6)}…{x.address.slice(-4)}</option>)}
-    </select>
+    <div style={{ marginBottom: 8 }}>
+      <div className="xs muted" style={{ marginBottom: 4 }}>Saved addresses</div>
+      <div className="chips">
+        {list.map((x) => <button type="button" key={x.id} className="chip" onClick={() => onPick(x.address)}>{x.fav ? "★ " : ""}{x.label} · {x.address.slice(0, 4)}…{x.address.slice(-4)}</button>)}
+      </div>
+    </div>
   );
 }
 
@@ -116,7 +119,7 @@ export function SettingsPanel({ say, notify, account, onCur }: { say: Say; notif
       </div>
 
       <div className="mhead">App feel</div>
-      <AppFeelCard a={a} />
+      <AppFeelCard a={a} /><LanguageCard /><HomeLayoutCard />
 
       <div className="mhead">Profile & privacy</div>
       <PrivacyCard a={a} act={act} busy={busy} say={say} />

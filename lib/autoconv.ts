@@ -1,6 +1,6 @@
 import { db } from "./firebase";
 import { sortableId } from "./crypto";
-import { earn, spend, usdtTot, activity } from "./wallet";
+import { earn, spend, usdtTot, activity, weekIndex } from "./wallet";
 import { getCfg2 } from "./cfg2";
 import { getPrice, toU, U } from "./market";
 import { commissionBase, UserRecord } from "./user";
@@ -51,6 +51,46 @@ export async function settleAutoConvert(uid: string, u: UserRecord, s: Settings,
     return want;
   } catch (e) {
     console.error("autoconv", e);
+    return 0;
+  }
+}
+
+/** Weekly schedule: once per week (UTC, Monday–Sunday) sell X% of the TFUEL balance at market price. Runs when the app is opened. */
+export async function settleWeekly(uid: string, u: UserRecord, s: Settings, now = Date.now()): Promise<number> {
+  try {
+    const pct = Number((u as any).acw_pct) || 0;
+    const wk = weekIndex(now);
+    if (!(pct > 0) || (Number((u as any).acw_last) || 0) >= wk || !s.trade_enabled || !s.sell_enabled) return 0;
+    const cfg = await getCfg2();
+    if (!cfg.autoconv.enabled || !cfg.autoconv.weekly) return 0;
+    const want = Math.floor(((u.balance || 0) * pct) / 100);
+    const p = await getPrice(s);
+    if (!p || p.stale) return 0;
+    const gross = Math.round((want / s.coins_per_tfuel) * p.price * U);
+    if (want < 1 || gross < toU(s.min_trade_usdt)) { await db().ref(`users/${uid}/acw_last`).set(wk); return 0; }
+    const fee = Math.floor(gross * (s.trade_fee_pct / 100));
+    const net = gross - fee;
+    const id = sortableId();
+    let done = 0;
+    await db().ref(`users/${uid}`).transaction((cur: any) => {
+      done = 0;
+      if (cur === null) return cur;
+      if ((Number(cur.acw_last) || 0) >= wk || cur.balance < want) return;
+      cur.balance -= want;
+      spend(cur, "sold", want);
+      usdtTot(cur, "sold", net);
+      cur.usdt_u = (cur.usdt_u || 0) + net;
+      cur.acw_last = wk;
+      done = want;
+      return cur;
+    });
+    if (!done) return 0;
+    await db().ref(`trades/${id}`).set({ uid, side: "sell", coins: want, usdt_u: net, fee_u: fee, price: p.price, at: now, auto: true, weekly: true }).catch(() => {});
+    await activity(uid, "sell", { coins: -want, usdt_u: net, note: `Weekly auto-convert @ $${p.price}` });
+    await recordFill(uid, "sell", want, net);
+    return want;
+  } catch (e) {
+    console.error("autoconv weekly", e);
     return 0;
   }
 }

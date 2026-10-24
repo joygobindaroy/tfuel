@@ -29,7 +29,7 @@ export function usdtTot(cur: UserRecord, key: UsdtKey, micro: number) {
 
 export type ActType =
   | "article" | "task" | "daily" | "referral" | "mining" | "stake_paid" | "boost"
-  | "sell" | "buy" | "deposit" | "deposit_rejected" | "usdt_withdraw" | "usdt_paid" | "usdt_rejected" | "adjust" | "spin" | "promo" | "prize" | "ads" | "limit_buy" | "limit_sell" | "shop" | "shop_refund" | "send" | "receive";
+  | "sell" | "buy" | "deposit" | "deposit_rejected" | "usdt_withdraw" | "usdt_paid" | "usdt_rejected" | "adjust" | "spin" | "promo" | "prize" | "ads" | "limit_buy" | "limit_sell" | "shop" | "shop_refund" | "send" | "receive" | "adbuy" | "adrefund";
 
 /** সাম্প্রতিক কার্যকলাপ (best-effort; tap-এর মতো ঘন ঘন ঘটনা এখানে নয়) */
 export async function activity(uid: string, type: ActType, o: { coins?: number; usdt_u?: number; note?: string } = {}) {

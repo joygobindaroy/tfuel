@@ -3,9 +3,10 @@ import { route, rateLimit } from "@/lib/api";
 import { db } from "@/lib/firebase";
 import { dayKey } from "@/lib/log";
 import { randomToken } from "@/lib/crypto";
+import { getCfg2 } from "@/lib/cfg2";
 import { ensureUser, newUser, UserRecord } from "@/lib/user";
 
-export const PURPOSES = ["coins", "energy", "spin"] as const;
+export const PURPOSES = ["coins", "energy", "spin", "box", "boost"] as const;
 export type Purpose = (typeof PURPOSES)[number];
 export const MIN_AD_SECONDS = 4;
 
@@ -17,7 +18,8 @@ export default route(async (req, res) => {
   const purpose = String(req.body?.purpose || "") as Purpose;
   if (!PURPOSES.includes(purpose)) throw new HttpError(400, "bad_purpose");
   if (!s.ads_enabled || !(s.ads_provider === "monetag" ? s.ads_monetag_zone : s.ads_block_id)) throw new HttpError(403, "ads_disabled");
-  const limit = purpose === "coins" ? s.ads_coins_per_day : purpose === "energy" ? s.ads_energy_per_day : s.spin_enabled ? s.ads_spin_per_day : 0;
+  const e = (await getCfg2()).eng;
+  const limit = purpose === "coins" ? s.ads_coins_per_day : purpose === "energy" ? s.ads_energy_per_day : purpose === "box" ? (e.luckybox.enabled ? e.luckybox.per_day : 0) : purpose === "boost" ? (e.adboost.enabled ? e.adboost.per_day : 0) : s.spin_enabled ? s.ads_spin_per_day : 0;
   const day = dayKey();
   const nonce = randomToken();
   let err = "";
@@ -26,7 +28,7 @@ export default route(async (req, res) => {
     .transaction((cur: UserRecord | null) => {
       err = "";
       if (cur === null) return newUser();
-      const a = cur.ads && cur.ads.day === day ? cur.ads : { day, coins: 0, energy: 0, spin: 0, srv: cur.ads?.srv || 0 };
+      const a = cur.ads && cur.ads.day === day ? cur.ads : { day, coins: 0, energy: 0, spin: 0, box: 0, boost: 0, srv: cur.ads?.srv || 0 };
       if ((a[purpose] || 0) >= limit) {
         err = "ads_limit";
         return;

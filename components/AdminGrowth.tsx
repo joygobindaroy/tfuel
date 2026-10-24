@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import BackupPanel from "@/components/AdminBackup";
 
 type Call = <T = any>(body: Record<string, any>, okMsg?: string) => Promise<T | null>;
 const Sw = ({ on, set }: { on: boolean; set: (v: boolean) => void }) => <button type="button" className={`switch ${on ? "on" : ""}`} aria-label="toggle" style={{ flexShrink: 0 }} onClick={() => set(!on)} />;
@@ -22,6 +23,136 @@ function Sec({ title, help, section, init, call, children }: { title: string; he
       {help && <div className="sub">{help}</div>}
       {children(v, set)}
       <button className="btn" style={{ marginTop: 12 }} disabled={busy} onClick={async () => { setBusy(true); await call({ action: "growthSave", section, value: v }, `${title} saved`); setBusy(false); }}>Save</button>
+    </div>
+  );
+}
+
+
+/** A/B reward test: switch + how the two groups behave */
+function AbPanel({ call, S, Row, Sw, L }: { call: Call; S: any; Row: any; Sw: any; L: any }) {
+  const [st, setSt] = useState<any>(null);
+  return (
+    <>
+      {S("ab", "A/B reward test", "Users are split 50/50. Group B gets the daily reward multiplied by the number below while the test is on. Compare the groups after a week or two.", (v: any, set: any) => (
+        <>
+          <Row t="Enabled"><Sw on={!!v.enabled} set={(x: boolean) => set({ enabled: x })} /></Row>
+          <div className="grid2">
+            <L t="Test name"><input value={v.name} onChange={(e: any) => set({ name: e.target.value })} /></L>
+            <L t="Group B daily reward ×"><input inputMode="decimal" value={v.mult_b} onChange={(e: any) => set({ mult_b: e.target.value })} /></L>
+          </div>
+        </>
+      ))}
+      <div className="card">
+        <div className="title">Test results</div>
+        <button className="btn sec sm" style={{ marginTop: 6 }} onClick={async () => { const r: any = await call({ action: "growthAb" }); if (r) setSt(r); }}>Load results</button>
+        {st && (
+          <table style={{ width: "100%", marginTop: 10, fontSize: 13 }}>
+            <thead><tr><th align="left"></th><th align="right">A</th><th align="right">B</th></tr></thead>
+            <tbody>
+              {([["Users", "users"], ["Active in 7 days (%)", "active7"], ["Avg daily streak", "avgStreak"], ["Avg lifetime coins", "avgEarn"], ["Depositors (%)", "depositors"]] as const).map(([l, k]) => <tr key={k}><td>{l}</td><td align="right">{Number(st.a[k]).toLocaleString("en-US")}</td><td align="right">{Number(st.b[k]).toLocaleString("en-US")}</td></tr>)}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </>
+  );
+}
+
+/** Sponsor marketplace: review queue, active promotions, revenue */
+function AdsAdmin({ call }: { call: Call }) {
+  const [d, setD] = useState<any>(null);
+  const [rev, setRev] = useState<any>(null);
+  const [note, setNote] = useState<Record<string, string>>({});
+  const load = useCallback(async () => {
+    const r: any = await call({ action: "growthAds" }); if (r) setD(r);
+    const v: any = await call({ action: "growthRevenue" }); if (v) setRev(v);
+  }, [call]);
+  useEffect(() => { load(); }, [load]);
+  const act = async (action: string, id: string, ok: string) => { const r: any = await call({ action, id, note: note[id] || "" }, ok); if (r) { setD(r); const v: any = await call({ action: "growthRevenue" }); if (v) setRev(v); } };
+  if (!d) return <div className="card muted">Loading…</div>;
+  const Item = ({ o, children }: { o: any; children: React.ReactNode }) => (
+    <div className="hist" style={{ alignItems: "flex-start" }}>
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div className="title" style={{ fontSize: 14 }}>{o.title} <span className="muted">· {o.kind}{o.goal ? ` · ${o.goal} completions` : ""} · {o.days}d · {o.price.toFixed(2)} USDT</span></div>
+        {o.text && <div className="sub">{o.text}</div>}
+        <div className="sub" style={{ wordBreak: "break-all" }}><a href={o.url} target="_blank" rel="noreferrer">{o.url}</a></div>
+        <div className="sub">By {o.name || "User"} ({o.uid}) · {new Date(o.created).toLocaleString()}{o.status !== "pending" ? ` · views ${o.imp || 0} · clicks ${o.clk || 0}` : ""}{o.note ? ` · ${o.note}` : ""}</div>
+        {children}
+      </div>
+    </div>
+  );
+  return (
+    <>
+      {rev && (
+        <div className="card">
+          <div className="title">Revenue</div>
+          <div className="sub">Promotions: <b>{rev.ads30.toFixed(2)} USDT</b> in 30 days · {rev.adsAll.toFixed(2)} USDT all time. Shop fees: {rev.shopFees.toFixed(2)} USDT. Send fees: {rev.sendFeesTfuel.toLocaleString("en-US", { maximumFractionDigits: 2 })} TFUEL.</div>
+          <div style={{ display: "flex", alignItems: "flex-end", gap: 2, height: 60, marginTop: 10 }}>
+            {rev.days.map((x: any) => { const m = Math.max(0.01, ...rev.days.map((y: any) => y.ads)); return <div key={x.day} title={`${x.day}: ${x.ads.toFixed(2)} USDT`} style={{ flex: 1, height: `${Math.max(3, (x.ads / m) * 100)}%`, background: "var(--accent, #f59e0b)", borderRadius: 2, opacity: x.ads ? 1 : 0.25 }} />; })}
+          </div>
+        </div>
+      )}
+      <div className="card">
+        <div className="title">Waiting for review ({d.pending.length})</div>
+        {d.pending.length === 0 && <div className="sub">Nothing to review.</div>}
+        {d.pending.map((o: any) => (
+          <Item key={o.id} o={o}>
+            <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+              <input style={{ flex: 1, minWidth: 120 }} placeholder="Reason if rejecting (optional)" value={note[o.id] || ""} onChange={(e) => setNote({ ...note, [o.id]: e.target.value })} />
+              <button className="btn sm" onClick={() => act("growthAdApprove", o.id, "Approved — live now")}>Approve</button>
+              <button className="btn sec sm" onClick={() => act("growthAdReject", o.id, "Rejected and refunded")}>Reject + refund</button>
+            </div>
+          </Item>
+        ))}
+      </div>
+      <div className="card">
+        <div className="title">Live now ({d.active.length})</div>
+        {d.active.length === 0 && <div className="sub">No active promotions.</div>}
+        {d.active.map((o: any) => (
+          <Item key={o.id} o={o}>
+            <div className="sub">Ends {o.end ? new Date(o.end).toLocaleString() : "—"}</div>
+            <button className="btn sec sm" style={{ marginTop: 6 }} onClick={() => { if (confirm("Stop now? The unused part is refunded to the advertiser.")) act("growthAdStop", o.id, "Stopped and refunded"); }}>Stop + refund unused</button>
+          </Item>
+        ))}
+      </div>
+      <div className="card">
+        <div className="title">Recent</div>
+        {d.recent.length === 0 && <div className="sub">Nothing yet.</div>}
+        {d.recent.map((o: any) => <Item key={o.id} o={o}><div className="sub">{o.status}{o.refund > 0 ? ` · refunded ${o.refund.toFixed(2)} USDT` : ""}</div></Item>)}
+      </div>
+    </>
+  );
+}
+
+/** Creator applications + name-tag moderation */
+function CreatorsAdmin({ call }: { call: Call }) {
+  const [list, setList] = useState<any[] | null>(null);
+  const [uid, setUid] = useState("");
+  useEffect(() => { call({ action: "growthCreators" }).then((r: any) => r && setList(r.list)); }, [call]);
+  const set = async (u: string, status: string) => { const r: any = await call({ action: "growthCreatorSet", uid: u, status }, status === "approved" ? "Approved" : "Updated"); if (r) setList(r.list); };
+  return (
+    <div className="card">
+      <div className="title">Creators</div>
+      {!list && <div className="sub">Loading…</div>}
+      {list && list.length === 0 && <div className="sub">No applications yet.</div>}
+      {(list || []).map((c) => (
+        <div className="hist" key={c.uid} style={{ alignItems: "flex-start" }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div className="title" style={{ fontSize: 14 }}>{c.name || "User"} <span className="muted">· {c.uid} · {c.status}</span></div>
+            <div className="sub" style={{ wordBreak: "break-all" }}><a href={c.link} target="_blank" rel="noreferrer">{c.link}</a> · {c.subs} followers · {c.friends} invited</div>
+            <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+              {c.status !== "approved" && <button className="btn sm" onClick={() => set(c.uid, "approved")}>Approve</button>}
+              {c.status === "pending" && <button className="btn sec sm" onClick={() => set(c.uid, "rejected")}>Reject</button>}
+              {c.status === "approved" && <button className="btn sec sm" onClick={() => set(c.uid, "revoked")}>Remove creator</button>}
+            </div>
+          </div>
+        </div>
+      ))}
+      <div className="title" style={{ marginTop: 14, fontSize: 14 }}>Remove a user's name tag</div>
+      <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+        <input inputMode="numeric" placeholder="User ID" value={uid} onChange={(e) => setUid(e.target.value.replace(/\D/g, ""))} />
+        <button className="btn sec sm" disabled={!uid} onClick={async () => { await call({ action: "growthPlateClear", uid }, "Tag removed"); setUid(""); }}>Remove</button>
+      </div>
     </div>
   );
 }
@@ -89,8 +220,16 @@ export default function GrowthPage({ call }: { call: Call }) {
         <>
           <Row t="Enabled"><Sw on={!!v.enabled} set={(x) => set({ enabled: x })} /></Row>
           <L t="Percent choices (comma separated)"><input value={list(v.options)} onChange={(e) => set({ options: nums(e.target.value) })} /></L>
+          <Row t="Weekly schedule" h="Also lets users sell a chosen % of their TFUEL balance once a week (Monday–Sunday UTC)."><Sw on={v.weekly !== false} set={(x) => set({ weekly: x })} /></Row>
         </>
       ))}
+      {S("moves", "Price-move alerts", "Users pick a % (e.g. 5 / 10 / 20) and get a bot message when the price moves that much in 24 hours. One message per period.", (v, set) => (
+        <>
+          <Row t="Enabled"><Sw on={!!v.enabled} set={(x) => set({ enabled: x })} /></Row>
+          <L t="Percent choices (comma separated)"><input value={list(v.options)} onChange={(e) => set({ options: nums(e.target.value) })} /></L>
+        </>
+      ))}
+      <AbPanel call={call} S={S} Row={Row} Sw={Sw} L={L} />
 
       <div className="mhead">Safety</div>
       {S("bot", "Auto-tap detection", "Flags accounts that tap at a steady inhuman rate.", (v, set) => (
@@ -99,6 +238,16 @@ export default function GrowthPage({ call }: { call: Call }) {
           <div className="grid2">
             <L t="Score threshold (lower = stricter)"><input inputMode="numeric" value={v.threshold} onChange={(e) => set({ threshold: e.target.value })} /></L>
             <L t="When flagged"><select value={v.action} onChange={(e) => set({ action: e.target.value })}><option value="flag">Only flag</option><option value="freeze">Freeze money-out</option></select></L>
+          </div>
+        </>
+      ))}
+      {S("autoban", "Auto-protect (risk rules)", "The cron job scans risk scores and acts automatically. Freezing only blocks money-out (withdraw / send); the user can still play. Clearing an account in the Risk report never gets auto-frozen again.", (v, set) => (
+        <>
+          <Row t="Enabled"><Sw on={!!v.enabled} set={(x) => set({ enabled: x })} /></Row>
+          <div className="grid2">
+            <L t="Act at risk score ≥"><input inputMode="numeric" value={v.min_score} onChange={(e) => set({ min_score: e.target.value })} /></L>
+            <L t="Action"><select value={v.action} onChange={(e) => set({ action: e.target.value })}><option value="freeze">Freeze money-out</option><option value="flag">Only flag</option></select></L>
+            <L t="Max accounts per run"><input inputMode="numeric" value={v.max_per_run} onChange={(e) => set({ max_per_run: e.target.value })} /></L>
           </div>
         </>
       ))}
@@ -119,7 +268,8 @@ export default function GrowthPage({ call }: { call: Call }) {
         {risk && <div className="sub" style={{ marginTop: 6 }}>{risk.scanned} accounts scanned · {risk.risk.length} flagged</div>}
         {risk && risk.risk.map((x: any) => (
           <div className="hist" key={x.id}>
-            <div><div className="title" style={{ fontSize: 14 }}>{x.name || "User"} <span className="muted">· {x.id}</span></div><div className="sub">Risk {x.score} · {x.why.join("; ")}</div></div>
+            <div><div className="title" style={{ fontSize: 14 }}>{x.name || "User"} <span className="muted">· {x.id}</span></div><div className="sub">Risk {x.score} · {x.why.join("; ")}{risk.auto?.[x.id] ? ` · auto: ${risk.auto[x.id].action}` : ""}</div></div>
+            <button className="btn sec sm" onClick={async () => { await call({ action: "growthRiskClear", uid: x.id }, "Cleared — won't be auto-actioned again"); setRisk({ ...risk, risk: risk.risk.filter((r: any) => r.id !== x.id) }); }}>Clear</button>
           </div>
         ))}
       </div>
@@ -149,6 +299,99 @@ export default function GrowthPage({ call }: { call: Call }) {
           <L t="Alert when a payout waits longer than (hours)"><input inputMode="numeric" value={v.pending_hours} onChange={(e) => set({ pending_hours: e.target.value })} /></L>
         </>
       ))}
+
+      <div className="mhead">Engagement perks</div>
+      {S("eng", "Rewards, boosts & perks", "Everything here is paid in coins from your side, so keep amounts small. Each block has its own switch.", (v, set) => {
+        const up = (k: string, p: any) => set({ [k]: { ...v[k], ...p } });
+        const N = (k: string, f: string, t: string) => <L t={t}><input inputMode="decimal" value={v[k]?.[f]} onChange={(e) => up(k, { [f]: e.target.value })} /></L>;
+        const steps = v.invms?.steps || [];
+        return (
+          <>
+            <div className="title" style={{ fontSize: 14 }}>Level-up reward</div>
+            <Row t="Enabled" h="Reward = new level × base coins"><Sw on={!!v.levelup?.enabled} set={(x) => up("levelup", { enabled: x })} /></Row>
+            <div className="grid2">{N("levelup", "base", "Base coins per level")}</div>
+            <div className="title" style={{ marginTop: 14, fontSize: 14 }}>Free lucky box (needs rewarded ads on)</div>
+            <Row t="Enabled"><Sw on={!!v.luckybox?.enabled} set={(x) => up("luckybox", { enabled: x })} /></Row>
+            <div className="grid2">{N("luckybox", "min", "Min coins")}{N("luckybox", "max", "Max coins")}{N("luckybox", "per_day", "Per user per day")}</div>
+            <div className="title" style={{ marginTop: 14, fontSize: 14 }}>Rewarded tap boost (needs rewarded ads on)</div>
+            <Row t="Enabled"><Sw on={!!v.adboost?.enabled} set={(x) => up("adboost", { enabled: x })} /></Row>
+            <div className="grid2">{N("adboost", "minutes", "Minutes per ad")}{N("adboost", "mult", "Tap multiplier")}{N("adboost", "per_day", "Per user per day")}</div>
+            <div className="title" style={{ marginTop: 14, fontSize: 14 }}>Friend gift</div>
+            <Row t="Enabled" h="Users gift friends they invited (or who invited them), once a day each."><Sw on={!!v.gift?.enabled} set={(x) => up("gift", { enabled: x })} /></Row>
+            <div className="grid2">{N("gift", "recv", "Friend gets (coins)")}{N("gift", "send", "Sender gets (coins)")}{N("gift", "per_day", "Gifts per day")}</div>
+            <div className="title" style={{ marginTop: 14, fontSize: 14 }}>Invite milestones</div>
+            <Row t="Enabled"><Sw on={!!v.invms?.enabled} set={(x) => up("invms", { enabled: x })} /></Row>
+            {steps.map((t: any, i: number) => (
+              <div className="grid2" key={i} style={{ marginTop: 6 }}>
+                <input inputMode="numeric" placeholder="Friends" value={t.n} onChange={(e) => up("invms", { steps: steps.map((y: any, j: number) => (j === i ? { ...y, n: e.target.value } : y)) })} />
+                <div style={{ display: "flex", gap: 6 }}><input inputMode="numeric" placeholder="Coins" value={t.coins} onChange={(e) => up("invms", { steps: steps.map((y: any, j: number) => (j === i ? { ...y, coins: e.target.value } : y)) })} /><button className="btn sec sm" onClick={() => up("invms", { steps: steps.filter((_: any, j: number) => j !== i) })}>✕</button></div>
+              </div>
+            ))}
+            <button className="btn sec sm" style={{ marginTop: 8 }} onClick={() => up("invms", { steps: [...steps, { n: 10, coins: 1000 }] })}>+ Add milestone</button>
+            <div className="title" style={{ marginTop: 14, fontSize: 14 }}>Creator program</div>
+            <Row t="Enabled" h="Approved creators earn extra commission % on their friends' earnings."><Sw on={!!v.creator?.enabled} set={(x) => up("creator", { enabled: x })} /></Row>
+            <div className="grid2">{N("creator", "bonus_pct", "Extra commission %")}{N("creator", "min_subs", "Minimum followers")}</div>
+            <div className="title" style={{ marginTop: 14, fontSize: 14 }}>Season pass</div>
+            <Row t="Enabled" h="Users pay coins once for a daily bonus during the pass."><Sw on={!!v.pass?.enabled} set={(x) => up("pass", { enabled: x })} /></Row>
+            <div className="grid2">{N("pass", "price", "Price (coins)")}{N("pass", "days", "Length (days)")}{N("pass", "daily", "Daily bonus (coins)")}</div>
+            <div className="title" style={{ marginTop: 14, fontSize: 14 }}>Name tag</div>
+            <Row t="Enabled" h="A short tag next to the user's name on leaderboards. Coin sink."><Sw on={!!v.plate?.enabled} set={(x) => up("plate", { enabled: x })} /></Row>
+            <div className="grid2">{N("plate", "price", "Price (coins)")}{N("plate", "max", "Max length")}</div>
+            <div className="title" style={{ marginTop: 14, fontSize: 14 }}>Tips (clan mates)</div>
+            <Row t="Enabled" h="Uses Send TFUEL rules (limits, PIN). Fee goes to you."><Sw on={!!v.tip?.enabled} set={(x) => up("tip", { enabled: x })} /></Row>
+            <div className="grid2">{N("tip", "fee_pct", "Fee %")}<L t="Amounts (coins, comma separated)"><input value={Array.isArray(v.tip?.amounts) ? v.tip.amounts.join(", ") : v.tip?.amounts} onChange={(e) => up("tip", { amounts: e.target.value })} /></L></div>
+          </>
+        );
+      })}
+      <CreatorsAdmin call={call} />
+
+      <div className="mhead">Sponsor marketplace</div>
+      {S("adsmkt", "Promotion slots & prices", "Any user can buy a slot with their USDT balance. Nothing goes live until you approve it. Rejected orders are refunded in full.", (v, set) => {
+        const slots = v.slots || [];
+        const up = (i: number, p: any) => set({ slots: slots.map((x: any, j: number) => (j === i ? { ...x, ...p } : x)) });
+        const disc = v.discounts || [];
+        return (
+          <>
+            <Row t="Enabled"><Sw on={!!v.enabled} set={(x) => set({ enabled: x })} /></Row>
+            {slots.map((t: any, i: number) => (
+              <div key={i} className="card" style={{ background: "var(--soft)", boxShadow: "none", marginTop: 8 }}>
+                <div className="grid2">
+                  <L t="Name"><input value={t.name} onChange={(e) => up(i, { name: e.target.value })} /></L>
+                  <L t="Where it shows"><select value={t.kind} onChange={(e) => up(i, { kind: e.target.value })}><option value="bot_button">Bot menu button</option><option value="home_banner">App home banner</option><option value="board_top">Top of Leaderboard</option><option value="pinned">Message to every user (once)</option></select></L>
+                  <L t={t.kind === "pinned" ? "Price per send (USDT)" : "Price per day (USDT)"}><input inputMode="decimal" value={t.price} onChange={(e) => up(i, { price: e.target.value })} /></L>
+                  <L t="Max at the same time"><input inputMode="numeric" value={t.max_active} onChange={(e) => up(i, { max_active: e.target.value })} /></L>
+                </div>
+                <button className="btn sec sm" style={{ marginTop: 6 }} onClick={() => set({ slots: slots.filter((_: any, j: number) => j !== i) })}>Remove slot</button>
+              </div>
+            ))}
+            <button className="btn sec sm" style={{ marginTop: 8 }} onClick={() => set({ slots: [...slots, { id: "s" + (slots.length + 1), kind: "home_banner", name: "New slot", price: 1, max_active: 2 }] })}>+ Add slot</button>
+            <div className="title" style={{ marginTop: 14, fontSize: 14 }}>Bulk discount (longer = cheaper)</div>
+            {disc.map((x: any, i: number) => (
+              <div className="grid2" key={i} style={{ marginTop: 6 }}>
+                <input inputMode="numeric" placeholder="From days" value={x.days} onChange={(e) => set({ discounts: disc.map((y: any, j: number) => (j === i ? { ...y, days: e.target.value } : y)) })} />
+                <div style={{ display: "flex", gap: 6 }}><input inputMode="decimal" placeholder="% off" value={x.pct} onChange={(e) => set({ discounts: disc.map((y: any, j: number) => (j === i ? { ...y, pct: e.target.value } : y)) })} /><button className="btn sec sm" onClick={() => set({ discounts: disc.filter((_: any, j: number) => j !== i) })}>✕</button></div>
+              </div>
+            ))}
+            <button className="btn sec sm" style={{ marginTop: 8 }} onClick={() => set({ discounts: [...disc, { days: 7, pct: 10 }] })}>+ Add discount</button>
+            <div className="grid2" style={{ marginTop: 12 }}>
+              <L t="Longest booking (days)"><input inputMode="numeric" value={v.max_days} onChange={(e) => set({ max_days: e.target.value })} /></L>
+            </div>
+            <div className="title" style={{ marginTop: 14, fontSize: 14 }}>Mission pack (advertiser buys task completions)</div>
+            <Row t="Enabled" h="Becomes a sponsored task after you approve it. Unused completions are refunded."><Sw on={!!v.mission?.enabled} set={(x) => set({ mission: { ...v.mission, enabled: x } })} /></Row>
+            <div className="grid2">
+              <L t="Advertiser pays per completion (USDT)"><input inputMode="decimal" value={v.mission?.price} onChange={(e) => set({ mission: { ...v.mission, price: e.target.value } })} /></L>
+              <L t="User reward per completion (coins)"><input inputMode="numeric" value={v.mission?.reward} onChange={(e) => set({ mission: { ...v.mission, reward: e.target.value } })} /></L>
+              <L t="Min completions"><input inputMode="numeric" value={v.mission?.min} onChange={(e) => set({ mission: { ...v.mission, min: e.target.value } })} /></L>
+              <L t="Max completions"><input inputMode="numeric" value={v.mission?.max} onChange={(e) => set({ mission: { ...v.mission, max: e.target.value } })} /></L>
+            </div>
+            <L t="Blocked words / domains (comma separated)"><textarea rows={2} value={Array.isArray(v.blocked) ? v.blocked.join(", ") : v.blocked} onChange={(e) => set({ blocked: e.target.value })} /></L>
+          </>
+        );
+      })}
+      <AdsAdmin call={call} />
+
+      <div className="mhead">Backup & restore</div>
+      <BackupPanel call={call} />
 
       <div className="mhead">Games</div>
       {S("clan", "Clans & raid boss", "Players form teams; their earnings count as clan points. The boss is defeated by all members together.", (v, set) => {

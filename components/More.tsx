@@ -4,12 +4,13 @@ import { Empty, SkelList, CopyBtn } from "@/components/Ui";
 import { api, errText, fmtUsd, tg } from "@/lib/client";
 import Icon from "@/components/Icons";
 import { PassCard } from "@/components/Today";
+import { MilestonesCard, GiftCard, CreatorCard } from "@/components/Eng";
 import { VERSION } from "@/lib/version";
 
 type P = { say: (m: string, ok?: boolean) => void; onBack: () => void; cpt: number; reload: () => void };
 
 /** Invite & earn: commission tier progress, weekly invite leaderboard + contest prizes */
-export function InvitePlusPage({ say, onBack, cpt, reload }: P) {
+export function InvitePlusPage({ say, onBack, cpt, reload, eng }: P & { eng?: any }) {
   const [d, setD] = useState<any>(null);
   const [board, setBoard] = useState<"w" | "all">("w");
   const [list, setList] = useState<any>(null);
@@ -32,6 +33,9 @@ export function InvitePlusPage({ say, onBack, cpt, reload }: P) {
         </div>
       </div>
       <PassCard pass={d.pass} say={say} cpt={cpt} reload={reload} onDone={load} />
+      <MilestonesCard eng={eng} say={say} cpt={cpt} reload={reload} />
+      <GiftCard eng={eng} say={say} />
+      <CreatorCard eng={eng} say={say} />
       <div className="section"><h2>Invite leaderboard</h2></div>
       <div className="seg">
         <button className={board === "w" ? "on" : ""} onClick={() => pick("w")}>This week</button>
@@ -93,6 +97,7 @@ export function AutoConvertCard({ say }: { say: (m: string, ok?: boolean) => voi
   const load = useCallback(async () => { try { setD(await api<any>("more", { action: "acGet" })); } catch {} }, []);
   useEffect(() => { load(); }, [load]);
   if (!d?.enabled) return null;
+  const setW = async (pct: number) => { setBusy(true); try { await api("more", { action: "acwSet", pct }); await load(); say(pct ? `Weekly auto-convert ${pct}% on` : "Weekly auto-convert off", true); } catch (e) { say(errText(e)); } finally { setBusy(false); } };
   const set = async (pct: number) => { setBusy(true); try { await api("more", { action: "acSet", pct }); await load(); say(pct ? `Auto-convert ${pct}% on` : "Auto-convert off", true); } catch (e) { say(errText(e)); } finally { setBusy(false); } };
   return (
     <div className="card">
@@ -103,6 +108,36 @@ export function AutoConvertCard({ say }: { say: (m: string, ok?: boolean) => voi
         {d.options.map((o: number) => <button key={o} className={`chip ${d.pct === o ? "on" : ""}`} disabled={busy} onClick={() => set(o)}>{o}%</button>)}
       </div>
       {d.total > 0 && <div className="xs muted" style={{ marginTop: 6 }}>Converted so far: {(d.total / 1).toLocaleString("en-US")} coins</div>}
+      {d.weekly && (
+        <>
+          <div className="title" style={{ fontSize: 14, marginTop: 12 }}>Every week</div>
+          <div className="sub" style={{ marginBottom: 6 }}>Once a week (Monday–Sunday, UTC) sell a share of the TFUEL you hold. Starts next week.</div>
+          <div className="chips">
+            <button className={`chip ${!d.wpct ? "on" : ""}`} disabled={busy} onClick={() => setW(0)}>Off</button>
+            {d.options.map((o: number) => <button key={o} className={`chip ${d.wpct === o ? "on" : ""}`} disabled={busy} onClick={() => setW(o)}>{o}%</button>)}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Price-move alert: bot message when the price moves X% in 24 h */
+export function MoveAlertCard({ say }: { say: (m: string, ok?: boolean) => void }) {
+  const [d, setD] = useState<any>(null);
+  const [busy, setBusy] = useState(false);
+  const load = useCallback(async () => { try { setD(await api<any>("more", { action: "moveGet" })); } catch {} }, []);
+  useEffect(() => { load(); }, [load]);
+  if (!d?.enabled) return null;
+  const set = async (pct: number) => { setBusy(true); try { await api("more", { action: "moveSet", pct }); await load(); say(pct ? `You'll be told when the price moves ${pct}%` : "Price-move alerts off", true); } catch (e) { say(errText(e)); } finally { setBusy(false); } };
+  return (
+    <div className="card">
+      <div className="title">Price-move alert</div>
+      <div className="sub" style={{ marginBottom: 8 }}>Get a message in the bot when the TFUEL price moves this much in 24 hours.</div>
+      <div className="chips">
+        <button className={`chip ${!d.pct ? "on" : ""}`} disabled={busy} onClick={() => set(0)}>Off</button>
+        {d.options.map((o: number) => <button key={o} className={`chip ${d.pct === o ? "on" : ""}`} disabled={busy} onClick={() => set(o)}>{o}%</button>)}
+      </div>
     </div>
   );
 }

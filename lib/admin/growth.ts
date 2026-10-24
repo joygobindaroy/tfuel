@@ -6,7 +6,11 @@ import { getSettings } from "../settings";
 import { getCfg2, setCfg2, SECTIONS } from "../cfg2";
 import { campaignStats } from "../growth2";
 import { sharedIpGroups } from "../geo";
-import { lifetimeEarn } from "../retention";
+import { scanRisk, riskClear } from "../risk";
+import { abStats } from "../abtest";
+import { adsAdminList, adsApprove, adsReject, adsFinish } from "../ads";
+import { fromU } from "../market";
+import { creatorList, creatorSet, plateClear } from "../eng";
 
 const clean = (v: any, n: number) => String(v ?? "").replace(/[\u0000-\u001f\u007f<>]/g, " ").trim().slice(0, n);
 
@@ -56,27 +60,44 @@ const mod: AdminMod = async (action, b, ctx) => {
       await adminLog(ctx.who, "bot_clear", { uid });
       return {};
     }
-    case "growthRisk": {
-      const users = ((await db().ref("users").get()).val() || {}) as Record<string, any>;
-      const prefs = ((await db().ref("user_prefs").get()).val() || {}) as Record<string, any>;
-      const now = Date.now();
-      const rows: { id: string; name: string; score: number; why: string[] }[] = [];
-      for (const [id, u] of Object.entries(users)) {
-        if (u.banned) continue;
-        const why: string[] = [];
-        let score = 0;
-        const life = lifetimeEarn(u);
-        const hrs = Math.max(1, (now - (u.created_at || now)) / 3600000);
-        const rate = life / hrs;
-        if (u.bot_flagged) { why.push("auto-tap flagged"); score += 3; }
-        if ((prefs[id]?.ip_shared || 0) >= 3) { why.push(`IP shared with ${prefs[id].ip_shared} accounts`); score += 2; }
-        if (hrs >= 6 && rate > Math.max(1, Number(b.rate) || 30000)) { why.push(`earns ${Math.round(rate).toLocaleString("en-US")} coins/hour`); score += 2; }
-        if ((u.ref_count || 0) >= 5 && (u.ref_earned || 0) > 0 && life < (u.ref_earned || 0) * 2) { why.push("mostly referral income"); score += 1; }
-        if (hrs < 48 && Object.keys(u.usdt_withdrawals || {}).length > 0) { why.push("withdrew within 2 days"); score += 1; }
-        if (score >= 2) rows.push({ id, name: u.name || "", score, why });
-      }
-      rows.sort((x, y) => y.score - x.score);
-      return { risk: rows.slice(0, 60), scanned: Object.keys(users).length };
+    case "growthRisk": { const r = await scanRisk(Number(b.rate) || 30000); return { risk: r.rows.slice(0, 60), scanned: r.scanned, auto: ((await db().ref("risk_auto").get()).val() || {}) }; }
+    case "growthRiskClear": { const uid = String(b.uid || ""); if (!/^\d{1,20}$/.test(uid)) throw new HttpError(400, "Invalid user id"); await riskClear(uid); await adminLog(ctx.who, "risk_clear", { uid }); return {}; }
+    case "growthAb": return await abStats();
+    case "growthAds": return await adsAdminList();
+    case "growthAdApprove": { const id = String(b.id || ""); await adsApprove(id, ctx.who); await adminLog(ctx.who, "ad_approve", { id }); return await adsAdminList(); }
+    case "growthAdReject": { const id = String(b.id || ""); await adsReject(id, clean(b.note, 120), ctx.who); await adminLog(ctx.who, "ad_reject", { id }); return await adsAdminList(); }
+    case "growthAdStop": { const id = String(b.id || ""); await adsFinish(id, true, ctx.who); await adminLog(ctx.who, "ad_stop", { id }); return await adsAdminList(); }
+    case "growthCreators": return { list: await creatorList() };
+    case "growthCreatorSet": {
+      const uid = String(b.uid || "");
+      if (!/^\d{1,20}$/.test(uid)) throw new HttpError(400, "Invalid user id");
+      const st = String(b.status || "");
+      if (!["approved", "rejected", "revoked"].includes(st)) throw new HttpError(400, "bad_request");
+      await creatorSet(uid, st as any, clean(b.note, 100));
+      await adminLog(ctx.who, "creator_" + st, { uid });
+      return { list: await creatorList() };
+    }
+    case "growthPlateClear": {
+      const uid = String(b.uid || "");
+      if (!/^\d{1,20}$/.test(uid)) throw new HttpError(400, "Invalid user id");
+      await plateClear(uid);
+      await adminLog(ctx.who, "plate_clear", { uid });
+      return {};
+    }
+    case "growthRevenue": {
+      const s = await getSettings();
+      const [ads, orders, fees] = await Promise.all([db().ref("stats/ads_day").get(), db().ref("shop_orders").get(), db().ref("stats/send_fees").get()]);
+      const adsDay = (ads.val() || {}) as Record<string, number>;
+      const days: { day: string; ads: number }[] = [];
+      for (let i = 29; i >= 0; i--) { const d = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10); days.push({ day: d, ads: fromU(Number(adsDay[d]) || 0) }); }
+      const shopFee = Object.values((orders.val() || {}) as Record<string, any>).reduce((a: number, o: any) => a + (o.status === "paid" ? Number(o.fee_u) || 0 : 0), 0);
+      return {
+        days,
+        ads30: days.reduce((a, d) => a + d.ads, 0),
+        adsAll: fromU(Object.values(adsDay).reduce((a, v) => a + (Number(v) || 0), 0)),
+        shopFees: fromU(shopFee),
+        sendFeesTfuel: (Number(fees.val()) || 0) / (s.coins_per_tfuel || 1000),
+      };
     }
     default: return undefined;
   }

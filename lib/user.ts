@@ -1,3 +1,4 @@
+import { creatorBonus } from "./eng";
 import { feedAdd } from "./feed";
 import { db } from "./firebase";
 import { ServerValue } from "firebase-admin/database";
@@ -128,7 +129,7 @@ export interface UserRecord {
   spin?: { day: string; used: number; extra: number };
   spin_last?: { c: number; at: number }[]; // Lucky Spin-এর শেষ ৫টা ফল
   ms_claimed?: Record<string, number>; // Invite milestone bonus নেওয়া হয়েছে (count → সময়)
-  ads?: { day: string; coins: number; energy: number; spin: number; nonce?: string; ns?: number; p?: string; srv?: number };
+  ads?: { day: string; coins: number; energy: number; spin: number; box?: number; boost?: number; nonce?: string; ns?: number; p?: string; srv?: number };
   promos?: Record<string, number>;
   notify_off?: boolean;
   ord_open?: number;
@@ -317,7 +318,7 @@ export async function settleCommission(refId: string, force = false): Promise<nu
     const now = Date.now();
     const me = (await db().ref(`users/${refId}`).get()).val() as UserRecord | null;
     if (!me || me.banned) return 0;
-    const pct = tierPct((await getCfg2()).tiers, me.ref_count || 0, s.referral_commission_pct) + (s.refpass_enabled && Number((me as any).refpass_until) > now ? s.refpass_bonus_pct : 0);
+    const pct = tierPct((await getCfg2()).tiers, me.ref_count || 0, s.referral_commission_pct) + (s.refpass_enabled && Number((me as any).refpass_until) > now ? s.refpass_bonus_pct : 0) + creatorBonus(me, await getCfg2());
     if (!force && now - (me.ref_comm_at || 0) < 10 * 60000) return 0;
     const list = ((await db().ref(`referrals/${refId}`).get()).val() || {}) as Record<string, any>;
     let total = 0;

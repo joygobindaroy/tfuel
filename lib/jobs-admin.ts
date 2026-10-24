@@ -5,6 +5,7 @@ import { daySummary, summaryText } from "./insights";
 import { alertTargets, alertAdmins } from "./adminalert";
 import { tgCall } from "./telegram";
 import { dayKey } from "./log";
+import { snapDaily } from "./snapshot";
 
 /** Cron: admin-side jobs (scheduled items, broadcasts, daily summary). Called from /api/cron. Must never throw. */
 export async function runAdminJobs(s: Settings): Promise<Record<string, any>> {
@@ -15,6 +16,7 @@ export async function runAdminJobs(s: Settings): Promise<Record<string, any>> {
   } catch (e: any) {
     await alertAdmins("error", `Scheduled job failed: ${String(e?.message || e).slice(0, 120)}`).catch(() => {});
   }
+  out.snapshot = await snapDaily().catch(() => false);
   try {
     const now = new Date();
     if (s.summary_enabled && now.getUTCHours() >= s.summary_hour_utc) {

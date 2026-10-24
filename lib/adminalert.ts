@@ -1,7 +1,7 @@
 import { getSettings } from "./settings";
 import { tgCall } from "./telegram";
 
-export type AlertKind = "big_withdraw" | "hold" | "ticket" | "error";
+export type AlertKind = "big_withdraw" | "hold" | "ticket" | "error" | "ad";
 const sent = new Map<string, number[]>();
 
 /** Chats that receive admin alerts: Settings → alert_chat plus every ADMIN_TELEGRAM_IDS entry */
@@ -16,14 +16,14 @@ export async function alertAdmins(kind: AlertKind, text: string, o: { amountUsdt
     const s = await getSettings();
     if (kind === "big_withdraw" && !(s.alert_big_usdt > 0 && (o.amountUsdt || 0) >= s.alert_big_usdt)) return false;
     if (kind === "hold" && !s.alert_hold) return false;
-    if (kind === "ticket" && !s.alert_ticket) return false;
+    if ((kind === "ticket" || kind === "ad") && !s.alert_ticket) return false;
     if (kind === "error" && !s.alert_errors) return false;
     const now = Date.now();
     const arr = (sent.get(kind) || []).filter((t) => now - t < 60000);
     if (arr.length >= 8) return false;
     arr.push(now);
     sent.set(kind, arr);
-    const icon = { big_withdraw: "💸", hold: "⏸", ticket: "🎫", error: "⚠️" }[kind];
+    const icon = { big_withdraw: "💸", hold: "⏸", ticket: "🎫", error: "⚠️", ad: "📣" }[kind];
     let ok = false;
     for (const chat of alertTargets(s.alert_chat)) {
       const r = await tgCall("sendMessage", { chat_id: chat, text: `${icon} ${text}`.slice(0, 900), disable_web_page_preview: "true" });

@@ -5,6 +5,8 @@ import { dayKey } from "@/lib/log";
 import { earn, activity, lbAdd } from "@/lib/wallet";
 import { ensureUser, newUser, effective, UserRecord } from "@/lib/user";
 import { MIN_AD_SECONDS } from "./ad-start";
+import { getCfg2 } from "@/lib/cfg2";
+import { rollBox } from "@/lib/eng";
 
 /**
  * ad শেষ হলে reward। যাচাই: টোকেন মেলে + কমপক্ষে MIN_AD_SECONDS পার + দৈনিক সীমা।
@@ -15,6 +17,8 @@ export default route(async (req, res) => {
   await rateLimit(user.id, "ad-claim", 12);
   const { settings: s } = await ensureUser(user);
   const nonce = String(req.body?.nonce || "");
+  const cfg2 = await getCfg2();
+  const boxCoins = rollBox(cfg2);
   const strict = !!process.env.ADS_SECRET && s.ads_provider === "adsgram";
   const now = Date.now();
   const day = dayKey(now);
@@ -46,8 +50,8 @@ export default route(async (req, res) => {
         }
         a.srv = (a.srv || 0) - 1;
       }
-      const p = a.p as "coins" | "energy" | "spin";
-      const limit = p === "coins" ? s.ads_coins_per_day : p === "energy" ? s.ads_energy_per_day : s.ads_spin_per_day;
+      const p = a.p as "coins" | "energy" | "spin" | "box" | "boost";
+      const limit = p === "coins" ? s.ads_coins_per_day : p === "energy" ? s.ads_energy_per_day : p === "box" ? (cfg2.eng.luckybox.enabled ? cfg2.eng.luckybox.per_day : 0) : p === "boost" ? (cfg2.eng.adboost.enabled ? cfg2.eng.adboost.per_day : 0) : s.ads_spin_per_day;
       if ((a[p] || 0) >= limit) {
         err = "ads_limit";
         return;
@@ -59,6 +63,14 @@ export default route(async (req, res) => {
         cur.balance += s.ads_coins;
         earn(cur, "ads", s.ads_coins);
         out = { purpose: p, coins: s.ads_coins };
+      } else if (p === "box") {
+        cur.balance += boxCoins;
+        earn(cur, "ads", boxCoins);
+        out = { purpose: p, coins: boxCoins };
+      } else if (p === "boost") {
+        const until = Math.max(now, Number((cur as any).ab_until) || 0) + cfg2.eng.adboost.minutes * 60000;
+        (cur as any).ab_until = until;
+        out = { purpose: p, until, mult: cfg2.eng.adboost.mult };
       } else if (p === "energy") {
         const eff = effective(cur, s, now);
         cur.energy = eff.max_energy;
@@ -80,6 +92,9 @@ export default route(async (req, res) => {
   if (out.purpose === "coins") {
     await lbAdd(user.id, s.ads_coins);
     await activity(user.id, "ads", { coins: s.ads_coins, note: "Watched an ad" });
+  } else if (out.purpose === "box") {
+    await lbAdd(user.id, out.coins);
+    await activity(user.id, "ads", { coins: out.coins, note: "Lucky box" });
   }
   res.json({ success: true, ...out });
 });

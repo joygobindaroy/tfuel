@@ -104,6 +104,19 @@ export async function clanKick(uid: string, target: string) {
   await notify(target, "👥 You were removed from your clan.");
 }
 
+/** Leader's announcement: shown on the clan page and sent to every member (once per hour) */
+export async function clanAnnounce(uid: string, text: string) {
+  const id = await clanOf(uid);
+  const c = id ? (await db().ref(`clans/${id}`).get()).val() : null;
+  if (!c || c.owner !== uid) throw new HttpError(403, "clan_owner_only");
+  const t = String(text || "").replace(/[\u0000-\u001f\u007f<>]/g, " ").replace(/\s+/g, " ").trim().slice(0, 200);
+  if (t.length < 3) throw new HttpError(400, "bad_request");
+  if (Date.now() - (Number(c.ann_at) || 0) < 3600000) throw new HttpError(429, "clan_ann_wait");
+  await db().ref(`clans/${id}`).update({ ann: t, ann_at: Date.now() });
+  const mem = Object.keys(((await db().ref(`clan_members/${id}`).get()).val() || {}) as Record<string, number>);
+  for (const m of mem) if (m !== uid) await notify(m, `📣 [${c.tag}] ${c.name}: ${t}`).catch(() => {});
+}
+
 export function bossInfo(cfg: Awaited<ReturnType<typeof getCfg2>>, members: number, score: number) {
   const b = cfg.clan.boss;
   if (!b.enabled) return null;
@@ -133,7 +146,7 @@ export async function clanView(uid: string) {
     const claimed = !!(await db().ref(`clan_boss_claim/${w}/${uid}`).get()).val();
     const rank = topClans.findIndex((t) => t.id === id);
     out.mine = {
-      id, name: c.name, tag: c.tag, owner: c.owner === uid, members: Object.keys(mem).length, score, rank: rank >= 0 ? rank + 1 : null,
+      id, name: c.name, tag: c.tag, ann: c.ann || "", annAt: c.ann_at || 0, owner: c.owner === uid, members: Object.keys(mem).length, score, rank: rank >= 0 ? rank + 1 : null,
       roster: names.map(([m, n]) => ({ id: m, name: n, v: contrib[m] || 0, owner: m === c.owner, me: m === uid })).sort((a, b) => b.v - a.v),
       boss: bossInfo(cfg, Object.keys(mem).length, score), bossClaimed: claimed, myContribution: contrib[uid] || 0,
     };

@@ -27,8 +27,9 @@ export async function cosEquip(uid: string, id: string, kind: string) {
   await db().ref(`user_prefs/${uid}/cos/${it.kind}`).set(id);
 }
 /** "✨🔥 Name" for leaderboards etc. (called with the user's prefs object) */
-export function decorate(name: string, cos: any, items: { id: string; emoji: string }[]): string {
-  if (!cos) return name;
+export function decorate(name: string, cos: any, items: { id: string; emoji: string }[], plate?: string): string {
+  const tail = plate ? ` «${plate}»` : "";
+  if (!cos) return name + tail;
   const e = (id?: string) => items.find((x) => x.id === id)?.emoji || "";
-  return `${e(cos.frame)}${e(cos.badge)} ${name}`.trim();
+  return `${e(cos.frame)}${e(cos.badge)} ${name}${tail}`.trim();
 }

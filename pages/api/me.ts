@@ -1,6 +1,6 @@
 import { getCfg2 } from "@/lib/cfg2";
 import { featureOn } from "@/lib/features";
-import { settleAutoConvert } from "@/lib/autoconv";
+import { settleAutoConvert, settleWeekly } from "@/lib/autoconv";
 import { authenticate } from "@/lib/auth";
 import { route } from "@/lib/api";
 import { db } from "@/lib/firebase";
@@ -11,6 +11,8 @@ import { dayKey } from "@/lib/log";
 import { markComeback, retentionState } from "@/lib/retention";
 import { trackLogin } from "@/lib/devices";
 import { missionsView } from "@/lib/missions";
+import { pickAd } from "@/lib/ads";
+import { engState, levelCheck } from "@/lib/eng";
 import { pendingMining } from "@/lib/user";
 import { rigsView } from "@/lib/rigs";
 import { notifyAchievements } from "@/lib/retention";
@@ -28,6 +30,7 @@ export default route(async (req, res) => {
   const awayMs = u.last_seen ? now - u.last_seen : 0; // before last_seen is refreshed
   await markComeback(user.id, u, settings, now);
   { const c = await settleAutoConvert(user.id, u, settings, now); if (c) u.balance -= c; }
+  { const c = await settleWeekly(user.id, u, settings, now); if (c) u.balance -= c; }
   let awayComm = 0;
   if (u.ref_count) { const g = await settleCommission(user.id); if (g) { u.balance += g; awayComm = g; } }
 
@@ -43,7 +46,7 @@ export default route(async (req, res) => {
     send: settings.send_enabled,
     shops: settings.shops_enabled,
     bdtRate: settings.bdt_rate,
-    games: { clans: c2.clan.enabled && featureOn(settings, "clans"), rigs: c2.rigs.enabled && featureOn(settings, "rigs"), puzzle: c2.puzzle.enabled && featureOn(settings, "puzzle"), collect: c2.collect.enabled && featureOn(settings, "collectibles"), autoconv: c2.autoconv.enabled && featureOn(settings, "autoconv"), cosmetics: c2.cosmetics.enabled, feed: settings.feed_enabled, refpass: settings.refpass_enabled },
+    games: { clans: c2.clan.enabled && featureOn(settings, "clans"), rigs: c2.rigs.enabled && featureOn(settings, "rigs"), puzzle: c2.puzzle.enabled && featureOn(settings, "puzzle"), collect: c2.collect.enabled && featureOn(settings, "collectibles"), autoconv: c2.autoconv.enabled && featureOn(settings, "autoconv"), cosmetics: c2.cosmetics.enabled, feed: settings.feed_enabled, refpass: settings.refpass_enabled, ads: c2.adsmkt.enabled },
   };
   const announcement =
     settings.announcement.enabled && settings.announcement.text ? settings.announcement : null;
@@ -148,6 +151,9 @@ export default route(async (req, res) => {
     faq: settings.faq,
     ret: await retentionState(user.id, u, settings, now).catch(() => null),
     dm: await missionsView(user.id, settings).catch(() => null),
+    levelup: await levelCheck(user.id, u, c2).catch(() => null),
+    eng: await engState(user.id, u, settings, c2).catch(() => null),
+    ads: c2.adsmkt.enabled ? { home: await pickAd("home_banner", user.id).catch(() => null), board: await pickAd("board_top", user.id).catch(() => null) } : null,
     away: awayMs > 2 * 3600000 ? await (async () => {
       const mining = (() => { try { return pendingMining(u, settings.mine_cap_hours, now).amount || 0; } catch { return 0; } })();
       const rigs = c2.rigs.enabled ? await rigsView(user.id).then((r: any) => r.pending || 0).catch(() => 0) : 0;

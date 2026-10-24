@@ -3,7 +3,7 @@ import { CopyBtn, Empty, ConfirmSheet, SkelList, AmtInput, OfflineBar, usePullRe
 import { api, cachedApi, errText, fmtTf, fmtUsd, openLink, openTgLink, tg, haptic, tick, getUi } from "@/lib/client";
 import { ReceiptSheet, NextReward } from "@/components/Extras";
 import { ClanPage, RigsPage, PuzzlePage, CollectPage } from "@/components/Games";
-import { InvitePlusPage, ReportPage, AutoConvertCard, PlCard } from "@/components/More";
+import { InvitePlusPage, ReportPage, AutoConvertCard, MoveAlertCard, PlCard } from "@/components/More";
 import { BRAND } from "@/lib/brand";
 import Logo from "@/components/Logo";
 import Icon from "@/components/Icons";
@@ -14,6 +14,9 @@ import { Bell, Onboarding, CurrencyPick, TermsGate } from "@/components/Inbox";
 import { PaySheet, ShopsPage, SupportPage, InviteCard } from "@/components/Shops";
 import { SendPage } from "@/components/Send";
 import { MissionsCard, TodoCard, FeedCard, AwayPopup, CosmeticsPage } from "@/components/Today";
+import { AdBanner, AdsPage } from "@/components/Ads";
+import { homeOrder } from "@/components/SettingsExtra";
+import { LevelUpPopup, AdPerks, PerksPage } from "@/components/Eng";
 import { WithdrawChoice } from "@/components/WithdrawChoice";
 import { SettingsPanel, useAccount, PinField, AddrPicker } from "@/components/Settings";
 import { BoostTab, DailyCard } from "@/components/Growth";
@@ -36,9 +39,12 @@ interface Me {
   cur?: "tfuel" | "usdt" | null;
   ret?: any;
   dm?: any;
+  ads?: { home?: any; board?: any } | null;
+  eng?: any;
+  levelup?: { from: number; to: number; coins: number } | null;
   away?: any;
   faq?: { q: string; a: string }[];
-  cfg: { send?: boolean; minWithdraw: number; methods: string[]; coinsPerUnit: number; unitLabel: string; withdrawEnabled: boolean; coinsPerTfuel: number; shops?: boolean; bdtRate?: number; games?: { clans: boolean; rigs: boolean; puzzle: boolean; collect: boolean; autoconv: boolean; invite?: boolean; cosmetics?: boolean; feed?: boolean; refpass?: boolean } };
+  cfg: { send?: boolean; minWithdraw: number; methods: string[]; coinsPerUnit: number; unitLabel: string; withdrawEnabled: boolean; coinsPerTfuel: number; shops?: boolean; bdtRate?: number; games?: { clans: boolean; rigs: boolean; puzzle: boolean; collect: boolean; autoconv: boolean; invite?: boolean; cosmetics?: boolean; feed?: boolean; refpass?: boolean; ads?: boolean } };
 }
 interface Task {
   id: string;
@@ -300,7 +306,7 @@ export default function Home() {
 
       {tab !== "tfuel" && tab !== "profile" && (
       <div className="balance-card">
-        <div className="lbl" style={{ display: "flex", justifyContent: "space-between" }}>Total balance <button type="button" aria-label="Hide balance" style={{ opacity: .7, fontSize: 15 }} onClick={() => setHide(!hide)}>{hide ? "🙈" : "👁"}</button></div>
+        <div className="lbl" style={{ display: "flex", justifyContent: "space-between" }}>Total balance <button type="button" aria-label="Hide balance" style={{ opacity: .7, display: "inline-flex" }} onClick={() => setHide(!hide)}><Icon name={hide ? "eyeoff" : "eye"} size={18} /></button></div>
         <div className="amt num balv">
           <Logo size={26} />
           {T(bal)}
@@ -348,14 +354,22 @@ export default function Home() {
             </div>
             {empty && <AdRefill say={say} reload={load} />}
           </div>
-          <NextReward me={me} cpt={cpt} onGo={() => go("tasks")} />
-          <TodoCard me={me} go={(t) => go(t as any)} />
-          <MissionsCard dm={me.dm} say={say} cpt={cpt} reload={load} />
-          {me.cfg.games?.feed && <FeedCard say={say} />}
+          {homeOrder().map((k) => {
+            switch (k) {
+              case "ad": return <AdBanner key={k} ad={me.ads?.home} />;
+              case "next": return <NextReward key={k} me={me} cpt={cpt} onGo={() => go("tasks")} />;
+              case "todo": return <TodoCard key={k} me={me} go={(t) => go(t as any)} />;
+              case "missions": return <MissionsCard key={k} dm={me.dm} say={say} cpt={cpt} reload={load} />;
+              case "perks": return <AdPerks key={k} eng={me.eng} say={say} cpt={cpt} reload={load} />;
+              case "feed": return me.cfg.games?.feed ? <FeedCard key={k} say={say} /> : null;
+              default: return null;
+            }
+          })}
         </>
       )}
 
       <AwayPopup away={me.away} cpt={cpt} />
+      <LevelUpPopup up={me.levelup} cpt={cpt} />
       {tab === "boost" && <BoostTab key={rk} cpt={cpt} price={me.price || 0} say={say} reload={load} />}
       {tab === "tfuel" && <Market key={(mkSub || "m") + rk} startSub={mkSub} say={say} reload={load} cpt={cpt} />}
       {tab === "tasks" && <TasksWrap key={rk} me={me} cpt={cpt} say={say} reload={load} />}
@@ -395,7 +409,7 @@ function TasksWrap({ me, cpt, say, reload }: { me: Me; cpt: number; say: Say; re
           <PromoCard cpt={cpt} say={say} reload={reload} />
         </>
       ) : (
-        <Leaderboard cpt={cpt} say={say} />
+        <><AdBanner ad={me.ads?.board} /><Leaderboard cpt={cpt} say={say} /></>
       )}
     </>
   );
@@ -630,7 +644,7 @@ function Tasks({ me, cpt, say, reload }: { me: Me; cpt: number; say: Say; reload
 }
 
 /** Profile: balance in TFUEL + USDT value, shortcuts, optional legacy payout methods, history */
-type Page = null | "rewards" | "send" | "deposit" | "deposits" | "withdraw" | "payouts" | "assets" | "history" | "settings" | "other" | "shops" | "support" | "invite" | "clan" | "rigs" | "puzzle" | "collect" | "report" | "cosmetics";
+type Page = null | "rewards" | "send" | "deposit" | "deposits" | "withdraw" | "payouts" | "assets" | "history" | "settings" | "other" | "shops" | "support" | "invite" | "clan" | "rigs" | "puzzle" | "collect" | "report" | "cosmetics" | "ads" | "perks";
 
 function Profile({ initPage, me, cpt, balance, go, say, reload, onCur }: { initPage?: Page; me: Me; cpt: number; balance: number; go: (t: Tab, sub?: string) => void; say: Say; reload: () => void; onCur: (c: "tfuel" | "usdt") => void }) {
   const [page, setPage] = useState<Page>(initPage || null);
@@ -653,6 +667,8 @@ function Profile({ initPage, me, cpt, balance, go, say, reload, onCur }: { initP
   const T = (n: number) => fmtTf(n, cpt);
 
   if (page === "rewards") return <RewardsPage say={say} onBack={back} cpt={cpt} reload={refresh} />;
+  if (page === "perks") return <PerksPage eng={me.eng} say={say} onBack={back} cpt={cpt} reload={refresh} />;
+  if (page === "ads") return <AdsPage say={say} onBack={back} reload={refresh} />;
   if (page === "cosmetics") return <CosmeticsPage say={say} onBack={back} cpt={cpt} reload={refresh} />;
   if (page === "send") return <SendPage say={say} onBack={back} cpt={cpt} reload={refresh} />;
   if (page === "deposit") return <DepositPage say={say} reload={refresh} onBack={back} onHistory={() => nav("deposits", "deposit")} onBuy={() => { nav(null); go("tfuel", "trade"); }} />;
@@ -660,8 +676,8 @@ function Profile({ initPage, me, cpt, balance, go, say, reload, onCur }: { initP
   if (page === "withdraw") return <WithdrawChoice say={say} reload={refresh} onBack={back} onHistory={() => nav("payouts", "withdraw")} cpt={cpt} internal={!!me.cfg.send} />;
   if (page === "payouts") return <PayoutHistory say={say} onBack={back} legacy={me.withdrawals} cpt={cpt} fmtTf={fmtTf} />;
   if (page === "shops") return <ShopsPage say={say} onBack={back} cpt={cpt} />;
-  if (page === "invite") return <InvitePlusPage say={say} onBack={back} cpt={cpt} reload={refresh} />;
-  if (page === "clan") return <ClanPage say={say} onBack={back} cpt={cpt} reload={refresh} />;
+  if (page === "invite") return <InvitePlusPage say={say} onBack={back} cpt={cpt} reload={refresh} eng={me.eng} />;
+  if (page === "clan") return <ClanPage say={say} onBack={back} cpt={cpt} reload={refresh} tip={me.eng?.tip} />;
   if (page === "rigs") return <RigsPage say={say} onBack={back} cpt={cpt} reload={refresh} />;
   if (page === "puzzle") return <PuzzlePage say={say} onBack={back} cpt={cpt} reload={refresh} />;
   if (page === "collect") return <CollectPage say={say} onBack={back} cpt={cpt} reload={refresh} />;
@@ -669,7 +685,7 @@ function Profile({ initPage, me, cpt, balance, go, say, reload, onCur }: { initP
   if (page === "support") return <SupportPage say={say} onBack={back} faq={me.faq || []} />;
   if (page === "settings") return <SettingsPage say={say} onBack={back} userId={me.user.id} onCur={onCur} />;
   if (page === "other") return (<><PageHead title="Other payout methods" onBack={back} /><LegacyWithdraw me={me} cpt={cpt} balance={balance} say={say} reload={refresh} /></>);
-  if (page === "assets") return (<><PageHead title="Portfolio & assets" onBack={back} />{w ? <><AssetsPage w={w} balance={balance} cpt={cpt} go={go} /><PlCard pl={w.pl} />{me.cfg.games?.autoconv && <AutoConvertCard say={say} />}</> : <SkelList />}</>);
+  if (page === "assets") return (<><PageHead title="Portfolio & assets" onBack={back} />{w ? <><AssetsPage w={w} balance={balance} cpt={cpt} go={go} /><PlCard pl={w.pl} />{me.cfg.games?.autoconv && <AutoConvertCard say={say} />}<MoveAlertCard say={say} /></> : <SkelList />}</>);
   if (page === "history") return (<><PageHead title="Transaction history" onBack={back} />{w ? <div className="card"><ActivityList first={w.activity} cpt={cpt} /></div> : <SkelList />}</>);
 
   const price = w?.price || me.price || 0;
@@ -741,6 +757,8 @@ function Profile({ initPage, me, cpt, balance, go, say, reload, onCur }: { initP
       <div className="menu">
         {me.cfg.methods.length > 0 && <Row icon="gift" t="Other payout methods" s="Withdraw TFUEL to other accounts" onClick={() => nav("other")} />}
         {me.cfg.shops && <Row icon="gift" t="Partner shops" s="Sign in automatically and pay with TFUEL or USDT" onClick={() => nav("shops")} />}
+        {(me.eng?.pass?.on || me.eng?.plate?.on) && <Row icon="star" t="Perks" s="Season pass and name tag" onClick={() => nav("perks")} />}
+        {me.cfg.games?.ads && <Row icon="gift" t="Promote with us" s="Show your link to every TFUEL user" onClick={() => nav("ads")} />}
         {me.cfg.games?.cosmetics && <Row icon="gift" t="Badges & frames" s="Customise your name on leaderboards" onClick={() => nav("cosmetics")} />}
         {me.cfg.games?.invite !== false && <Row icon="users" t="Invite & earn" s="Tiers, invite leaderboard and contest" onClick={() => nav("invite")} />}
         <Row icon="alert" t="Report a problem" s="Tell us what went wrong — details are attached" onClick={() => nav("report")} />
@@ -834,13 +852,13 @@ const EARN_LABEL: Record<string, string> = {
 };
 const SPEND_LABEL: Record<string, string> = { boosts: "Boosts", sold: "Sold for USDT", withdrawn: "Withdrawn", shop: "Shops", sent: "Sent to friends" };
 const USDT_LABEL: Record<string, string> = {
-  deposited: "Deposited", sold: "From selling TFUEL", bought: "Spent buying TFUEL", withdrawn: "Withdrawn", adjusted: "Admin adjustment",
+  deposited: "Deposited", ads: "Promotions", sold: "From selling TFUEL", bought: "Spent buying TFUEL", withdrawn: "Withdrawn", adjusted: "Admin adjustment",
 };
 const ACT_LABEL: Record<string, string> = {
   article: "Article reward", task: "Task reward", daily: "Daily reward", referral: "Referral bonus", mining: "Mining collected",
   stake_paid: "Staking payout", boost: "Boost purchased", sell: "Sold TFUEL", buy: "Bought TFUEL", deposit: "USDT deposit",
   deposit_rejected: "Deposit rejected", usdt_withdraw: "USDT withdrawal", usdt_paid: "Withdrawal paid", usdt_rejected: "Withdrawal refunded", adjust: "Balance adjustment",
-  spin: "Lucky Spin", promo: "Promo code", prize: "Leaderboard prize", ads: "Ad reward", limit_buy: "Limit buy filled", limit_sell: "Limit sell filled", send: "Sent to a friend", receive: "Received from a friend", shop: "Shop payment", shop_refund: "Shop refund",
+  spin: "Lucky Spin", promo: "Promo code", prize: "Leaderboard prize", ads: "Ad reward", limit_buy: "Limit buy filled", limit_sell: "Limit sell filled", send: "Sent to a friend", receive: "Received from a friend", shop: "Shop payment", shop_refund: "Shop refund", adbuy: "Promotion purchased", adrefund: "Promotion refund",
 };
 
 interface Wallet {
@@ -992,6 +1010,18 @@ const FILTERS: [string, string, string[] | null][] = [
   ["xfer", "Transfers", ["send", "receive"]],
 ];
 
+/** Downloads the rows on screen as a spreadsheet-friendly CSV (Excel opens it directly) */
+function exportCsv(rows: ActItem[], cpt: number) {
+  const esc = (v: unknown) => { const t = String(v ?? ""); return /[",\n\r]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
+  const lines = [["Date (UTC)", "Type", "TFUEL", "USDT", "Note", "ID"].join(",")];
+  for (const a of rows) lines.push([new Date(a.at).toISOString().replace("T", " ").slice(0, 19), ACT_LABEL[a.t] || a.t, a.c / (cpt || 1), a.u, a.n, a.id].map(esc).join(","));
+  const el = document.createElement("a");
+  el.href = URL.createObjectURL(new Blob(["\ufeff" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" }));
+  el.download = `tfuel-history-${new Date().toISOString().slice(0, 10)}.csv`;
+  el.click();
+  setTimeout(() => URL.revokeObjectURL(el.href), 4000);
+}
+
 /** Recent activity with "load more" and filters */
 function ActivityList({ first, cpt }: { first: ActItem[]; cpt: number }) {
   const [items, setItems] = useState<ActItem[]>(first);
@@ -1042,6 +1072,7 @@ function ActivityList({ first, cpt }: { first: ActItem[]; cpt: number }) {
       {more && (
         <button className="btn sec block" style={{ marginTop: 10 }} disabled={busy} onClick={load}>{busy ? "Loading…" : "Load more"}</button>
       )}
+      <button className="btn sec block" style={{ marginTop: 10 }} onClick={() => exportCsv(shown, cpt)}><Icon name="download" size={15} /> Export CSV ({shown.length})</button>
       {rc && <ReceiptSheet item={rc} label={ACT_LABEL[rc.t] || rc.t} cpt={cpt} onClose={() => setRc(null)} />}
     </div>
   );

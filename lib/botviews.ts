@@ -1,3 +1,4 @@
+import { pickAd, adImp } from "./ads";
 import { db } from "./firebase";
 import { getSettings, Settings } from "./settings";
 import { getRefCode } from "./refcode";
@@ -38,6 +39,14 @@ export async function menuKb(s: Settings, param?: string): Promise<Kb> {
   const items = s.bot_menu.filter((m) => m.on && CB[m.k] && (m.k !== "clan" || clanOn) && (m.k !== "daily" || s.daily_enabled) && (m.k !== "spin" || s.spin_enabled) && (m.k !== "missions" || s.dm_enabled) && (m.k !== "invite" || s.referral_enabled));
   const rows: Kb = [[openBtn(s, s.bot_start_label, param)]];
   for (let i = 0; i < items.length; i += 2) rows.push(items.slice(i, i + 2).map((m) => ({ text: m.text, callback_data: CB[m.k] })));
+  try {
+    const ad = c2?.adsmkt.enabled ? await pickAd("bot_button") : null;
+    if (ad) {
+      const base = (process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/+$/, "");
+      rows.push([{ text: `📣 ${ad.title}`.slice(0, 40), url: base ? `${base}/api/ad-click?id=${ad.id}` : ad.url }]);
+      void adImp(ad.id);
+    }
+  } catch {}
   if (s.bot_sponsor_text && s.bot_sponsor_url) rows.push([{ text: `📣 ${s.bot_sponsor_text}`, url: s.bot_sponsor_url }]);
   for (const b of s.bot_buttons) rows.push([{ text: b.text, url: b.url }]);
   return rows;

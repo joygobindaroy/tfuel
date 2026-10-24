@@ -31,7 +31,7 @@ export async function names(ids: string[]): Promise<Record<string, string>> {
     ids.map(async (id) => {
       const [nm, pr] = await Promise.all([db().ref(`users/${id}/name`).get(), db().ref(`user_prefs/${id}`).get()]);
       const p = (pr.val() || {}) as any;
-      out[id] = p.lb_hide ? "Anonymous" : decorate(String(p.nick || nm.val() || "Player").slice(0, 24), p.cos, items);
+      out[id] = p.lb_hide ? "Anonymous" : decorate(String(p.nick || nm.val() || "Player").slice(0, 24), p.cos, items, p.plate ? String(p.plate).slice(0, 20) : undefined);
     })
   );
   return out;

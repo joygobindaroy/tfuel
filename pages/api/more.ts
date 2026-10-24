@@ -16,6 +16,9 @@ import { missionsView, missionsClaim } from "@/lib/missions";
 import { cosView, cosBuy, cosEquip } from "@/lib/cosmetics";
 import { feedList } from "@/lib/feed";
 import { chargeCoins } from "@/lib/coins";
+import { weekIndex } from "@/lib/wallet";
+import { creatorBonus } from "@/lib/eng";
+import { adsView, adsBuy, adsCancel, adImp } from "@/lib/ads";
 
 const clean = (v: any, n: number) => String(v ?? "").replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, " ").trim().slice(0, n);
 
@@ -34,7 +37,7 @@ export default route(async (req, res) => {
       const info = tierInfo(cfg.tiers, u.ref_count || 0, s.referral_commission_pct);
       const until = Number((u as any).refpass_until) || 0;
       const passOn = s.refpass_enabled && until > Date.now();
-      return ok({ tier: { ...info, pct: info.pct + (passOn ? s.refpass_bonus_pct : 0), pass: passOn ? s.refpass_bonus_pct : 0 }, board: await refBoard(user.id, "w", s), pass: { enabled: s.refpass_enabled, price: s.refpass_price, days: s.refpass_days, bonus: s.refpass_bonus_pct, until: until > Date.now() ? until : 0 } });
+      return ok({ tier: { ...info, pct: info.pct + (passOn ? s.refpass_bonus_pct : 0) + creatorBonus(u, cfg), pass: passOn ? s.refpass_bonus_pct : 0 }, board: await refBoard(user.id, "w", s), pass: { enabled: s.refpass_enabled, price: s.refpass_price, days: s.refpass_days, bonus: s.refpass_bonus_pct, until: until > Date.now() ? until : 0 } });
     }
     case "passBuy": {
       if (!s.refpass_enabled) throw new HttpError(403, "feature_off");
@@ -43,6 +46,10 @@ export default route(async (req, res) => {
       await chargeCoins(user.id, s.refpass_price, "boosts", (cur: any) => { until = Math.max(now, Number(cur.refpass_until) || 0) + s.refpass_days * 86400000; cur.refpass_until = until; return null; });
       return ok({ until });
     }
+    case "ads": return ok({ ads: await adsView(user.id) });
+    case "adsBuy": { const r = await adsBuy(user.id, clean(u.name || "", 30), b); return ok({ ...r, ads: await adsView(user.id) }); }
+    case "adsCancel": await adsCancel(user.id, String(b.id || "")); return ok({ ads: await adsView(user.id) });
+    case "adImp": await adImp(String(b.id || "")); return ok();
     case "missions": return ok({ dm: await missionsView(user.id, s) });
     case "missionsClaim": { const reward = await missionsClaim(user.id, s); return ok({ reward, dm: await missionsView(user.id, s) }); }
     case "cos": return ok({ cos: await cosView(user.id) });
@@ -59,7 +66,22 @@ export default route(async (req, res) => {
       await db().ref(`users/${user.id}`).update({ ac_pct: pct || null, ac_base: commissionBase(u.earn), ac_at: Date.now() });
       return ok({ pct, options: cfg.autoconv.options });
     }
-    case "acGet": return ok({ enabled: cfg.autoconv.enabled && s.trade_enabled && s.sell_enabled, options: cfg.autoconv.options, pct: Number((u as any).ac_pct) || 0, total: Number((u as any).ac_total) || 0 });
+    case "acwSet": {
+      requireFeature(s, "autoconv");
+      if (!cfg.autoconv.enabled || !cfg.autoconv.weekly) throw new HttpError(403, "feature_off");
+      const pct = Math.floor(Number(b.pct) || 0);
+      if (pct !== 0 && !cfg.autoconv.options.includes(pct)) throw new HttpError(400, "bad_request");
+      await db().ref(`users/${user.id}`).update({ acw_pct: pct || null, acw_last: weekIndex() });
+      return ok({ wpct: pct });
+    }
+    case "moveSet": {
+      const pct = Math.floor(Number(b.pct) || 0);
+      if (!cfg.moves.enabled || (pct !== 0 && !cfg.moves.options.includes(pct))) throw new HttpError(400, "bad_request");
+      await db().ref().update({ [`user_prefs/${user.id}/mv`]: pct || null, [`mv_users/${user.id}`]: pct || null });
+      return ok({ pct });
+    }
+    case "moveGet": return ok({ enabled: cfg.moves.enabled, options: cfg.moves.options, pct: Number((await db().ref(`user_prefs/${user.id}/mv`).get()).val()) || 0 });
+    case "acGet": return ok({ wpct: Number((u as any).acw_pct) || 0, weekly: cfg.autoconv.weekly, enabled: cfg.autoconv.enabled && s.trade_enabled && s.sell_enabled, options: cfg.autoconv.options, pct: Number((u as any).ac_pct) || 0, total: Number((u as any).ac_total) || 0 });
 
     case "clan": requireFeature(s, "clans"); return ok({ clan: await clanView(user.id) });
     case "clanCreate": requireFeature(s, "clans"); await clanCreate(user.id, b.name, b.tag); return ok({ clan: await clanView(user.id) });

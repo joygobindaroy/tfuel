@@ -1,5 +1,8 @@
 /** Short highlights shown in Admin → Controls → Version (full history is in CHANGELOG.md) */
 export const CHANGELOG_HIGHLIGHTS: { v: string; text: string }[] = [
+  { v: "19.2", text: "Price-move alerts, weekly auto-convert, CSV export, address chips, Bangla language, home layout, A/B reward test, auto-protect, backup & money snapshots." },
+  { v: "19.1", text: "Level-up rewards, lucky box, rewarded boost, clan announcement, friend gift, invite milestones, creator program, season pass, name plate, clan tips." },
+  { v: "19.0", text: "Sponsor marketplace (paid promotion slots, admin review, refunds, reports), mission packs, pinned messages, bulk discounts, revenue panel." },
   { v: "18.2", text: "Bot admin tools, tickets, spin, deposit QR, missions, to-do, feed, boost pass, badges & frames, risk report, internal/on-chain withdraw choice, auto bot-menu refresh, email social icons." },
   { v: "18.1", text: "Bot: daily reward, wallet, leaderboard, price, clan, help and settings buttons; name greeting, returning-user summary, banner, commands, inline invite, group /top, receipts and claim buttons, task alerts, boss alerts, weekly winners post." },
   { v: "18.0", text: "Invite tiers + contest, campaigns, sponsored tasks, auto-convert, P&L, auto-tap detection, country/IP rules, status page, clans + raid boss, rigs, word puzzle, collectibles, FAQ bot, report a problem." },

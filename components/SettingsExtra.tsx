@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, errText, fmtUsd, getUi, setUi, hapticOn, setHapticOn } from "@/lib/client";
+import { getLang, setLang } from "@/lib/i18n";
 import Icon from "@/components/Icons";
 import type { Account } from "@/components/Settings";
 
@@ -11,6 +12,55 @@ const Sw = ({ on, onClick, label, disabled }: { on: boolean; onClick: () => void
 const hh = (h: number) => `${String(h).padStart(2, "0")}:00`;
 
 /** App feel: sound, haptic, start screen, number format, balance estimate (saved on this device) */
+/** Home cards the user can reorder / hide (stored on this device) */
+export const HOME_CARDS: [string, string][] = [["ad", "Sponsored banner"], ["next", "Next reward"], ["todo", "To do today"], ["missions", "Today's missions"], ["perks", "Ad bonuses"], ["feed", "Community"]];
+export function homeOrder(): string[] {
+  const all = HOME_CARDS.map(([k]) => k);
+  let ord: string[] = [], hide: string[] = [];
+  try { ord = getUi("home_order").split(",").filter((k) => all.includes(k)); hide = getUi("home_hide").split(",").filter(Boolean); } catch {}
+  return [...ord, ...all.filter((k) => !ord.includes(k))].filter((k) => !hide.includes(k));
+}
+export function HomeLayoutCard() {
+  const [, f] = useState(0);
+  const re = () => f((n) => n + 1);
+  const all = HOME_CARDS.map(([k]) => k);
+  const ord = (() => { const o = getUi("home_order").split(",").filter((k) => all.includes(k)); return [...o, ...all.filter((k) => !o.includes(k))]; })();
+  const hide = getUi("home_hide").split(",").filter(Boolean);
+  const move = (i: number, d: number) => { const a = [...ord]; const j = i + d; if (j < 0 || j >= a.length) return; [a[i], a[j]] = [a[j], a[i]]; setUi("home_order", a.join(",")); re(); };
+  const toggle = (k: string) => { setUi("home_hide", (hide.includes(k) ? hide.filter((x) => x !== k) : [...hide, k]).join(",")); re(); };
+  const label = Object.fromEntries(HOME_CARDS);
+  return (
+    <div className="card">
+      <div className="title">Home layout</div>
+      <div className="sub" style={{ marginBottom: 8 }}>Choose which cards show on the Tap screen and in what order.</div>
+      {ord.map((k, i) => (
+        <div key={k} className="row" style={{ marginTop: 6, opacity: hide.includes(k) ? 0.5 : 1 }}>
+          <div className="title" style={{ fontSize: 14 }}>{label[k]}</div>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button className="btn sec sm" aria-label="Up" onClick={() => move(i, -1)}>↑</button>
+            <button className="btn sec sm" aria-label="Down" onClick={() => move(i, 1)}>↓</button>
+            <button className="btn sec sm" onClick={() => toggle(k)}>{hide.includes(k) ? "Show" : "Hide"}</button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** English / Bangla */
+export function LanguageCard() {
+  const cur = getLang();
+  return (
+    <div className="card">
+      <div className="title">Language</div>
+      <div className="seg" style={{ marginTop: 8, marginBottom: 0 }}>
+        {([["en", "English"], ["bn", "বাংলা"]] as const).map(([v, l]) => <button key={v} className={cur === v ? "on" : ""} onClick={() => { if (v !== cur) setLang(v); }}>{l}</button>)}
+      </div>
+      <div className="xs muted" style={{ marginTop: 6 }}>Main screens are translated; some texts may stay in English.</div>
+    </div>
+  );
+}
+
 export function AppFeelCard({ a }: { a: Account }) {
   const [, f] = useState(0);
   const re = () => f((n) => n + 1);

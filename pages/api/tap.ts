@@ -8,6 +8,7 @@ import { tapMult } from "@/lib/retention";
 import { getCfg2 } from "@/lib/cfg2";
 import { alertAdmins } from "@/lib/adminalert";
 import { dmBump } from "@/lib/missions";
+import { adBoostActive } from "@/lib/eng";
 import {
   ensureUser,
   currentEnergy,
@@ -30,7 +31,8 @@ export default route(async (req, res) => {
 
   const { settings } = await ensureUser(user);
 
-  const botCfg = (await getCfg2()).bot;
+  const cfgAll = await getCfg2();
+  const botCfg = cfgAll.bot;
   let botNow = false;
   let failure: string | null = null;
   let earnedTap = 0;
@@ -83,7 +85,7 @@ export default route(async (req, res) => {
         }
       }
       cur.last_tap_time = now;
-      const per = Math.floor(eff.earn_per_tap * tapMult(settings, now));
+      const per = Math.floor(eff.earn_per_tap * tapMult(settings, now) * (adBoostActive(cur, cfgAll, now) ? cfgAll.eng.adboost.mult : 1));
       cur.balance += n * per;
       earn(cur, "tap", n * per);
       earnedTap = n * per;

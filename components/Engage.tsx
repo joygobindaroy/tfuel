@@ -54,7 +54,7 @@ export function useAd(ads: AdCfg, say: Say) {
     s.async = true;
     document.head.appendChild(s);
   }, [blockId, monetag]);
-  const watch = async (purpose: "coins" | "energy" | "spin"): Promise<any | null> => {
+  const watch = async (purpose: "coins" | "energy" | "spin" | "box" | "boost"): Promise<any | null> => {
     if (busy) return null;
     setBusy(true);
     try {

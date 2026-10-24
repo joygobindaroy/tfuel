@@ -1,3 +1,4 @@
+import { snapList, snapCreate, snapLook, snapRestoreUser } from "../snapshot";
 import type { AdminMod } from "./types";
 import { db } from "../firebase";
 import { adminLog, dayKey } from "../log";
@@ -115,6 +116,19 @@ const mod: AdminMod = async (action, b, ctx) => {
       invalidateCfg2();
       await adminLog(ctx.who, "backup_restore", { changed: p.diff.map((d) => `${d.area}.${d.key}`).slice(0, 80), skipped: p.skipped.length });
       return { applied: p.diff.length, skipped: p.skipped };
+    }
+
+    /* ---------- money snapshots ---------- */
+    case "snapList": needSuper(ctx.role); return { list: await snapList() };
+    case "snapCreate": { needSuper(ctx.role); const r = await snapCreate(ctx.who); await adminLog(ctx.who, "snap_create", r); return { ...r, list: await snapList() }; }
+    case "snapLook": needSuper(ctx.role); return await snapLook(String(b.id || ""), String(b.uid || ""));
+    case "snapRestore": {
+      needSuper(ctx.role);
+      const reason = clean(b.reason, 200);
+      if (reason.length < 3) throw new HttpError(400, "A reason is required");
+      const r = await snapRestoreUser(String(b.id || ""), String(b.uid || ""), ctx.who, reason);
+      await adminLog(ctx.who, "snap_restore", { uid: b.uid, id: b.id, reason, before: r.before, after: r.after });
+      return r;
     }
 
     /* ---------- (18) version & changelog ---------- */

@@ -44,6 +44,7 @@ const note = (t: string) => <div className="sub" style={{ margin: "4px 2px 12px"
 /* ---------------------------------------------------------------- Clan */
 interface ClanMine {
   id: string; name: string; tag: string; owner: boolean; members: number; score: number; rank: number | null; myContribution: number; bossClaimed: boolean;
+  ann?: string;
   roster: { id: string; name: string; v: number; owner: boolean; me: boolean }[];
   boss: { name: string; emoji: string; hp: number; damage: number; pct: number; defeated: boolean; reward: number } | null;
 }
@@ -52,12 +53,13 @@ interface ClanV {
   list: { id: string; name: string; tag: string; members: number; full: boolean }[];
   ranks: { rank: number; id: string; name?: string; tag?: string; v: number }[];
 }
-export function ClanPage({ say, onBack, cpt, reload }: P) {
+export function ClanPage({ say, onBack, cpt, reload, tip }: P & { tip?: { on: boolean; amounts: number[]; fee: number } }) {
   const { d, setD, load, err } = useMore<ClanV>("clan", "clan", say);
   const [busy, setBusy] = useState("");
   const [name, setName] = useState("");
   const [tag, setTag] = useState("");
-  const [ask, setAsk] = useState<null | { kind: "leave" } | { kind: "kick"; id: string; name: string } | { kind: "create" }>(null);
+  const [ask, setAsk] = useState<null | { kind: "leave" } | { kind: "kick"; id: string; name: string } | { kind: "create" } | { kind: "tip"; id: string; name: string }>(null);
+  const [ann, setAnn] = useState("");
   const now = useNow();
   const money = (c: number) => `${fmtTf(c, cpt)} TFUEL`;
 
@@ -152,6 +154,18 @@ export function ClanPage({ say, onBack, cpt, reload }: P) {
         </div>
       )}
 
+      {(m.ann || m.owner) && (
+        <div className="card">
+          <div className="title" style={{ marginBottom: 4 }}>📣 Announcement</div>
+          {m.ann ? <div className="sub" style={{ whiteSpace: "pre-wrap" }}>{m.ann}</div> : <div className="sub">Nothing posted yet.</div>}
+          {m.owner && (
+            <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+              <input maxLength={200} placeholder="Write to all members…" value={ann} onChange={(e) => setAnn(e.target.value)} />
+              <button className="btn sm" disabled={ann.trim().length < 3 || !!busy} onClick={async () => { setBusy("ann"); try { await api("eng", { action: "clanAnnounce", text: ann }); setAnn(""); say("Announcement sent to your members", true); await load(); } catch (e) { say(errText(e)); } setBusy(""); }}>Post</button>
+            </div>
+          )}
+        </div>
+      )}
       <div className="card">
         <div className="title" style={{ marginBottom: 4 }}>Members this week</div>
         {m.roster.map((r) => (
@@ -159,6 +173,7 @@ export function ClanPage({ say, onBack, cpt, reload }: P) {
             <span>{r.name}{r.owner ? " 👑" : ""}{r.me ? " (you)" : ""}</span>
             <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <b className="num">{num(r.v)}</b>
+              {tip?.on && !r.me && <button className="btn sec sm" disabled={!!busy} onClick={() => setAsk({ kind: "tip", id: r.id, name: r.name })}>💛 Tip</button>}
               {m.owner && !r.me && <button className="btn sec sm" disabled={!!busy} onClick={() => setAsk({ kind: "kick", id: r.id, name: r.name })}>Remove</button>}
             </span>
           </div>
@@ -171,6 +186,17 @@ export function ClanPage({ say, onBack, cpt, reload }: P) {
       {ask?.kind === "leave" && (
         <ConfirmSheet title="Leave clan?" rows={[["Clan", `[${m.tag}] ${m.name}`]]} warn={m.owner ? "Leadership will pass to the longest-standing member. If you are the last member, the clan is deleted." : "Your weekly contribution stays with the clan."}
           busy={busy === "leave"} confirmLabel="Leave" onCancel={() => setAsk(null)} onConfirm={() => run("leave", { action: "clanLeave" }, "You left the clan.")} />
+      )}
+      {ask?.kind === "tip" && tip && (
+        <div className="sheet-bg" onClick={() => setAsk(null)}>
+          <div className="sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="title" style={{ fontSize: 17 }}>Tip {ask.name}</div>
+            <div className="sub" style={{ margin: "4px 0 10px" }}>Say thanks with a few coins. A {tip.fee}% fee applies.</div>
+            <div className="chips">
+              {tip.amounts.map((a) => <button key={a} className="chip" disabled={!!busy} onClick={async () => { setBusy("tip"); try { await api("eng", { action: "tip", to: ask.id, amount: a }); haptic(); say(`Tip sent: ${num(a)} coins`, true); reload(); } catch (e) { say(errText(e)); } setBusy(""); setAsk(null); }}>{num(a)}</button>)}
+            </div>
+          </div>
+        </div>
       )}
       {ask?.kind === "kick" && (
         <ConfirmSheet title="Remove member?" rows={[["Member", ask.name]]} busy={busy === "kick"} confirmLabel="Remove" onCancel={() => setAsk(null)}
