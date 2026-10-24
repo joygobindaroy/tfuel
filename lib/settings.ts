@@ -7,7 +7,7 @@ export interface BotButton { text: string; url: string }
 export interface BotMenuItem { k: string; text: string; on: boolean }
 export const BOT_MENU_DEFAULT: BotMenuItem[] = [
   { k: "profile", text: "👤 My Profile", on: true }, { k: "tasks", text: "✅ Tasks", on: true },
-  { k: "daily", text: "🎁 Daily Reward", on: true }, { k: "wallet", text: "💰 Wallet", on: true },
+  { k: "daily", text: "🎁 Daily Reward", on: true }, { k: "spin", text: "🎰 Lucky Spin", on: true }, { k: "missions", text: "🎯 Missions", on: true }, { k: "wallet", text: "💰 Wallet", on: true },
   { k: "leaderboard", text: "🏆 Leaderboard", on: true }, { k: "price", text: "📈 Price", on: true },
   { k: "clan", text: "🛡 Clan", on: true }, { k: "invite", text: "👥 Invite Friends", on: true },
   { k: "help", text: "❓ Help", on: true }, { k: "settings", text: "⚙️ Settings", on: true },
@@ -85,6 +85,22 @@ export interface Settings {
   bot_inline: boolean; // @bot inline invite card
   bot_groups: boolean; // গ্রুপে /top /price
   autopost_winners: boolean; // সাপ্তাহিক বিজয়ীদের channel-এ পোস্ট
+  streak_warn_hour_utc: number; // streak বিপদের বার্তা (UTC ঘণ্টা; দিন শেষের আগে)
+  comeback_msg_days: number; // এতদিন না এলে "আমরা মিস করছি" (০ = বন্ধ)
+  event_announce: boolean; // নতুন ইভেন্ট শুরু হলে সবাইকে বার্তা
+  dm_enabled: boolean; // আজকের মিশন
+  dm_taps: number;
+  dm_tasks: number;
+  dm_bonus: number; // তিনটা শেষ করলে বোনাস (coin)
+  refpass_enabled: boolean; // Referral boost pass
+  refpass_price: number; // coin
+  refpass_days: number;
+  refpass_bonus_pct: number; // কমিশনের সাথে যোগ হয়
+  confirm_bot_usdt: number; // এর সমান/বেশি USDT withdraw বটে নিশ্চিত করতে হয় (০ = বন্ধ)
+  bot_sponsor_text: string; // বটের মেনুর নিচে স্পনসরড বাটন
+  bot_sponsor_url: string;
+  feed_enabled: boolean; // Community activity feed
+  mail_socials: { kind: string; url: string }[]; // email footer social icons
   bot_buttons: BotButton[]; // Channel / Chat / Twitter ইত্যাদি লিংক বাটন
   hold_new_hours: number; // নতুন account-এর withdraw এত ঘণ্টা HOLD (০ = বন্ধ)
   hold_amount_usdt: number; // এর সমান/বেশি amount HOLD (০ = বন্ধ)
@@ -221,7 +237,23 @@ export const DEFAULTS: Settings = {
   bot_inline: true,
   bot_groups: true,
   autopost_winners: true,
+  streak_warn_hour_utc: 21,
+  comeback_msg_days: 3,
+  event_announce: true,
+  dm_enabled: true,
+  dm_taps: 200,
+  dm_tasks: 1,
+  dm_bonus: 300,
+  refpass_enabled: false,
+  refpass_price: 20000,
+  refpass_days: 7,
+  refpass_bonus_pct: 3,
+  confirm_bot_usdt: 0,
+  bot_sponsor_text: "",
+  bot_sponsor_url: "",
+  feed_enabled: true,
   bot_buttons: [],
+  mail_socials: [],
   hold_new_hours: 0,
   hold_amount_usdt: 0,
   hold_first_withdraw: false,
@@ -229,7 +261,7 @@ export const DEFAULTS: Settings = {
   terms_version: 1,
   terms_text: "By using TFUEL you agree to our Terms of Use and Privacy Policy. Rewards, balances and prices can change, nothing here is financial advice, and accounts that break the rules may be restricted.",
   terms_url: "",
-  send_enabled: false,
+  send_enabled: true,
   send_fee_pct: 1,
   send_min: 1000,
   send_daily_limit: 100000,
@@ -329,6 +361,7 @@ function merge(stored: any): Settings {
     daily_rewards: Array.isArray(s.daily_rewards) ? s.daily_rewards : Object.values(s.daily_rewards || {}).length ? Object.values(s.daily_rewards) : DEFAULTS.daily_rewards,
     deposit_networks: arr(s.deposit_networks),
     bot_buttons: arr(s.bot_buttons),
+    mail_socials: arr(s.mail_socials),
     bot_menu: normMenu(s.bot_menu),
     faq: s.faq === undefined ? DEFAULTS.faq : arr(s.faq),
     payout_networks: arr(s.payout_networks),
@@ -446,6 +479,16 @@ export function parseSettings(b: any, cur: Settings): Settings {
       return { text, url };
     });
   }
+  let msoc = cur.mail_socials;
+  if (b.mail_socials !== undefined) {
+    if (!Array.isArray(b.mail_socials) || b.mail_socials.length > 8) throw new HttpError(400, "At most 8 social links");
+    msoc = b.mail_socials.filter((x: any) => txt(x?.url, 200)).map((x: any) => {
+      const kind = String(x.kind || "");
+      const url = txt(x.url, 200);
+      if (!/^(telegram|x|youtube|instagram|facebook|discord|tiktok|whatsapp)$/.test(kind) || !/^https:\/\/[^\s]+$/.test(url)) throw new HttpError(400, "Each social link needs a network and an https:// link");
+      return { kind, url };
+    });
+  }
   const bool = (k: keyof Settings) => (b[k] === undefined ? (cur as any)[k] : !!b[k]);
   return {
     daily_enabled: bool("daily_enabled"),
@@ -502,12 +545,28 @@ export function parseSettings(b: any, cur: Settings): Settings {
     bot_welcome: (() => { const v = b.bot_welcome === undefined ? cur.bot_welcome : String(b.bot_welcome).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "").trim().slice(0, 1500); return v || cur.bot_welcome; })(),
     bot_start_label: str(b.bot_start_label, 40, cur.bot_start_label) || cur.bot_start_label,
     bot_buttons: bbtn,
+    mail_socials: msoc,
     bot_menu: b.bot_menu === undefined ? cur.bot_menu : normMenu(b.bot_menu),
     bot_photo: (() => { if (b.bot_photo === undefined) return cur.bot_photo; const v = txt(b.bot_photo, 300); if (v && !/^https:\/\/[^\s]+$/.test(v)) throw new HttpError(400, "Banner must be an https:// image link"); return v; })(),
     bot_returning: bool("bot_returning"),
     bot_inline: bool("bot_inline"),
     bot_groups: bool("bot_groups"),
     autopost_winners: bool("autopost_winners"),
+    streak_warn_hour_utc: Math.floor(num(b.streak_warn_hour_utc, "streak_warn_hour_utc", 0, 23, cur.streak_warn_hour_utc)),
+    comeback_msg_days: Math.floor(num(b.comeback_msg_days, "comeback_msg_days", 0, 90, cur.comeback_msg_days)),
+    event_announce: bool("event_announce"),
+    dm_enabled: bool("dm_enabled"),
+    dm_taps: Math.floor(num(b.dm_taps, "dm_taps", 1, 100000, cur.dm_taps)),
+    dm_tasks: Math.floor(num(b.dm_tasks, "dm_tasks", 1, 100, cur.dm_tasks)),
+    dm_bonus: Math.floor(num(b.dm_bonus, "dm_bonus", 0, 1e9, cur.dm_bonus)),
+    refpass_enabled: bool("refpass_enabled"),
+    refpass_price: Math.floor(num(b.refpass_price, "refpass_price", 1, 1e10, cur.refpass_price)),
+    refpass_days: Math.floor(num(b.refpass_days, "refpass_days", 1, 365, cur.refpass_days)),
+    refpass_bonus_pct: num(b.refpass_bonus_pct, "refpass_bonus_pct", 0, 50, cur.refpass_bonus_pct),
+    confirm_bot_usdt: num(b.confirm_bot_usdt, "confirm_bot_usdt", 0, 1e7, cur.confirm_bot_usdt),
+    bot_sponsor_text: str(b.bot_sponsor_text, 30, cur.bot_sponsor_text),
+    bot_sponsor_url: (() => { if (b.bot_sponsor_url === undefined) return cur.bot_sponsor_url; const v = txt(b.bot_sponsor_url, 300); if (v && !/^https:\/\/[^\s]+$/.test(v)) throw new HttpError(400, "Sponsor link must be https://"); return v; })(),
+    feed_enabled: bool("feed_enabled"),
     hold_new_hours: num(b.hold_new_hours, "hold_new_hours", 0, 8760, cur.hold_new_hours),
     hold_amount_usdt: num(b.hold_amount_usdt, "hold_amount_usdt", 0, 1e7, cur.hold_amount_usdt),
     hold_first_withdraw: bool("hold_first_withdraw"),

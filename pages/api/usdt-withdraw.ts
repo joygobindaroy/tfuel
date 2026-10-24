@@ -15,6 +15,7 @@ import { secLog } from "@/lib/seclog";
 import { checkAddress } from "@/lib/addrcheck";
 import { assertCanMoveMoney } from "@/lib/freeze";
 import { alertAdmins } from "@/lib/adminalert";
+import { askConfirm } from "@/lib/wdconfirm";
 
 /** USDT withdraw: ব্যালেন্স আগে কাটা, admin হাতে পাঠিয়ে paid করে / বাতিলে ফেরত */
 export default route(async (req, res) => {
@@ -86,5 +87,6 @@ export default route(async (req, res) => {
   if (hold) { await secLog(user.id, "withdraw_held", reqCtx(req), hold); await alertAdmins("hold", `USDT withdrawal on HOLD (${amount} USDT, user ${user.id}): ${hold}`); }
   await alertAdmins("big_withdraw", `Large USDT withdrawal request: ${amount} USDT (user ${user.id})`, { amountUsdt: amount });
   await mailWithdraw(user.id, "requested", { amount: `${amount} USDT`, receive: `${data.receive} USDT`, network: net.name, address, ctx: reqCtx(req) });
-  res.json({ success: true, id, usdtBalance: left / U, receive: data.receive });
+  const asked = await askConfirm(user.id, id, s, { amount, network_name: net.name, address }).catch(() => false);
+  res.json({ success: true, id, usdtBalance: left / U, receive: data.receive, confirmInBot: asked });
 });

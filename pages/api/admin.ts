@@ -18,7 +18,7 @@ import { payWeek, top, names } from "@/lib/leaderboard";
 import { weekIndex } from "@/lib/wallet";
 import { mailWithdraw, EMAIL_RE } from "@/lib/emailcode";
 import { mailReady, sendMail } from "@/lib/mailer";
-import { renderMail } from "@/lib/mailtpl";
+import { renderMailS } from "@/lib/mailtpl";
 import { processTriggers } from "@/lib/triggers";
 import { getPrice, fromU, toU } from "@/lib/market";
 import { settleDeposit, recheckAuto } from "@/lib/deposits";
@@ -377,7 +377,7 @@ export default route(async (req, res) => {
       if (!EMAIL_RE.test(to)) throw new HttpError(400, "That email address doesn't look right");
       if (!mailReady()) throw new HttpError(400, "SMTP is not set. Add SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS (and SMTP_FROM) in Vercel → Environment Variables, then redeploy.");
       try {
-        await sendMail(to, "[TFUEL] Test email", renderMail({ title: "Email is working", intro: "This is a test message from your TFUEL admin panel. If you can read this in your inbox, user codes will arrive too.", tone: "success", rows: [["Sent by", who], ["Time", new Date().toISOString().replace("T", " ").slice(0, 19) + " (UTC)"]], code: "123456", codeNote: "Example code — not a real one." }));
+        await sendMail(to, "[TFUEL] Test email", await renderMailS({ title: "Email is working", intro: "This is a test message from your TFUEL admin panel. If you can read this in your inbox, user codes will arrive too.", tone: "success", rows: [["Sent by", who], ["Time", new Date().toISOString().replace("T", " ").slice(0, 19) + " (UTC)"]], code: "123456", codeNote: "Example code — not a real one." }));
       } catch (e: any) {
         throw new HttpError(400, "SMTP error: " + String(e?.message || e).slice(0, 200));
       }
@@ -485,7 +485,7 @@ export default route(async (req, res) => {
       upd[`user_tickets/${x.uid}/${id}/status`] = status;
       upd[`user_tickets/${x.uid}/${id}/updated_at`] = now;
       await db().ref().update(upd);
-      await notify(x.uid, action === "supportReply" ? `💬 Support replied to "${x.subject}". Open Profile → Support to read it.` : `Your support ticket "${x.subject}" was closed.`);
+      await notify(x.uid, action === "supportReply" ? `💬 Support replied to "${x.subject}". Open Profile → Support to read it.` : `Your support ticket "${x.subject}" was closed.`, false, action === "supportReply" ? [[{ text: "🎫 Read & reply", callback_data: `tk:${id}` }]] : undefined);
       await adminLog(who, action === "supportReply" ? "support_reply" : "support_close", { id, uid: x.uid });
       return void res.json({ success: true });
     }

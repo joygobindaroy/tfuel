@@ -37,6 +37,7 @@ export async function claimDaily(uid: string, s: Settings, now = Date.now()) {
   if (err) throw new HttpError(409, err);
   out.saved = saved;
   await lbAdd(uid, out.reward);
+  await db().ref(`daily_day/${today}/${uid}`).set(out.streak).catch(() => {});
   await activity(uid, "daily", { coins: out.reward, note: `Day ${out.streak}` });
   return out;
 }

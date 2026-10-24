@@ -798,6 +798,49 @@ function SettingsPage({ call }: { call: Call }) {
       </div>
 
       <div className="card">
+        <div className="title">Email footer social icons</div>
+        <div className="sub">Round icons shown at the bottom of every email. Users can tap them. Needs NEXT_PUBLIC_APP_URL.</div>
+        {(s.mail_socials || []).map((b: any, i: number) => (
+          <div key={i} className="grid2" style={{ marginTop: 6 }}>
+            <select value={b.kind} onChange={(e) => set("mail_socials", s.mail_socials.map((x: any, j: number) => (j === i ? { ...x, kind: e.target.value } : x)))}>
+              {[["telegram", "Telegram"], ["x", "X (Twitter)"], ["youtube", "YouTube"], ["instagram", "Instagram"], ["facebook", "Facebook"], ["discord", "Discord"], ["tiktok", "TikTok"], ["whatsapp", "WhatsApp"]].map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+            </select>
+            <div style={{ display: "flex", gap: 6 }}>
+              <input placeholder="https://t.me/…" value={b.url} onChange={(e) => set("mail_socials", s.mail_socials.map((x: any, j: number) => (j === i ? { ...x, url: e.target.value } : x)))} />
+              <button className="btn sec sm" type="button" onClick={() => set("mail_socials", s.mail_socials.filter((_: any, j: number) => j !== i))}>✕</button>
+            </div>
+          </div>
+        ))}
+        {(s.mail_socials || []).length < 8 && <button className="btn sec sm" style={{ marginTop: 8 }} type="button" onClick={() => set("mail_socials", [...(s.mail_socials || []), { kind: "telegram", url: "" }])}>+ Add icon</button>}
+      </div>
+
+      <div className="card">
+        <div className="title">Engagement</div>
+        <div className="row" style={{ marginTop: 8 }}><div><div className="title" style={{ fontSize: 14 }}>Daily missions</div><div className="sub">Three small tasks a day for a bonus.</div></div><Toggle on={!!s.dm_enabled} onChange={(v) => set("dm_enabled", v)} /></div>
+        <div className="grid3">
+          <div><label>Taps goal</label><input inputMode="numeric" value={s.dm_taps} onChange={(e) => set("dm_taps", e.target.value)} /></div>
+          <div><label>Tasks goal</label><input inputMode="numeric" value={s.dm_tasks} onChange={(e) => set("dm_tasks", e.target.value)} /></div>
+          <div><label>Bonus (coins)</label><input inputMode="numeric" value={s.dm_bonus} onChange={(e) => set("dm_bonus", e.target.value)} /><Hint coins={s.dm_bonus} /></div>
+        </div>
+        <div className="row" style={{ marginTop: 10 }}><div><div className="title" style={{ fontSize: 14 }}>Community activity feed</div><div className="sub">Anonymous recent wins on the home screen.</div></div><Toggle on={!!s.feed_enabled} onChange={(v) => set("feed_enabled", v)} /></div>
+        <div className="row" style={{ marginTop: 10 }}><div><div className="title" style={{ fontSize: 14 }}>Announce new events to everyone</div></div><Toggle on={!!s.event_announce} onChange={(v) => set("event_announce", v)} /></div>
+        <div className="grid2">
+          <div><label>Win-back message after (days, 0 = off)</label><input inputMode="numeric" value={s.comeback_msg_days} onChange={(e) => set("comeback_msg_days", e.target.value)} /></div>
+          <div><label>Streak warning hour (UTC)</label><input inputMode="numeric" value={s.streak_warn_hour_utc} onChange={(e) => set("streak_warn_hour_utc", e.target.value)} /></div>
+        </div>
+        <div className="row" style={{ marginTop: 10 }}><div><div className="title" style={{ fontSize: 14 }}>Referral boost pass</div><div className="sub">Users pay coins for a temporary extra commission %.</div></div><Toggle on={!!s.refpass_enabled} onChange={(v) => set("refpass_enabled", v)} /></div>
+        <div className="grid3">
+          <div><label>Price (coins)</label><input inputMode="numeric" value={s.refpass_price} onChange={(e) => set("refpass_price", e.target.value)} /><Hint coins={s.refpass_price} /></div>
+          <div><label>Days</label><input inputMode="numeric" value={s.refpass_days} onChange={(e) => set("refpass_days", e.target.value)} /></div>
+          <div><label>Extra %</label><input inputMode="decimal" value={s.refpass_bonus_pct} onChange={(e) => set("refpass_bonus_pct", e.target.value)} /></div>
+        </div>
+        <label>Confirm in the bot for USDT withdrawals from (USDT, 0 = off)</label>
+        <input inputMode="decimal" value={s.confirm_bot_usdt} onChange={(e) => set("confirm_bot_usdt", e.target.value)} />
+        <label>Sponsored button in bot menus (text, link)</label>
+        <div className="grid2"><input maxLength={40} placeholder="⭐ Sponsor" value={s.bot_sponsor_text} onChange={(e) => set("bot_sponsor_text", e.target.value)} /><input placeholder="https://…" value={s.bot_sponsor_url} onChange={(e) => set("bot_sponsor_url", e.target.value)} /></div>
+      </div>
+
+      <div className="card">
         <div className="row"><div><div className="title">Send TFUEL (user → user)</div><div className="sub">Users send TFUEL to a friend with their transfer code. Both get an email and an in-app message.</div></div><Toggle on={!!s.send_enabled} onChange={(v) => set("send_enabled", v)} /></div>
         <div className="grid3">
           <div><label>Fee (%)</label><input inputMode="decimal" value={s.send_fee_pct} onChange={(e) => set("send_fee_pct", e.target.value)} /></div>

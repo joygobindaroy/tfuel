@@ -380,7 +380,7 @@ function RecentDeposits({ m, say, done }: { m: CashM; say: Say; done: () => void
 }
 
 /* ------------------------------ Withdraw ------------------------------ */
-export function WithdrawPage({ say, reload, onBack, onHistory }: { say: Say; reload: () => void; onBack: () => void; onHistory: () => void }) {
+export function WithdrawPage({ say, reload, onBack, onHistory, top }: { say: Say; reload: () => void; onBack: () => void; onHistory: () => void; top?: React.ReactNode }) {
   const { m, load } = useCash(say);
   const { a: acct } = useAccount();
   const [id, setId] = useState("");
@@ -419,6 +419,7 @@ export function WithdrawPage({ say, reload, onBack, onHistory }: { say: Say; rel
   return (
     <>
       <PageHead title="Withdraw" onBack={onBack} right={<button className="btn sec sm" onClick={onHistory}><Icon name="clock" size={14} /> History</button>} />
+      {top}
       {!m && <SkelList />}
       {m && (!m.payout.enabled || !nets.length) && <div className="card empty">USDT withdrawals aren&apos;t available right now.</div>}
       {m && m.payout.enabled && net && (

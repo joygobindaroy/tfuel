@@ -3,12 +3,13 @@ import { PageHead } from "@/components/Cashier";
 import { Empty, SkelList, CopyBtn } from "@/components/Ui";
 import { api, errText, fmtUsd, tg } from "@/lib/client";
 import Icon from "@/components/Icons";
+import { PassCard } from "@/components/Today";
 import { VERSION } from "@/lib/version";
 
 type P = { say: (m: string, ok?: boolean) => void; onBack: () => void; cpt: number; reload: () => void };
 
 /** Invite & earn: commission tier progress, weekly invite leaderboard + contest prizes */
-export function InvitePlusPage({ say, onBack, cpt }: P) {
+export function InvitePlusPage({ say, onBack, cpt, reload }: P) {
   const [d, setD] = useState<any>(null);
   const [board, setBoard] = useState<"w" | "all">("w");
   const [list, setList] = useState<any>(null);
@@ -30,6 +31,7 @@ export function InvitePlusPage({ say, onBack, cpt }: P) {
           {t.tiers.map((x: any) => <div key={x.n} className="sub" style={{ opacity: t.count >= x.n ? 1 : 0.55 }}>{x.n === 0 ? "Start" : `${x.n}+ friends`}: <b>{x.pct}%</b></div>)}
         </div>
       </div>
+      <PassCard pass={d.pass} say={say} cpt={cpt} reload={reload} onDone={load} />
       <div className="section"><h2>Invite leaderboard</h2></div>
       <div className="seg">
         <button className={board === "w" ? "on" : ""} onClick={() => pick("w")}>This week</button>

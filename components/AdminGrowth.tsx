@@ -30,6 +30,8 @@ export default function GrowthPage({ call }: { call: Call }) {
   const [d, setD] = useState<any>(null);
   const [tag, setTag] = useState("");
   const [cname, setCname] = useState("");
+  const [risk, setRisk] = useState<any>(null);
+  const [rb, setRb] = useState(false);
   const load = useCallback(async () => { const r: any = await call({ action: "growthData" }); if (r) setD(r); }, [call]);
   useEffect(() => { load(); }, [load]);
   if (!d) return <div className="card muted">Loading…</div>;
@@ -107,6 +109,17 @@ export default function GrowthPage({ call }: { call: Call }) {
           <div className="hist" key={x.id}>
             <div><div className="title" style={{ fontSize: 14 }}>{x.name || "User"} <span className="muted">· {x.id}</span></div><div className="sub">Score {x.score} · {new Date(x.at).toLocaleString()}</div></div>
             <button className="btn sec sm" onClick={async () => { await call({ action: "growthBotClear", uid: x.id }, "Cleared"); load(); }}>Clear</button>
+          </div>
+        ))}
+      </div>
+      <div className="card">
+        <div className="title">Risk report</div>
+        <div className="sub">Scans all accounts for suspicious patterns (flags, shared IPs, extreme earn rate, referral-only income, instant withdrawals).</div>
+        <button className="btn sec sm" style={{ marginTop: 8 }} disabled={rb} onClick={async () => { setRb(true); const r: any = await call({ action: "growthRisk" }); setRb(false); if (r) setRisk(r); }}>{rb ? "Scanning…" : "Run scan"}</button>
+        {risk && <div className="sub" style={{ marginTop: 6 }}>{risk.scanned} accounts scanned · {risk.risk.length} flagged</div>}
+        {risk && risk.risk.map((x: any) => (
+          <div className="hist" key={x.id}>
+            <div><div className="title" style={{ fontSize: 14 }}>{x.name || "User"} <span className="muted">· {x.id}</span></div><div className="sub">Risk {x.score} · {x.why.join("; ")}</div></div>
           </div>
         ))}
       </div>
@@ -206,14 +219,13 @@ export default function GrowthPage({ call }: { call: Call }) {
                     <input placeholder="Image URL (https, optional)" value={t.image} onChange={(e) => up({ image: e.target.value })} />
                     <input inputMode="numeric" placeholder="Price (coins)" value={t.price} onChange={(e) => up({ price: e.target.value })} />
                     <input inputMode="numeric" placeholder="Points" value={t.pts} onChange={(e) => up({ pts: e.target.value })} />
-                    <input inputMode="numeric" placeholder="Total supply (0 = unlimited)" value={t.supply} onChange={(e) => up({ supply: e.target.value })} />
-                    <input inputMode="numeric" placeholder="Max per user (0 = no limit)" value={t.max} onChange={(e) => up({ max: e.target.value })} />
                   </div>
                   <button className="btn sec sm" style={{ marginTop: 6 }} onClick={() => { const a = [...items]; a.splice(i, 1); set({ items: a }); }}>Remove item</button>
                 </div>
               );
             })}
             <button className="btn sec sm" style={{ marginTop: 8 }} onClick={() => set({ items: [...items, { id: "c" + (items.length + 1), name: "New item", emoji: "🎴", image: "", price: 1000, supply: 0, pts: 1, max: 0 }] })}>+ Add item</button>
+            <div className="xs muted" style={{ marginTop: 8 }}>Supply is unlimited; each user can buy each item once.</div>
             <div className="title" style={{ marginTop: 14, fontSize: 14 }}>Season</div>
             <div className="grid2">
               <L t="Season name"><input value={se.name} onChange={(e) => ss({ name: e.target.value })} /></L>
@@ -221,6 +233,30 @@ export default function GrowthPage({ call }: { call: Call }) {
             </div>
             <L t="Reward pool (coins, funded by you)"><input inputMode="numeric" value={se.pool} onChange={(e) => ss({ pool: e.target.value })} /></L>
             <div className="xs muted" style={{ marginTop: 4 }}>{se.paid ? "This season was already paid." : "Paid automatically once, a few minutes after the end time (cron)."}</div>
+          </>
+        );
+      })}
+
+      {S("cosmetics", "Profile badges & frames", "Users buy these with TFUEL coins (a coin sink). Fixed price, in-app only, no resale.", (v, set) => {
+        const items = v.items || [];
+        const up = (i: number, p: any) => set({ items: items.map((x: any, j: number) => (j === i ? { ...x, ...p } : x)) });
+        return (
+          <>
+            <Row t="Enabled"><Sw on={!!v.enabled} set={(x) => set({ enabled: x })} /></Row>
+            {items.map((t: any, i: number) => (
+              <div className="grid2" key={i} style={{ marginTop: 8 }}>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <input style={{ width: 54 }} value={t.emoji} onChange={(e) => up(i, { emoji: e.target.value })} />
+                  <input value={t.name} onChange={(e) => up(i, { name: e.target.value })} />
+                </div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <select value={t.kind} onChange={(e) => up(i, { kind: e.target.value })}><option value="badge">Badge</option><option value="frame">Frame</option></select>
+                  <input inputMode="numeric" value={t.price} onChange={(e) => up(i, { price: e.target.value })} />
+                  <button className="btn sec sm" onClick={() => set({ items: items.filter((_: any, j: number) => j !== i) })}>✕</button>
+                </div>
+              </div>
+            ))}
+            <button className="btn sec sm" style={{ marginTop: 8 }} onClick={() => set({ items: [...items, { id: "x" + (items.length + 1), name: "New", emoji: "✨", kind: "badge", price: 5000 }] })}>+ Add item</button>
           </>
         );
       })}

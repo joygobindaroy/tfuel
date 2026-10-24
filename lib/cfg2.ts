@@ -4,7 +4,9 @@ import { db } from "./firebase";
 export interface Tier { n: number; pct: number }
 export interface RigTier { id: string; name: string; emoji: string; price: number; rate: number }
 export interface Collectible { id: string; name: string; emoji: string; image: string; price: number; supply: number; pts: number; max: number }
+export interface Cosmetic { id: string; name: string; emoji: string; kind: "badge" | "frame"; price: number }
 export interface Cfg2 {
+  cosmetics: { enabled: boolean; items: Cosmetic[] };
   tiers: Tier[];
   contest: { enabled: boolean; name: string; prizes: number[] };
   autoconv: { enabled: boolean; options: number[] };
@@ -22,6 +24,14 @@ export interface Cfg2 {
 const WORDS = "planet rocket silver golden market wallet crypto token energy mining tapper streak reward coffee garden bridge pocket window yellow orange purple castle forest island desert ocean thunder dragon knight wizard pirate anchor candle mirror ticket jacket button pencil marble camera guitar violin piano tiger rabbit monkey turtle falcon dolphin cherry banana potato tomato lemon butter cheese honey sugar pepper summer winter autumn spring river mountain valley cloud storm breeze shadow flame crystal diamond emerald ruby sapphire".split(" ");
 
 export const CFG2_DEFAULTS: Cfg2 = {
+  cosmetics: { enabled: false, items: [
+    { id: "b_fire", name: "Fire", emoji: "🔥", kind: "badge", price: 5000 },
+    { id: "b_star", name: "Star", emoji: "⭐", kind: "badge", price: 8000 },
+    { id: "b_crown", name: "Crown", emoji: "👑", kind: "badge", price: 25000 },
+    { id: "b_diamond", name: "Diamond", emoji: "💎", kind: "badge", price: 50000 },
+    { id: "f_spark", name: "Sparkle", emoji: "✨", kind: "frame", price: 10000 },
+    { id: "f_leaf", name: "Laurel", emoji: "🌿", kind: "frame", price: 15000 },
+  ] },
   tiers: [{ n: 5, pct: 4 }, { n: 20, pct: 5 }, { n: 50, pct: 6 }],
   contest: { enabled: false, name: "Weekly invite contest", prizes: [20000, 10000, 5000] },
   autoconv: { enabled: false, options: [10, 25, 50] },
@@ -50,6 +60,10 @@ const idOk = (v: any, fb: string) => { const s = String(v ?? "").toLowerCase().r
 
 /** sanitise one section; throws Error(message) on invalid input */
 export const SECTIONS: { [K in keyof Cfg2]: (v: any, cur: Cfg2[K]) => Cfg2[K] } = {
+  cosmetics: (v) => ({
+    enabled: bool(v?.enabled),
+    items: (Array.isArray(v?.items) ? v.items : []).slice(0, 40).map((t: any, i: number) => ({ id: idOk(t?.id, "c" + (i + 1)), name: str(t?.name, 20) || "Item", emoji: str(t?.emoji, 4) || "✨", kind: t?.kind === "frame" ? "frame" : "badge", price: int(t?.price, 1, 1e10, 5000) })),
+  }),
   tiers: (v) => {
     const a = (Array.isArray(v) ? v : []).map((t) => ({ n: int(t?.n, 1, 100000, 0), pct: num(t?.pct, 0, 50, 0) })).filter((t) => t.n > 0 && t.pct > 0).sort((x, y) => x.n - y.n).slice(0, 8);
     return a;

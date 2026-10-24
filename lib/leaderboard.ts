@@ -4,6 +4,9 @@ import type { Settings } from "./settings";
 import { weekIndex, activity } from "./wallet";
 import { mailMoney } from "./moneymail";
 import { notify } from "./notify";
+import { feedAdd } from "./feed";
+import { getCfg2 } from "./cfg2";
+import { decorate } from "./cosmetics";
 
 export type Top = { id: string; v: number }[];
 
@@ -23,11 +26,12 @@ export async function top(board: string, n = 50): Promise<Top> {
 
 export async function names(ids: string[]): Promise<Record<string, string>> {
   const out: Record<string, string> = {};
+  const items = (await getCfg2().catch(() => null))?.cosmetics.items || [];
   await Promise.all(
     ids.map(async (id) => {
       const [nm, pr] = await Promise.all([db().ref(`users/${id}/name`).get(), db().ref(`user_prefs/${id}`).get()]);
       const p = (pr.val() || {}) as any;
-      out[id] = p.lb_hide ? "Anonymous" : String(p.nick || nm.val() || "Player").slice(0, 24);
+      out[id] = p.lb_hide ? "Anonymous" : decorate(String(p.nick || nm.val() || "Player").slice(0, 24), p.cos, items);
     })
   );
   return out;
@@ -58,6 +62,7 @@ export async function payWeek(idx: number, s: Settings) {
     await activity(uid, "prize", { coins, note: `Weekly leaderboard #${i + 1}` });
     await mailMoney(uid, "prize", [["Rank", `#${i + 1}`], ["Prize", `${(coins / s.coins_per_tfuel).toLocaleString("en-US")} TFUEL`]]);
     await notify(uid, `🏆 You finished #${i + 1} on last week's leaderboard! +${(coins / s.coins_per_tfuel).toLocaleString("en-US")} TFUEL was added to your balance.`);
+    if (i === 0) await feedAdd(uid, "won the weekly leaderboard 🏆");
     paid++;
   }
   return { week: idx, paid };

@@ -19,7 +19,7 @@ export type NotifCat = "money" | "rewards" | "tasks" | "news" | "security";
 export function catOf(text: string): NotifCat {
   if (/^(🔐|🔒|🔔 New login)/.test(text)) return "security";
   if (/^(✅|❌|↩️|💸|🛍|🔓|🔔 TFUEL price)/.test(text)) return "money";
-  if (/^(⚡|🎁|👋|🎉|🏆)/.test(text)) return "rewards";
+  if (/^(⚡|🎁|👋|🎉|🏆|🔥|🏅|🎯)/.test(text)) return "rewards";
   if (/^(📝|☑️)/.test(text)) return "tasks";
   return "news";
 }

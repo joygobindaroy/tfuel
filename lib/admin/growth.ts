@@ -6,6 +6,7 @@ import { getSettings } from "../settings";
 import { getCfg2, setCfg2, SECTIONS } from "../cfg2";
 import { campaignStats } from "../growth2";
 import { sharedIpGroups } from "../geo";
+import { lifetimeEarn } from "../retention";
 
 const clean = (v: any, n: number) => String(v ?? "").replace(/[\u0000-\u001f\u007f<>]/g, " ").trim().slice(0, n);
 
@@ -54,6 +55,28 @@ const mod: AdminMod = async (action, b, ctx) => {
       await db().ref(`users/${uid}`).update({ bot_flagged: null, bot_score: 0 });
       await adminLog(ctx.who, "bot_clear", { uid });
       return {};
+    }
+    case "growthRisk": {
+      const users = ((await db().ref("users").get()).val() || {}) as Record<string, any>;
+      const prefs = ((await db().ref("user_prefs").get()).val() || {}) as Record<string, any>;
+      const now = Date.now();
+      const rows: { id: string; name: string; score: number; why: string[] }[] = [];
+      for (const [id, u] of Object.entries(users)) {
+        if (u.banned) continue;
+        const why: string[] = [];
+        let score = 0;
+        const life = lifetimeEarn(u);
+        const hrs = Math.max(1, (now - (u.created_at || now)) / 3600000);
+        const rate = life / hrs;
+        if (u.bot_flagged) { why.push("auto-tap flagged"); score += 3; }
+        if ((prefs[id]?.ip_shared || 0) >= 3) { why.push(`IP shared with ${prefs[id].ip_shared} accounts`); score += 2; }
+        if (hrs >= 6 && rate > Math.max(1, Number(b.rate) || 30000)) { why.push(`earns ${Math.round(rate).toLocaleString("en-US")} coins/hour`); score += 2; }
+        if ((u.ref_count || 0) >= 5 && (u.ref_earned || 0) > 0 && life < (u.ref_earned || 0) * 2) { why.push("mostly referral income"); score += 1; }
+        if (hrs < 48 && Object.keys(u.usdt_withdrawals || {}).length > 0) { why.push("withdrew within 2 days"); score += 1; }
+        if (score >= 2) rows.push({ id, name: u.name || "", score, why });
+      }
+      rows.sort((x, y) => y.score - x.score);
+      return { risk: rows.slice(0, 60), scanned: Object.keys(users).length };
     }
     default: return undefined;
   }

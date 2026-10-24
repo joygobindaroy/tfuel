@@ -12,6 +12,10 @@ import { rigsView, rigBuy, rigCollect } from "@/lib/rigs";
 import { puzzleView, puzzleGuess } from "@/lib/puzzle";
 import { collectView, collectBuy } from "@/lib/collect";
 import { alertAdmins } from "@/lib/adminalert";
+import { missionsView, missionsClaim } from "@/lib/missions";
+import { cosView, cosBuy, cosEquip } from "@/lib/cosmetics";
+import { feedList } from "@/lib/feed";
+import { chargeCoins } from "@/lib/coins";
 
 const clean = (v: any, n: number) => String(v ?? "").replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, " ").trim().slice(0, n);
 
@@ -28,8 +32,23 @@ export default route(async (req, res) => {
   switch (a) {
     case "invite": {
       const info = tierInfo(cfg.tiers, u.ref_count || 0, s.referral_commission_pct);
-      return ok({ tier: info, board: await refBoard(user.id, "w", s) });
+      const until = Number((u as any).refpass_until) || 0;
+      const passOn = s.refpass_enabled && until > Date.now();
+      return ok({ tier: { ...info, pct: info.pct + (passOn ? s.refpass_bonus_pct : 0), pass: passOn ? s.refpass_bonus_pct : 0 }, board: await refBoard(user.id, "w", s), pass: { enabled: s.refpass_enabled, price: s.refpass_price, days: s.refpass_days, bonus: s.refpass_bonus_pct, until: until > Date.now() ? until : 0 } });
     }
+    case "passBuy": {
+      if (!s.refpass_enabled) throw new HttpError(403, "feature_off");
+      const now = Date.now();
+      let until = 0;
+      await chargeCoins(user.id, s.refpass_price, "boosts", (cur: any) => { until = Math.max(now, Number(cur.refpass_until) || 0) + s.refpass_days * 86400000; cur.refpass_until = until; return null; });
+      return ok({ until });
+    }
+    case "missions": return ok({ dm: await missionsView(user.id, s) });
+    case "missionsClaim": { const reward = await missionsClaim(user.id, s); return ok({ reward, dm: await missionsView(user.id, s) }); }
+    case "cos": return ok({ cos: await cosView(user.id) });
+    case "cosBuy": await cosBuy(user.id, String(b.id || "")); return ok({ cos: await cosView(user.id) });
+    case "cosEquip": await cosEquip(user.id, String(b.id || ""), String(b.kind || "")); return ok({ cos: await cosView(user.id) });
+    case "feed": { if (!s.feed_enabled) return ok({ feed: [] }); return ok({ feed: await feedList(12) }); }
     case "refBoard": return ok({ board: await refBoard(user.id, b.board === "all" ? "all" : "w", s) });
 
     case "acSet": {

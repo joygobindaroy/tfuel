@@ -10,6 +10,7 @@ import { fromU } from "@/lib/market";
 import { getSettings } from "@/lib/settings";
 import { handleBot } from "@/lib/bot";
 import { settleStars } from "@/lib/stars";
+import { ensureBotSynced } from "@/lib/botsync";
 
 /** Telegram → bot webhook: Stars পেমেন্ট (pre_checkout_query + successful_payment) ও /start */
 
@@ -17,6 +18,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method !== "POST") return void res.status(405).end();
   if (!process.env.BOT_TOKEN || req.headers["x-telegram-bot-api-secret-token"] !== webhookSecret()) return void res.status(401).end();
   const u = req.body || {};
+  await ensureBotSynced(String(req.headers["x-forwarded-host"] || req.headers.host || ""));
   try {
     if (u.pre_checkout_query) {
       const q = u.pre_checkout_query;

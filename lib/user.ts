@@ -1,3 +1,4 @@
+import { feedAdd } from "./feed";
 import { db } from "./firebase";
 import { ServerValue } from "firebase-admin/database";
 import { HttpError, TgUser } from "./auth";
@@ -237,6 +238,7 @@ export async function ensureUser(
     }
     if (dayKey(u.last_seen || 0) !== dayKey(now)) upd[`stats/dau/${dayKey(now)}`] = ServerValue.increment(1);
     upd[`users/${user.id}/last_seen`] = now;
+    upd[`seen_day/${dayKey(now)}/${user.id}`] = 1;
     await db().ref().update(upd).catch(() => {});
   }
 
@@ -286,6 +288,7 @@ export async function qualifyReferral(uid: string) {
     await lbAdd(uid, s.invitee_bonus);
     await lbAdd(refId, paid);
     if (paid) await refBoardAdd(refId);
+    if (paid) { const n = ((await db().ref(`users/${refId}/ref_count`).get()).val() as number) || 0; if ([10, 25, 50, 100, 250, 500].includes(n)) await feedAdd(refId, `invited ${n} friends 🎉`); }
     await activity(uid, "referral", { coins: s.invitee_bonus, note: "Welcome bonus" });
     if (paid) {
       await activity(refId, "referral", { coins: paid, note: `${u.name || "A friend"} joined` });
@@ -314,7 +317,7 @@ export async function settleCommission(refId: string, force = false): Promise<nu
     const now = Date.now();
     const me = (await db().ref(`users/${refId}`).get()).val() as UserRecord | null;
     if (!me || me.banned) return 0;
-    const pct = tierPct((await getCfg2()).tiers, me.ref_count || 0, s.referral_commission_pct);
+    const pct = tierPct((await getCfg2()).tiers, me.ref_count || 0, s.referral_commission_pct) + (s.refpass_enabled && Number((me as any).refpass_until) > now ? s.refpass_bonus_pct : 0);
     if (!force && now - (me.ref_comm_at || 0) < 10 * 60000) return 0;
     const list = ((await db().ref(`referrals/${refId}`).get()).val() || {}) as Record<string, any>;
     let total = 0;

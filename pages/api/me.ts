@@ -10,6 +10,10 @@ import { peekPrice } from "@/lib/market";
 import { dayKey } from "@/lib/log";
 import { markComeback, retentionState } from "@/lib/retention";
 import { trackLogin } from "@/lib/devices";
+import { missionsView } from "@/lib/missions";
+import { pendingMining } from "@/lib/user";
+import { rigsView } from "@/lib/rigs";
+import { notifyAchievements } from "@/lib/retention";
 
 /** Mini App খুললে প্রথম call: user state + task + article card + চলমান run + withdraw ইতিহাস (গোপন কিছু ছাড়া) */
 const snapAt = new Map<string, number>();
@@ -21,9 +25,11 @@ export default route(async (req, res) => {
   const prefsP = db().ref(`user_prefs/${user.id}/cur`).get();
   const termsP = settings.terms_enabled ? db().ref(`user_prefs/${user.id}/terms_v`).get() : null;
   await trackLogin(user.id, req);
+  const awayMs = u.last_seen ? now - u.last_seen : 0; // before last_seen is refreshed
   await markComeback(user.id, u, settings, now);
   { const c = await settleAutoConvert(user.id, u, settings, now); if (c) u.balance -= c; }
-  if (u.ref_count) { const g = await settleCommission(user.id); if (g) u.balance += g; }
+  let awayComm = 0;
+  if (u.ref_count) { const g = await settleCommission(user.id); if (g) { u.balance += g; awayComm = g; } }
 
   const c2 = await getCfg2();
   const cfg = {
@@ -37,7 +43,7 @@ export default route(async (req, res) => {
     send: settings.send_enabled,
     shops: settings.shops_enabled,
     bdtRate: settings.bdt_rate,
-    games: { clans: c2.clan.enabled && featureOn(settings, "clans"), rigs: c2.rigs.enabled && featureOn(settings, "rigs"), puzzle: c2.puzzle.enabled && featureOn(settings, "puzzle"), collect: c2.collect.enabled && featureOn(settings, "collectibles"), autoconv: c2.autoconv.enabled && featureOn(settings, "autoconv") },
+    games: { clans: c2.clan.enabled && featureOn(settings, "clans"), rigs: c2.rigs.enabled && featureOn(settings, "rigs"), puzzle: c2.puzzle.enabled && featureOn(settings, "puzzle"), collect: c2.collect.enabled && featureOn(settings, "collectibles"), autoconv: c2.autoconv.enabled && featureOn(settings, "autoconv"), cosmetics: c2.cosmetics.enabled, feed: settings.feed_enabled, refpass: settings.refpass_enabled },
   };
   const announcement =
     settings.announcement.enabled && settings.announcement.text ? settings.announcement : null;
@@ -114,6 +120,7 @@ export default route(async (req, res) => {
     if (snapAt.size > 5000) snapAt.clear();
     db().ref(`bal_snap/${user.id}`).set({ b: u.balance, u: u.usdt_u || 0, earn: u.earn || null, spent: u.spent || null, usdt_tot: u.usdt_tot || null, at: now }).catch(() => {});
   }
+  notifyAchievements(user.id, u, settings).catch(() => {});
   res.json({
     success: true,
     user: {
@@ -140,6 +147,12 @@ export default route(async (req, res) => {
     terms: termsP && (Number((await termsP).val()) || 0) < settings.terms_version ? { version: settings.terms_version, text: settings.terms_text, url: settings.terms_url } : null,
     faq: settings.faq,
     ret: await retentionState(user.id, u, settings, now).catch(() => null),
+    dm: await missionsView(user.id, settings).catch(() => null),
+    away: awayMs > 2 * 3600000 ? await (async () => {
+      const mining = (() => { try { return pendingMining(u, settings.mine_cap_hours, now).amount || 0; } catch { return 0; } })();
+      const rigs = c2.rigs.enabled ? await rigsView(user.id).then((r: any) => r.pending || 0).catch(() => 0) : 0;
+      return { hours: Math.floor(awayMs / 3600000), commission: awayComm, mining, rigs };
+    })() : null,
     dailyReady: settings.daily_enabled && u.daily?.day !== dayKey(now),
     cfg,
   });

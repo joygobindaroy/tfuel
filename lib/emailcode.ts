@@ -3,7 +3,7 @@ import { db } from "./firebase";
 import { HttpError } from "./auth";
 import { sendMail, mailReady } from "./mailer";
 import { getSettings } from "./settings";
-import { renderMail, MailSpec } from "./mailtpl";
+import { renderMailS, MailSpec } from "./mailtpl";
 import { ReqCtx, ctxRows } from "./reqctx";
 
 const secret = () => {
@@ -62,7 +62,7 @@ export async function sendCode(uid: string, purpose: Purpose, email: string, ctx
   await db().ref(`email_codes/${uid}/${purpose}`).set({ h: hash(uid, purpose, email, code, bindOf(purpose, details)), exp: now + 10 * 60000, fails: 0, email });
   try {
     const { subject, spec } = codeMail(purpose, email, code, ctx, details);
-    await sendMail(email, subject, renderMail(spec));
+    await sendMail(email, subject, await renderMailS(spec));
   } catch (e) {
     console.error("mail failed", e);
     await db().ref("diagnostics/email").set({ at: Date.now(), purpose, reason: String((e as any)?.message || e).slice(0, 200) }).catch(() => {});
@@ -106,7 +106,7 @@ export async function mailUser(uid: string, subject: string, spec: MailSpec) {
   try {
     const e = await getEmail(uid);
     if (!e?.verified || (!mailReady() && !(globalThis as any).__fakeMail)) return;
-    await sendMail(e.addr, subject, renderMail(spec));
+    await sendMail(e.addr, subject, await renderMailS(spec));
   } catch (err) {
     console.error("mailUser", err);
   }

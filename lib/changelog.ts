@@ -1,5 +1,6 @@
 /** Short highlights shown in Admin → Controls → Version (full history is in CHANGELOG.md) */
 export const CHANGELOG_HIGHLIGHTS: { v: string; text: string }[] = [
+  { v: "18.2", text: "Bot admin tools, tickets, spin, deposit QR, missions, to-do, feed, boost pass, badges & frames, risk report, internal/on-chain withdraw choice, auto bot-menu refresh, email social icons." },
   { v: "18.1", text: "Bot: daily reward, wallet, leaderboard, price, clan, help and settings buttons; name greeting, returning-user summary, banner, commands, inline invite, group /top, receipts and claim buttons, task alerts, boss alerts, weekly winners post." },
   { v: "18.0", text: "Invite tiers + contest, campaigns, sponsored tasks, auto-convert, P&L, auto-tap detection, country/IP rules, status page, clans + raid boss, rigs, word puzzle, collectibles, FAQ bot, report a problem." },
   { v: "17.1", text: "Settings: tap sound/vibration, start screen, number format, balance estimate (USDT/BDT), nickname + leaderboard privacy, security checkup, trusted-address mode, notification groups, quiet hours, daily summary, price-alert list." },

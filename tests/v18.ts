@@ -65,7 +65,7 @@ import assert from "node:assert/strict";
   await set("collect", { enabled: true, items: [{ id: "c1", name: "Gem", emoji: "g", image: "", price: 5000, supply: 1, pts: 2, max: 1 }], season: { name: "S", end: Date.now() + 100000, pool: 9000, paid: false } }); reset();
   const col = await import("../lib/collect");
   await col.collectBuy("2", "c1");
-  await assert.rejects(col.collectBuy("3", "c1"), /sold_out|supply|collect/);
+  await assert.rejects(col.collectBuy("2", "c1"), /collect_max/);
   await set("collect", { enabled: true, items: [{ id: "c1", name: "Gem", emoji: "g", image: "", price: 5000, supply: 1, pts: 2, max: 1 }], season: { name: "S", end: Date.now() - 1000, pool: 9000, paid: false } });
   const b2 = await bal("2");
   const paid = await col.paySeason();

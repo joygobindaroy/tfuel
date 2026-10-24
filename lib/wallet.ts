@@ -37,7 +37,7 @@ export async function activity(uid: string, type: ActType, o: { coins?: number; 
     await db()
       .ref(`activity/${uid}/${sortableId()}`)
       .set({ t: type, c: o.coins || 0, u: o.usdt_u || 0, n: (o.note || "").slice(0, 80), at: Date.now() });
-    if (type === "article" || type === "task" || type === "daily") await db().ref().update({ [`weekly/${uid}/${weekIndex()}/n`]: ServerValue.increment(1) });
+    if (type === "article" || type === "task" || type === "daily") await db().ref().update({ [`weekly/${uid}/${weekIndex()}/n`]: ServerValue.increment(1), ...(type !== "daily" ? { [`dm/${uid}/${dayKey()}/tasks`]: ServerValue.increment(1) } : {}) });
   } catch {}
 }
 

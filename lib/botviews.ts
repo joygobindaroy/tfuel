@@ -29,15 +29,16 @@ export function openBtn(s: Settings, label: string, param?: string) {
 }
 export const deepLink = (s: Settings, param: string) => (s.referral_link ? `${s.referral_link}?startapp=${param}` : "");
 
-const CB: Record<string, string> = { profile: "p", tasks: "t", invite: "i", daily: "d", wallet: "w", leaderboard: "l", price: "x", clan: "c", help: "h", settings: "s" };
+const CB: Record<string, string> = { profile: "p", tasks: "t", invite: "i", daily: "d", spin: "sn", missions: "mi", wallet: "w", leaderboard: "l", price: "x", clan: "c", help: "h", settings: "s" };
 
 /** welcome keyboard from the admin-edited menu (2 per row) */
 export async function menuKb(s: Settings, param?: string): Promise<Kb> {
   const c2 = await getCfg2().catch(() => null);
   const clanOn = !!c2 && c2.clan.enabled && featureOn(s, "clans");
-  const items = s.bot_menu.filter((m) => m.on && CB[m.k] && (m.k !== "clan" || clanOn) && (m.k !== "daily" || s.daily_enabled) && (m.k !== "invite" || s.referral_enabled));
+  const items = s.bot_menu.filter((m) => m.on && CB[m.k] && (m.k !== "clan" || clanOn) && (m.k !== "daily" || s.daily_enabled) && (m.k !== "spin" || s.spin_enabled) && (m.k !== "missions" || s.dm_enabled) && (m.k !== "invite" || s.referral_enabled));
   const rows: Kb = [[openBtn(s, s.bot_start_label, param)]];
   for (let i = 0; i < items.length; i += 2) rows.push(items.slice(i, i + 2).map((m) => ({ text: m.text, callback_data: CB[m.k] })));
+  if (s.bot_sponsor_text && s.bot_sponsor_url) rows.push([{ text: `📣 ${s.bot_sponsor_text}`, url: s.bot_sponsor_url }]);
   for (const b of s.bot_buttons) rows.push([{ text: b.text, url: b.url }]);
   return rows;
 }
@@ -93,7 +94,7 @@ export async function inviteView(uid: string, s: Settings): Promise<View> {
   const share = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(s.invite_msg || "Join me on TFUEL — tap, earn and invite friends!")}`;
   return {
     text: `👥 <b>Invite friends</b>\n\nYou get <b>${tf(s.referrer_bonus, s.coins_per_tfuel)} TFUEL</b> for each friend who joins and completes a task, plus <b>${s.referral_commission_pct}%</b> of their earnings — for life.\n\n🔗 <code>${esc(link)}</code>`,
-    kb: [[{ text: "📤 Share link", url: share }], back],
+    kb: [[{ text: "📤 Share link", url: share }, { text: "🖼 Share card", callback_data: "cd" }], back],
   };
 }
 
@@ -108,7 +109,7 @@ export async function tasksView(uid: string, s: Settings): Promise<View> {
   const lines = ["✅ <b>Tasks</b>", ""];
   if (!all.length) lines.push("You've completed everything for now. New tasks appear here — check back soon!");
   for (const [id, t] of join) {
-    lines.push(`• ${esc(t.title)} — <b>+${tf(Number(t.reward) || 0, cpt)} TFUEL</b>`);
+    lines.push(`• ${esc(t.title)}${t.sponsor ? ` ⭐ <i>${esc(t.sponsor)}</i>` : ""} — <b>+${tf(Number(t.reward) || 0, cpt)} TFUEL</b>`);
     const ch = String(t.channel_id || "");
     const url = t.url || (ch.startsWith("@") ? `https://t.me/${ch.slice(1)}` : "");
     kb.push([...(url ? [{ text: "📢 Join", url }] : []), { text: "✅ Verify", callback_data: `v:${id}` }]);
@@ -152,7 +153,7 @@ export async function walletView(uid: string, s: Settings): Promise<View> {
     `USDT: <b>${usdt.toFixed(2)}</b>`,
     ...(price ? ["", `Total ≈ <b>$${(tfUsd + usdt).toFixed(2)}</b>`] : []),
   ];
-  return { text: lines.join("\n"), kb: [[openBtn(s, "⬇ Deposit", "go_deposit"), openBtn(s, "⬆ Withdraw", "go_withdraw")], [openBtn(s, "📈 Trade", "go_trade"), openBtn(s, "🧾 History", "go_history")], back] };
+  return { text: lines.join("\n"), kb: [[openBtn(s, "⬇ Deposit", "go_deposit"), openBtn(s, "⬆ Withdraw", "go_withdraw")], [{ text: "📥 Address & QR", callback_data: "dep" }, { text: "⬆ My withdrawals", callback_data: "wd" }], [openBtn(s, "📈 Trade", "go_trade"), openBtn(s, "🧾 History", "go_history")], back] };
 }
 
 type Board = "d" | "w" | "a";
@@ -201,7 +202,7 @@ export async function clanBotView(uid: string, s: Settings): Promise<View> {
 
 export function helpView(s: Settings): View {
   const kb: Kb = s.faq.slice(0, 8).map((f, i) => [{ text: `❓ ${String(f.q).slice(0, 48)}`, callback_data: `q:${i}` }]);
-  kb.push([openBtn(s, "💬 Contact support", "go_support")], back);
+  kb.push([{ text: "🎫 My tickets / new ticket", callback_data: "sup" }], back);
   return { text: `❓ <b>Help</b>\n\nPick a question, or just type yours here and I'll try to answer. If I can't, open a support ticket.`, kb };
 }
 export function faqAnswerView(s: Settings, i: number): View {

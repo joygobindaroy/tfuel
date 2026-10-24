@@ -405,7 +405,7 @@ export function CollectPage({ say, onBack, cpt, reload }: P) {
       <div className="title" style={{ margin: "6px 2px 8px" }}>Shop</div>
       {d.items.length === 0 ? <Empty icon="list" title="No items yet" hint="New collectibles will appear here." /> : d.items.map((it) => {
         const sold = it.left !== null && it.left <= 0;
-        const capped = it.max > 0 && it.owned >= it.max;
+        const capped = it.owned >= 1;
         const poor = bal !== null && bal < it.price;
         const dis = over || sold || capped || poor || busy;
         return (
@@ -416,7 +416,7 @@ export function CollectPage({ say, onBack, cpt, reload }: P) {
                 <div>
                   <div className="title">{it.name}</div>
                   <div className="sub">{it.pts} season pts · {it.left === null ? "Unlimited supply" : `${num(it.left)} of ${num(it.supply)} left`}</div>
-                  <div className="sub">Owned: <b>{it.owned}</b>{it.max > 0 ? ` / max ${it.max}` : ""}</div>
+                  <div className="sub">{it.owned >= 1 ? <b>✓ You own this</b> : "One per user"}</div>
                 </div>
               </div>
               <button className="btn sm" disabled={dis} onClick={() => setAsk(it)}>{over ? "Ended" : sold ? "Sold out" : capped ? "Max" : money(it.price)}</button>

@@ -13,6 +13,8 @@ import { DepositPage, WithdrawPage, DepositHistory, PayoutHistory, PageHead } fr
 import { Bell, Onboarding, CurrencyPick, TermsGate } from "@/components/Inbox";
 import { PaySheet, ShopsPage, SupportPage, InviteCard } from "@/components/Shops";
 import { SendPage } from "@/components/Send";
+import { MissionsCard, TodoCard, FeedCard, AwayPopup, CosmeticsPage } from "@/components/Today";
+import { WithdrawChoice } from "@/components/WithdrawChoice";
 import { SettingsPanel, useAccount, PinField, AddrPicker } from "@/components/Settings";
 import { BoostTab, DailyCard } from "@/components/Growth";
 import { SpinCard, PromoCard, AdBonus, AdRefill, Leaderboard, InAppAds } from "@/components/Engage";
@@ -33,8 +35,10 @@ interface Me {
   terms?: { version: number; text: string; url: string } | null;
   cur?: "tfuel" | "usdt" | null;
   ret?: any;
+  dm?: any;
+  away?: any;
   faq?: { q: string; a: string }[];
-  cfg: { send?: boolean; minWithdraw: number; methods: string[]; coinsPerUnit: number; unitLabel: string; withdrawEnabled: boolean; coinsPerTfuel: number; shops?: boolean; bdtRate?: number; games?: { clans: boolean; rigs: boolean; puzzle: boolean; collect: boolean; autoconv: boolean; invite?: boolean } };
+  cfg: { send?: boolean; minWithdraw: number; methods: string[]; coinsPerUnit: number; unitLabel: string; withdrawEnabled: boolean; coinsPerTfuel: number; shops?: boolean; bdtRate?: number; games?: { clans: boolean; rigs: boolean; puzzle: boolean; collect: boolean; autoconv: boolean; invite?: boolean; cosmetics?: boolean; feed?: boolean; refpass?: boolean } };
 }
 interface Task {
   id: string;
@@ -345,9 +349,13 @@ export default function Home() {
             {empty && <AdRefill say={say} reload={load} />}
           </div>
           <NextReward me={me} cpt={cpt} onGo={() => go("tasks")} />
+          <TodoCard me={me} go={(t) => go(t as any)} />
+          <MissionsCard dm={me.dm} say={say} cpt={cpt} reload={load} />
+          {me.cfg.games?.feed && <FeedCard say={say} />}
         </>
       )}
 
+      <AwayPopup away={me.away} cpt={cpt} />
       {tab === "boost" && <BoostTab key={rk} cpt={cpt} price={me.price || 0} say={say} reload={load} />}
       {tab === "tfuel" && <Market key={(mkSub || "m") + rk} startSub={mkSub} say={say} reload={load} cpt={cpt} />}
       {tab === "tasks" && <TasksWrap key={rk} me={me} cpt={cpt} say={say} reload={load} />}
@@ -622,7 +630,7 @@ function Tasks({ me, cpt, say, reload }: { me: Me; cpt: number; say: Say; reload
 }
 
 /** Profile: balance in TFUEL + USDT value, shortcuts, optional legacy payout methods, history */
-type Page = null | "rewards" | "send" | "deposit" | "deposits" | "withdraw" | "payouts" | "assets" | "history" | "settings" | "other" | "shops" | "support" | "invite" | "clan" | "rigs" | "puzzle" | "collect" | "report";
+type Page = null | "rewards" | "send" | "deposit" | "deposits" | "withdraw" | "payouts" | "assets" | "history" | "settings" | "other" | "shops" | "support" | "invite" | "clan" | "rigs" | "puzzle" | "collect" | "report" | "cosmetics";
 
 function Profile({ initPage, me, cpt, balance, go, say, reload, onCur }: { initPage?: Page; me: Me; cpt: number; balance: number; go: (t: Tab, sub?: string) => void; say: Say; reload: () => void; onCur: (c: "tfuel" | "usdt") => void }) {
   const [page, setPage] = useState<Page>(initPage || null);
@@ -645,10 +653,11 @@ function Profile({ initPage, me, cpt, balance, go, say, reload, onCur }: { initP
   const T = (n: number) => fmtTf(n, cpt);
 
   if (page === "rewards") return <RewardsPage say={say} onBack={back} cpt={cpt} reload={refresh} />;
+  if (page === "cosmetics") return <CosmeticsPage say={say} onBack={back} cpt={cpt} reload={refresh} />;
   if (page === "send") return <SendPage say={say} onBack={back} cpt={cpt} reload={refresh} />;
   if (page === "deposit") return <DepositPage say={say} reload={refresh} onBack={back} onHistory={() => nav("deposits", "deposit")} onBuy={() => { nav(null); go("tfuel", "trade"); }} />;
   if (page === "deposits") return <DepositHistory say={say} onBack={back} />;
-  if (page === "withdraw") return <WithdrawPage say={say} reload={refresh} onBack={back} onHistory={() => nav("payouts", "withdraw")} />;
+  if (page === "withdraw") return <WithdrawChoice say={say} reload={refresh} onBack={back} onHistory={() => nav("payouts", "withdraw")} cpt={cpt} internal={!!me.cfg.send} />;
   if (page === "payouts") return <PayoutHistory say={say} onBack={back} legacy={me.withdrawals} cpt={cpt} fmtTf={fmtTf} />;
   if (page === "shops") return <ShopsPage say={say} onBack={back} cpt={cpt} />;
   if (page === "invite") return <InvitePlusPage say={say} onBack={back} cpt={cpt} reload={refresh} />;
@@ -732,6 +741,7 @@ function Profile({ initPage, me, cpt, balance, go, say, reload, onCur }: { initP
       <div className="menu">
         {me.cfg.methods.length > 0 && <Row icon="gift" t="Other payout methods" s="Withdraw TFUEL to other accounts" onClick={() => nav("other")} />}
         {me.cfg.shops && <Row icon="gift" t="Partner shops" s="Sign in automatically and pay with TFUEL or USDT" onClick={() => nav("shops")} />}
+        {me.cfg.games?.cosmetics && <Row icon="gift" t="Badges & frames" s="Customise your name on leaderboards" onClick={() => nav("cosmetics")} />}
         {me.cfg.games?.invite !== false && <Row icon="users" t="Invite & earn" s="Tiers, invite leaderboard and contest" onClick={() => nav("invite")} />}
         <Row icon="alert" t="Report a problem" s="Tell us what went wrong — details are attached" onClick={() => nav("report")} />
         <Row icon="info" t="Help & support" s="Message us and see replies" onClick={() => nav("support")} />

@@ -1,3 +1,4 @@
+import { feedAdd } from "./feed";
 import { db } from "./firebase";
 import { HttpError } from "./auth";
 import { dayKey } from "./log";
@@ -135,6 +136,7 @@ export async function claimRetention(uid: string, kind: string, id: string, s: S
       c.ach = { ...(c.ach || {}), [a.id]: now };
       return null;
     });
+    feedAdd(uid, `unlocked “${a.title}” 🏅`).catch(() => {});
     return { reward: a.reward, balance: bal };
   }
   if (kind === "comeback") {
@@ -232,3 +234,15 @@ export async function recoverStreak(uid: string, s: Settings, now = Date.now()) 
 
 /** Cron: tell users who just reached the weekly target / ach? (kept light) — nothing heavy here */
 export async function notifyAnniv(uid: string, key: string) { await notify(uid, `🎉 Happy anniversary! Open the app to claim your ${key} bonus.`); }
+
+/** 🏅 once per achievement: tell the user it is ready (with a Claim button in the bot) */
+export async function notifyAchievements(uid: string, u: UserRecord, s: Settings) {
+  if (!s.ach_enabled) return;
+  const sent = ((u as any).ach_n || {}) as Record<string, number>;
+  for (const a of achProgress(u)) {
+    if (!a.done || a.claimed || sent[a.id]) continue;
+    const r = await db().ref(`users/${uid}/ach_n/${a.id}`).transaction((c: number | null) => (c ? undefined : Date.now()));
+    if (!r.committed) continue;
+    await notify(uid, `🏅 Achievement unlocked: ${a.title}! Claim +${(a.reward / Math.max(1, s.coins_per_tfuel)).toLocaleString("en-US", { maximumFractionDigits: 3 })} TFUEL.`, false, [[{ text: "🏅 Claim reward", callback_data: `ac:${a.id}` }]]);
+  }
+}

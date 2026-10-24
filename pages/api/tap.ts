@@ -7,6 +7,7 @@ import { earn, lbAdd } from "@/lib/wallet";
 import { tapMult } from "@/lib/retention";
 import { getCfg2 } from "@/lib/cfg2";
 import { alertAdmins } from "@/lib/adminalert";
+import { dmBump } from "@/lib/missions";
 import {
   ensureUser,
   currentEnergy,
@@ -105,6 +106,7 @@ export default route(async (req, res) => {
     await alertAdmins("error", `Auto-tap suspected: user ${user.id} (${u.name || "?"}) tapped at a machine-like rate for a long time.${botCfg.action === "freeze" ? " Account frozen (withdraw/send blocked)." : ""}`);
   }
   await lbAdd(user.id, earnedTap);
+  dmBump(user.id, "taps", accepted).catch(() => {});
   if (u.empty_at && u.energy < settings.energy_cost && settings.empty_refill_hours > 0)
     await enqueue("energy", u.empty_at + settings.empty_refill_hours * 3600000, user.id, { uid: user.id, ea: u.empty_at });
   res.json({

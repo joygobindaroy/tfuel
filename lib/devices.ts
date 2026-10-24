@@ -44,7 +44,7 @@ export async function trackLogin(uid: string, req: NextApiRequest) {
     while (keys.length >= 9) { const [k] = keys.shift()!; upd[`${base}/devices/${k}`] = null; }
     await db().ref().update(upd);
     if (known > 0 && p.login_alert !== false) {
-      await notify(uid, `🔔 New login detected: ${label(ua)}. If this wasn't you, set a Withdraw PIN in Settings and contact support.`);
+      await notify(uid, `🔔 New login detected: ${label(ua)}. If this wasn't you, tap the button below.`, false, [[{ text: "🚫 It wasn't me", callback_data: `nm:${h}` }, { text: "✅ It was me", callback_data: "ok" }]]);
       const ctx = reqCtx(req);
       await secLog(uid, "new_device", ctx);
       await mailUser(uid, "[TFUEL] New login detected", { title: "New login to your account", intro: "Your TFUEL account was opened on a new device.", tone: "warn", rows: ctxRows(ctx), warning: "If this wasn't you, set a Withdraw PIN in Settings and contact support immediately." });

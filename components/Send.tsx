@@ -9,7 +9,7 @@ type Say = (t: string, ok?: boolean) => void;
 interface Info { enabled: boolean; code: string; fee_pct: number; min: number; left: number | null; daily_limit: number; min_age_hours: number; balance: number }
 
 /** Send TFUEL: friend's transfer code → check name → amount → confirm (PIN / email code when needed) */
-export function SendPage({ say, onBack, cpt, reload }: { say: Say; onBack: () => void; cpt: number; reload: () => void }) {
+export function SendPage({ say, onBack, cpt, reload, top }: { say: Say; onBack: () => void; cpt: number; reload: () => void; top?: React.ReactNode }) {
   const [info, setInfo] = useState<Info | null>(null);
   const { a: acct } = useAccount();
   const [code, setCode] = useState("");
@@ -58,13 +58,14 @@ export function SendPage({ say, onBack, cpt, reload }: { say: Say; onBack: () =>
 
   return (
     <>
-      <PageHead title="Send TFUEL" onBack={onBack} />
+      <PageHead title={top ? "Withdraw" : "Send TFUEL"} onBack={onBack} />
+      {top}
       {!info && <SkelCard rows={4} />}
       {info && !info.enabled && <div className="banner warn"><Icon name="alert" size={18} /><span>Sending TFUEL is turned off right now.</span></div>}
       {info && (
         <>
           <div className="card">
-            <div className="sub">Your transfer code — share it to receive TFUEL</div>
+            <div className="sub">Your unique ID — share it to receive TFUEL</div>
             <div className="gap" style={{ background: "var(--soft)", borderRadius: 12, padding: "10px 12px", marginTop: 6 }}>
               <span className="num" style={{ flex: 1, fontWeight: 700, letterSpacing: 1, userSelect: "text" }}>{info.code || "—"}</span>
               {info.code && <CopyBtn text={info.code} />}
@@ -72,7 +73,7 @@ export function SendPage({ say, onBack, cpt, reload }: { say: Say; onBack: () =>
           </div>
           {info.enabled && (
             <div className="card">
-              <label style={{ marginTop: 0 }}>Friend&apos;s transfer code</label>
+              <label style={{ marginTop: 0 }}>Receiver&apos;s unique ID</label>
               <input placeholder="10 letters / numbers" maxLength={10} autoCapitalize="off" autoCorrect="off" value={code} onChange={(e) => setCode(e.target.value.replace(/[^A-Za-z0-9]/g, ""))} />
               {who && <div className="xs" style={{ color: "#15803d", marginTop: 4 }}>✓ {who}</div>}
               <label>Amount (TFUEL)</label>
