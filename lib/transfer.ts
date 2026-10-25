@@ -61,18 +61,23 @@ export async function sendCoins(from: { id: string; name: string }, toUid: strin
 
   let err = "";
   let balance = 0;
+  let deducted = false;
   try {
     await db().ref(`users/${from.id}`).transaction((cur: UserRecord | null) => {
       err = "";
-      if (cur === null) { err = "send_no_user"; return; }
+      deducted = false;
+      // first pass on a real database often sees null (empty local cache): return it unchanged so the server re-runs with the real value
+      if (cur === null) return cur;
       if (s.send_min_age_hours > 0 && cur.created_at && now < cur.created_at + s.send_min_age_hours * 3600000) { err = "send_too_new"; return; }
       if ((cur.balance || 0) < total) { err = "insufficient"; return; }
       cur.balance -= total;
       spend(cur, "sent", total);
       balance = cur.balance;
+      deducted = true;
       return cur;
     });
   } catch (e) { await unreserve(); throw e; }
+  if (!err && !deducted) err = "send_no_user";
   if (err) { await unreserve(); throw new HttpError(err === "insufficient" ? 409 : 403, err); }
 
   const id = sortableId();
