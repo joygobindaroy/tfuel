@@ -44,10 +44,10 @@ export default route(async (req, res) => {
     withdrawEnabled: settings.withdraw_enabled,
     earnPerTap: settings.earn_per_tap,
     coinsPerTfuel: settings.coins_per_tfuel,
-    send: settings.send_enabled,
+    send: settings.send_enabled || c2.xfer.usdt.enabled,
     shops: settings.shops_enabled,
     bdtRate: settings.bdt_rate,
-    games: { clans: c2.clan.enabled && featureOn(settings, "clans"), rigs: c2.rigs.enabled && featureOn(settings, "rigs"), puzzle: c2.puzzle.enabled && featureOn(settings, "puzzle"), collect: c2.collect.enabled && featureOn(settings, "collectibles"), autoconv: c2.autoconv.enabled && featureOn(settings, "autoconv"), cosmetics: c2.cosmetics.enabled, feed: settings.feed_enabled, refpass: settings.refpass_enabled, ads: c2.adsmkt.enabled },
+    games: { mini: c2.mini.enabled, vip: c2.vip.enabled, clans: c2.clan.enabled && featureOn(settings, "clans"), rigs: c2.rigs.enabled && featureOn(settings, "rigs"), puzzle: c2.puzzle.enabled && featureOn(settings, "puzzle"), collect: c2.collect.enabled && featureOn(settings, "collectibles"), autoconv: c2.autoconv.enabled && featureOn(settings, "autoconv"), cosmetics: c2.cosmetics.enabled, feed: settings.feed_enabled, refpass: settings.refpass_enabled, ads: c2.adsmkt.enabled },
   };
   const announcement =
     settings.announcement.enabled && settings.announcement.text ? settings.announcement : null;

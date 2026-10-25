@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, errText, getUi, setUi, hapticOn, setHapticOn } from "@/lib/client";
 import Icon from "@/components/Icons";
-import { getTheme, setTheme, Theme } from "@/lib/theme";
+import { getTheme, setTheme, Theme, ACCENTS, getAccent, setAccent } from "@/lib/theme";
 import { CopyBtn, useCountdown } from "@/components/Ui";
 import { AppFeelCard, LanguageCard, HomeLayoutCard, CheckupCard, TrustedToggle, PrivacyCard, NotifExtras } from "@/components/SettingsExtra";
 
@@ -77,6 +77,8 @@ export function SettingsPanel({ say, notify, account, onCur }: { say: Say; notif
   const { a, setA, load } = useAccount();
   const [theme, setT] = useState<Theme>("light");
   useEffect(() => setT(getTheme()), []);
+  const [accent, setAc] = useState("gold");
+  useEffect(() => setAc(getAccent()), []);
   const [cur, setCur] = useState("");
   const [pin, setPin] = useState("");
   const [busy, setBusy] = useState(false);
@@ -114,6 +116,14 @@ export function SettingsPanel({ say, notify, account, onCur }: { say: Say; notif
       <div className="seg" style={{ marginBottom: 0 }}>
         {(["light", "dark", "auto"] as Theme[]).map((t) => (
           <button key={t} className={theme === t ? "on" : ""} onClick={() => { setT(t); setTheme(t); }}>{t === "auto" ? "Auto" : t === "dark" ? "Dark" : "Light"}</button>
+        ))}
+      </div>
+      <div className="sub" style={{ margin: "14px 0 8px" }}>Accent colour</div>
+      <div className="chips">
+        {Object.entries(ACCENTS).map(([k, a]) => (
+          <button key={k} className={`chip ${accent === k ? "on" : ""}`} onClick={() => { setAc(k); setAccent(k); }}>
+            <span style={{ display: "inline-block", width: 12, height: 12, borderRadius: 6, marginRight: 6, verticalAlign: -1, background: a.v["--gold2"] || "#f59e0b" }} />{a.name}
+          </button>
         ))}
       </div>
       </div>

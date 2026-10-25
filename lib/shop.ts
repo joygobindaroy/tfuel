@@ -191,7 +191,31 @@ export async function sendWebhook(shopId: string, shop: Shop, orderId: string, o
     const r = await fetch(shop.webhook, { method: "POST", headers: { "content-type": "application/json", "x-shop-id": shopId, "x-timestamp": ts, "x-signature": sign(secret, ts, body) }, body, signal: AbortSignal.timeout(6000) });
     ok = r.ok;
   } catch {}
-  await db().ref(`shop_orders/${orderId}/webhook_ok`).set(ok).catch(() => {});
+  await db().ref().update({ [`shop_orders/${orderId}/webhook_ok`]: ok, [`shop_orders/${orderId}/webhook_at`]: Date.now() }).catch(() => {});
+  await db().ref(`shop_orders/${orderId}/webhook_tries`).transaction((c: number | null) => (c || 0) + 1).catch(() => {});
+}
+
+/** Re-send one webhook (admin button or automatic retry). Returns whether the shop answered 2xx. */
+export async function retryHook(orderId: string): Promise<boolean> {
+  const o = (await db().ref(`shop_orders/${orderId}`).get()).val() as Order | null;
+  if (!o || (o.status !== "paid" && o.status !== "refunded")) throw new HttpError(409, "not_paid");
+  const shop = (await db().ref(`shops/${o.shop}`).get()).val() as Shop | null;
+  if (!shop || !shop.webhook) throw new HttpError(400, "No webhook URL set for this shop");
+  await sendWebhook(o.shop, shop, orderId, o, o.paid_by || "");
+  return !!(await db().ref(`shop_orders/${orderId}/webhook_ok`).get()).val();
+}
+/** cron: retry failed webhooks of the last 24 h (up to 6 tries, spaced out) */
+export async function retryFailedHooks(): Promise<number> {
+  const all = ((await db().ref("shop_orders").orderByChild("created_at").limitToLast(200).get().catch(async () => await db().ref("shop_orders").get())).val() || {}) as Record<string, any>;
+  let n = 0;
+  for (const [id, o] of Object.entries(all)) {
+    if (o.webhook_ok !== false || (o.status !== "paid" && o.status !== "refunded")) continue;
+    const tries = Number(o.webhook_tries) || 0;
+    if (tries >= 6 || Date.now() - (o.paid_at || o.created_at || 0) > 86400000) continue;
+    if (Date.now() - (o.webhook_at || 0) < Math.min(3600000, 120000 * 2 ** tries)) continue;
+    try { if (await retryHook(id)) n++; } catch {}
+  }
+  return n;
 }
 
 /** পূর্ণ refund (একবারই): যেই currency-তে দিয়েছিল সেটাই ফেরত */

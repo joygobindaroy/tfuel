@@ -7,7 +7,7 @@ import { ServerValue } from "firebase-admin/database";
 import { ArticleSite, normUrl } from "@/lib/chain";
 import { sortableId, randomToken } from "@/lib/crypto";
 import { seal } from "@/lib/secretbox";
-import { refundOrder, shopPk, shopTest } from "@/lib/shop";
+import { refundOrder, shopPk, shopTest, retryHook } from "@/lib/shop";
 import { adminLog, dayKey } from "@/lib/log";
 import { getSettings, invalidateSettings, parseSettings } from "@/lib/settings";
 import { tgCall, webhookSecret } from "@/lib/telegram";
@@ -416,6 +416,17 @@ export default route(async (req, res) => {
       const pendW = up.filter((x) => x.status === "pending").length + wp.filter((x) => x.status === "pending").length;
       const held = up.filter((x) => x.status === "pending" && x.hold).length + wp.filter((x) => x.status === "pending" && x.hold).length;
       add("Waiting for you", pendD + pendW === 0 ? true : null, `${pendD} deposit(s), ${pendW} withdrawal(s) pending${held ? `, ${held} on HOLD` : ""}`);
+      try {
+        const so = await recent("shop_orders", 200);
+        const bad = so.filter((x: any) => (x.status === "paid" || x.status === "refunded") && x.webhook_ok === false).length;
+        add("Shop webhooks", bad === 0 ? true : false, bad === 0 ? "No failed shop webhooks in the last 200 orders" : `${bad} order(s) where the shop did not answer — open Admin → Shops → Orders and press Retry`);
+      } catch {}
+      try {
+        const hs = ((await db().ref("xfer_hold").orderByChild("st").equalTo("held").get().catch(async () => await db().ref("xfer_hold").get())).val() || {}) as Record<string, any>;
+        const waiting = Object.values(hs).filter((h: any) => h && h.st === "held");
+        const late = waiting.filter((h: any) => h.rel && h.rel < now - 15 * 60000).length;
+        add("Held transfers", late === 0 ? true : false, late === 0 ? `${waiting.length} waiting, none overdue` : `${late} held transfer(s) are overdue — the cron job may not be running`);
+      } catch {}
       return void res.json({ success: true, items, at: now });
     }
 
@@ -554,13 +565,23 @@ export default route(async (req, res) => {
     case "shopOrders": {
       const items = await recent("shop_orders", 300);
       const shops = ((await db().ref("shops").get()).val() || {}) as Record<string, any>;
-      const sum: Record<string, { paid: number; fee: number; refunded: number; n: number }> = {};
+      const sum: Record<string, { paid: number; fee: number; refunded: number; n: number; d1: number; d7: number; d30: number; open: number; hook_failed: number }> = {};
+      const nowT = Date.now();
       for (const o of items) {
-        const s0 = (sum[o.shop] = sum[o.shop] || { paid: 0, fee: 0, refunded: 0, n: 0 });
+        const s0 = (sum[o.shop] = sum[o.shop] || { paid: 0, fee: 0, refunded: 0, n: 0, d1: 0, d7: 0, d30: 0, open: 0, hook_failed: 0 });
+        if (o.status === "open" && o.exp > nowT) s0.open++;
+        if ((o.status === "paid" || o.status === "refunded") && o.webhook_ok === false) s0.hook_failed++;
+        if (o.status === "paid") { const age = nowT - (o.paid_at || o.created_at || 0), v = fromU(o.usd_u); if (age < 86400000) s0.d1 += v; if (age < 7 * 86400000) s0.d7 += v; if (age < 30 * 86400000) s0.d30 += v; }
         if (o.status === "paid") { s0.paid += fromU(o.usd_u); s0.fee += fromU(o.fee_u || 0); s0.n++; }
         if (o.status === "refunded") s0.refunded += fromU(o.usd_u);
       }
-      return void res.json({ success: true, items: items.map((o: any) => ({ id: o.id, shop: o.shop, shop_name: shops[o.shop]?.name || o.shop, ref: o.ref, title: o.title, usd: fromU(o.usd_u), status: o.status === "open" && o.exp < Date.now() ? "expired" : o.status, cur: o.cur || null, coins: o.coins || 0, usdt: fromU(o.usdt_u || 0), fee: fromU(o.fee_u || 0), uid: o.paid_by || o.uid || "", created_at: o.created_at, paid_at: o.paid_at || 0, webhook_ok: o.webhook_ok })), totals: Object.entries(sum).map(([id, v]) => ({ id, name: shops[id]?.name || id, ...v, owed: v.paid - v.fee })) });
+      return void res.json({ success: true, items: items.map((o: any) => ({ id: o.id, shop: o.shop, shop_name: shops[o.shop]?.name || o.shop, ref: o.ref, title: o.title, usd: fromU(o.usd_u), status: o.status === "open" && o.exp < Date.now() ? "expired" : o.status, cur: o.cur || null, coins: o.coins || 0, usdt: fromU(o.usdt_u || 0), fee: fromU(o.fee_u || 0), uid: o.paid_by || o.uid || "", created_at: o.created_at, paid_at: o.paid_at || 0, webhook_ok: o.webhook_ok, webhook_tries: o.webhook_tries || 0 })), totals: Object.entries(sum).map(([id, v]) => ({ id, name: shops[id]?.name || id, ...v, owed: v.paid - v.fee })) });
+    }
+    case "shopRetryHook": {
+      const id = String(b.id || "");
+      if (!idRe.test(id)) throw new HttpError(400, "Invalid id");
+      const ok = await retryHook(id);
+      return void res.json({ success: true, ok });
     }
     case "shopRefund": {
       const id = String(b.id || "");

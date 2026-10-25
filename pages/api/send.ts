@@ -5,18 +5,27 @@ import { ensureUser, MAX_AUTH_AGE_MONEY } from "@/lib/user";
 import { checkPin } from "@/lib/prefs";
 import { requireEmailCode, getEmail, sendCode, checkCode } from "@/lib/emailcode";
 import { getRefCode } from "@/lib/refcode";
-import { sendCoins, sendQuota, displayName } from "@/lib/transfer";
+import { sendAsset, sendQuota, displayName, Asset, feeFor, minFor, cancelHold, amtStr } from "@/lib/transfer";
 import { assertCanMoveMoney } from "@/lib/freeze";
 import { secLog } from "@/lib/seclog";
 import { reqCtx } from "@/lib/reqctx";
+import { getCfg2 } from "@/lib/cfg2";
+import { toU, fromU } from "@/lib/market";
+import { vipPerks } from "@/lib/vip";
+import { createRequest, getRequest, reqHold, reqDone, cancelRequest, listRequests, createLink, peekLink, claimLink, cancelLink, listLinks, listXfers, listContacts, saveContact, deleteContact } from "@/lib/xlink";
 
-/** Send TFUEL (user → user): info / lookup / send */
+/** Send money (user → user) in TFUEL or USDT: info / lookup / prepare / send, payment requests, money links, history, contacts */
 export default route(async (req, res) => {
   const user = authenticate(req, MAX_AUTH_AGE_MONEY);
-  await rateLimit(user.id, "send", 20);
+  await rateLimit(user.id, "send", 40);
   const { u, settings: s } = await ensureUser(user);
-  const action = String(req.body?.action || "info");
+  const b = req.body || {};
+  const action = String(b.action || "info");
   const cpt = s.coins_per_tfuel;
+  const c2 = await getCfg2();
+  const reqId = String(b.req || "");
+  const mode: "person" | "request" | "link" = reqId ? "request" : b.mode === "link" ? "link" : "person";
+  let asset: Asset = b.asset === "usdt" ? "usdt" : "tfuel";
 
   const lookup = async (code: string) => {
     if (!/^[A-Za-z0-9]{10}$/.test(code)) throw new HttpError(400, "send_bad_code");
@@ -27,76 +36,143 @@ export default route(async (req, res) => {
     return { uid, name: await displayName(uid) };
   };
   const maskEmail = (e: string) => { const [a, d] = e.split("@"); return `${a.slice(0, 2)}•••@${d}`; };
-  const parseAmount = (v: unknown) => {
+  const unit = (a: Asset) => (a === "usdt" ? 1e6 : cpt);
+  const parseAmount = (v: unknown, a: Asset) => {
     const x = Number(v);
     if (!Number.isFinite(x) || x <= 0) throw new HttpError(400, "send_min");
-    return Math.round(x * cpt);
+    return Math.round(x * unit(a));
   };
+  const enabled = (a: Asset) => (a === "usdt" ? c2.xfer.usdt.enabled : s.send_enabled);
+  const balanceOf = (a: Asset) => (a === "usdt" ? u.usdt_u || 0 : u.balance || 0);
+
+  /** who/what is being paid: a typed ID, a payment request, or nobody (money link) */
+  const resolve = async () => {
+    if (mode === "request") {
+      const r = await getRequest(reqId);
+      if (r.st !== "open") throw new HttpError(409, "request_closed");
+      if (r.to === user.id) throw new HttpError(400, "send_self");
+      asset = r.asset;
+      return { toUid: r.to, code: r.code, name: r.name, amount: r.amount, note: r.note };
+    }
+    if (mode === "link") return { toUid: "", code: "LINK", name: "Anyone with the link", amount: parseAmount(b.amount, asset), note: String(b.note || "") };
+    const code = String(b.code || "").trim();
+    const r = await lookup(code);
+    return { toUid: r.uid, code, name: r.name, amount: parseAmount(b.amount, asset), note: String(b.note || "") };
+  };
+  const bindAddr = (code: string) => (asset === "usdt" ? `${code}_usdt` : code);
+  const shown = (amt: number) => (asset === "usdt" ? fromU(amt) : amt / cpt);
 
   if (action === "lookup") {
-    const r = await lookup(String(req.body?.code || "").trim());
+    const r = await lookup(String(b.code || "").trim());
     return void res.json({ success: true, name: r.name });
   }
   if (action === "prepare") {
-    // step 1 (after "Send now"): check everything, then email the code (the code is bound to this recipient + amount)
-    if (!s.send_enabled) throw new HttpError(403, "send_disabled");
-    const code = String(req.body?.code || "").trim();
-    const r = await lookup(code);
-    const amount = parseAmount(req.body?.amount);
-    if (amount < s.send_min) throw new HttpError(400, "send_min");
-    const total = amount + Math.ceil((amount * s.send_fee_pct) / 100);
+    const t = await resolve();
+    if (!enabled(asset)) throw new HttpError(403, "send_disabled");
+    if (mode === "link" && !c2.xfer.links.claim) throw new HttpError(403, "feature_off");
+    if (t.amount < (await minFor(asset, s))) throw new HttpError(400, "send_min");
+    const { fee } = await feeFor(user.id, asset, t.amount, s);
+    const total = t.amount + fee;
     await assertCanMoveMoney(user.id, s);
-    if ((u.balance || 0) < total) throw new HttpError(409, "insufficient");
+    if (balanceOf(asset) < total) throw new HttpError(409, asset === "usdt" ? "insufficient_usdt" : "insufficient");
     if (s.send_min_age_hours > 0 && u.created_at && Date.now() < u.created_at + s.send_min_age_hours * 3600000) throw new HttpError(403, "send_too_new");
-    const q = await sendQuota(user.id, s);
+    const q = await sendQuota(user.id, s, asset);
     if (q.left !== null && total > q.left) throw new HttpError(429, "send_limit");
-    await checkPin(user.id, req.body?.pin);
+    await checkPin(user.id, b.pin);
     const e = await getEmail(user.id);
     if (s.email_required && !e?.verified) throw new HttpError(403, "email_required");
     if (!e?.verified) return void res.json({ success: true, step: "ready" });
-    await sendCode(user.id, "send", e.addr, reqCtx(req), { amount: amount / cpt, asset: "TFUEL", address: code, label: r.name });
+    await sendCode(user.id, "send", e.addr, reqCtx(req), { amount: shown(t.amount), asset: asset === "usdt" ? "USDT" : "TFUEL", address: bindAddr(t.code), label: t.name });
     return void res.json({ success: true, step: "code", email: maskEmail(e.addr) });
   }
+  if (action === "send") {
+    const t = await resolve();
+    if (!enabled(asset)) throw new HttpError(403, "send_disabled");
+    await checkPin(user.id, b.pin);
+    const em = await getEmail(user.id);
+    const det = { address: bindAddr(t.code), amount: shown(t.amount) };
+    if (em?.verified) await checkCode(user.id, "send", b.email_code, em.addr, det);
+    else await requireEmailCode(user.id, "send", b.email_code, det);
+    const note = String(t.note || "").replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 60);
+    const me = { id: user.id, name: String(u.name || user.first_name || "User") };
+    if (mode === "link") {
+      const L = await createLink(me, asset, t.amount, note, s);
+      await secLog(user.id, "withdraw_request", reqCtx(req), `link ${shown(t.amount)} ${asset}`).catch(() => {});
+      return void res.json({ success: true, link: { url: L.url, exp: L.exp, amount: t.amount, fee: L.fee, asset } });
+    }
+    let out;
+    if (mode === "request") {
+      await reqHold(reqId, user.id);
+      try { out = await sendAsset(me, t.toUid, asset, t.amount, s, note || t.note); }
+      catch (e) { await reqDone(reqId, false); throw e; }
+      await reqDone(reqId, true, out.txid);
+    } else out = await sendAsset(me, t.toUid, asset, t.amount, s, note);
+    await secLog(user.id, "withdraw_request", reqCtx(req), `send ${shown(t.amount)} ${asset}`).catch(() => {});
+    return void res.json({ success: true, fee: out.fee, balance: out.balance, tx: { id: out.id, txid: out.txid, at: out.at, amount: t.amount, fee: out.fee, to: out.to, asset, held: !!out.held, release_at: out.release_at || 0 } });
+  }
+
+  // ── history, contacts, requests, links ──
+  if (action === "history") return void res.json({ success: true, items: await listXfers(user.id, 120) });
+  if (action === "cancel") { await cancelHold(user.id, String(b.id || "")); return void res.json({ success: true }); }
+  if (action === "contacts") return void res.json({ success: true, items: await listContacts(user.id) });
+  if (action === "contact_save") { await saveContact(user.id, String(b.code || "").trim(), String(b.label || "")); return void res.json({ success: true, items: await listContacts(user.id) }); }
+  if (action === "contact_del") { await deleteContact(user.id, String(b.code || "").trim()); return void res.json({ success: true, items: await listContacts(user.id) }); }
+  if (action === "req_create") {
+    const r = await createRequest(user.id, asset, parseAmount(b.amount, asset), String(b.note || ""), s);
+    return void res.json({ success: true, ...r });
+  }
+  if (action === "req_list") return void res.json({ success: true, items: await listRequests(user.id, s) });
+  if (action === "req_cancel") { await cancelRequest(user.id, String(b.id || "")); return void res.json({ success: true, items: await listRequests(user.id, s) }); }
+  if (action === "req_info") {
+    const r = await getRequest(reqId || String(b.id || ""));
+    return void res.json({ success: true, req: { id: r.id, name: r.name, code: r.code, asset: r.asset, amount: r.amount, note: r.note, st: r.st, mine: r.to === user.id } });
+  }
+  if (action === "link_list") return void res.json({ success: true, items: await listLinks(user.id, s) });
+  if (action === "link_cancel") { await cancelLink(user.id, String(b.id || "")); return void res.json({ success: true, items: await listLinks(user.id, s) }); }
+  if (action === "claim_info") return void res.json({ success: true, link: await peekLink(String(b.token || "")) });
+  if (action === "claim") {
+    await rateLimit(user.id, "claim", 10);
+    const r = await claimLink(user.id, String(b.token || ""), s);
+    return void res.json({ success: true, ...r });
+  }
+
+  // ── received list (TFUEL + USDT) ──
   if (action === "received") {
-    const v = ((await db().ref(`activity/${user.id}`).orderByKey().limitToLast(80).get()).val() || {}) as Record<string, any>;
-    const items = Object.entries(v).filter(([, a]) => a.t === "receive").sort(([a], [b]) => (a < b ? 1 : -1)).slice(0, 15).map(([id, a]) => ({ id, c: a.c || 0, n: a.n || "", at: a.at }));
+    const items = (await listXfers(user.id, 40)).filter((x: any) => x.d === "in").slice(0, 15).map((x: any) => ({ id: x.id, c: x.a === "tfuel" ? x.amt : 0, u: x.a === "usdt" ? x.amt : 0, n: `From ${x.peer} (${x.pc}) · ${x.tx}`, at: x.at }));
     return void res.json({ success: true, items });
   }
   if (action === "receipt") {
-    const tid = String(req.body?.txid || "").toUpperCase();
+    const tid = String(b.txid || "").toUpperCase();
     if (!/^TF[0-9A-F]{40}$/.test(tid)) throw new HttpError(400, "bad_request");
     const id = (await db().ref(`transfer_tx/${tid}`).get()).val();
     const t = id ? (await db().ref(`transfers/${id}`).get()).val() : null;
     if (!t || (t.from !== user.id && t.to !== user.id)) throw new HttpError(404, "not_found");
     const mine = t.from === user.id;
-    return void res.json({ success: true, receipt: { txid: tid, at: t.at, amount: t.amount, fee: mine ? t.fee : 0, dir: mine ? "out" : "in", other: mine ? await displayName(t.to) : (await displayName(t.from)).replace(/^(.).*(.)$/, "$1•••$2"), note: t.note || "" } });
+    return void res.json({ success: true, receipt: { txid: tid, at: t.at, asset: t.asset || "tfuel", amount: t.amount, fee: mine ? t.fee : 0, dir: mine ? "out" : "in", other: mine ? await displayName(t.to) : (await displayName(t.from)).replace(/^(.).*(.)$/, "$1•••$2"), note: t.note || "" } });
   }
-  if (action === "send") {
-    if (!s.send_enabled) throw new HttpError(403, "send_disabled");
-    const code = String(req.body?.code || "").trim();
-    const r = await lookup(code);
-    const amount = parseAmount(req.body?.amount);
-    await checkPin(user.id, req.body?.pin);
-    const em = await getEmail(user.id);
-    if (em?.verified) await checkCode(user.id, "send", req.body?.email_code, em.addr, { address: code, amount: amount / cpt });
-    else await requireEmailCode(user.id, "send", req.body?.email_code, { address: code, amount: amount / cpt });
-    const note = String(req.body?.note || "").replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 60);
-    const out = await sendCoins({ id: user.id, name: String(u.name || user.first_name || "User") }, r.uid, amount, s, note);
-    await secLog(user.id, "withdraw_request", reqCtx(req), `send ${amount / cpt} TFUEL`).catch(() => {});
-    return void res.json({ success: true, fee: out.fee, balance: out.balance, tx: { id: out.id, txid: out.txid, at: out.at, amount, fee: out.fee, to: out.to } });
-  }
-  // info
-  const q = await sendQuota(user.id, s);
+
+  // ── info ──
+  const [qt, qu, vip] = await Promise.all([sendQuota(user.id, s, "tfuel"), sendQuota(user.id, s, "usdt"), vipPerks(user.id)]);
+  const ft = await feeFor(user.id, "tfuel", 1000, s);
+  const fu = await feeFor(user.id, "usdt", 1000, s);
   res.json({
     success: true,
-    enabled: s.send_enabled,
+    enabled: s.send_enabled || c2.xfer.usdt.enabled,
     cpt,
     code: await getRefCode(user.id).catch(() => ""),
-    fee_pct: s.send_fee_pct,
+    // TFUEL (kept for older screens)
+    fee_pct: ft.pct,
     min: s.send_min,
-    left: q.left,
+    left: qt.left,
     daily_limit: s.send_daily_limit,
     min_age_hours: s.send_min_age_hours,
     balance: u.balance,
+    assets: {
+      tfuel: { enabled: s.send_enabled, fee_pct: ft.pct, min: s.send_min, left: qt.left, balance: u.balance || 0 },
+      usdt: { enabled: c2.xfer.usdt.enabled, fee_pct: fu.pct, min: toU(c2.xfer.usdt.min), left: qu.left, balance: u.usdt_u || 0 },
+    },
+    links: c2.xfer.links,
+    hold: c2.xfer.hold.minutes && (c2.xfer.hold.tfuel > 0 || c2.xfer.hold.usdt > 0) ? { minutes: c2.xfer.hold.minutes, tfuel: c2.xfer.hold.tfuel, usdt: toU(c2.xfer.hold.usdt) } : null,
+    vip: { active: vip.active, fee_off_pct: vip.fee_off_pct },
   });
 });

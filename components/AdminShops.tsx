@@ -45,6 +45,7 @@ export function ShopsPage({ call }: { call: Call }) {
   return (
     <>
       <Head title="Shops" sub="Partner shops: users sign in with Telegram and pay with TFUEL or USDT">
+        <a className="btn sec" href="/shop-docs" target="_blank" rel="noreferrer" style={{ marginRight: 8 }}>Setup guide</a>
         <button className="btn" onClick={() => setF({ ...blank })}><Icon name="plus" size={15} /> Add shop</button>
       </Head>
 
@@ -119,7 +120,7 @@ export function ShopsPage({ call }: { call: Call }) {
           <div className="title" style={{ marginBottom: 6 }}>Settlement (last 300 orders)</div>
           {o.totals.map((t: any) => (
             <div className="row" key={t.id} style={{ marginBottom: 6 }}>
-              <div><div className="b">{t.name}</div><div className="xs muted">{t.n} paid orders · refunded ${t.refunded.toFixed(2)}</div></div>
+              <div><div className="b">{t.name}</div><div className="xs muted">{t.n} paid orders · refunded ${t.refunded.toFixed(2)}</div><div className="xs muted">Sales: today ${t.d1.toFixed(2)} · 7 days ${t.d7.toFixed(2)} · 30 days ${t.d30.toFixed(2)} · open orders {t.open}</div>{t.hook_failed > 0 && <div className="xs" style={{ color: "#dc2626" }}>⚠ {t.hook_failed} webhook(s) failed — retry below (auto-retry runs every cron)</div>}</div>
               <div style={{ textAlign: "right" }}><div className="b num">Owed to shop: ${t.owed.toFixed(2)}</div><div className="xs muted">Sales ${t.paid.toFixed(2)} · our fee ${t.fee.toFixed(2)}</div></div>
             </div>
           ))}
@@ -141,6 +142,7 @@ export function ShopsPage({ call }: { call: Call }) {
             </div>
             <div className="gap">
               <span className={`tag ${x.status === "paid" ? "ok" : x.status === "open" ? "warn" : "err"}`}>{x.status}</span>
+              {(x.status === "paid" || x.status === "refunded") && x.webhook_ok === false && <button className="btn sec sm" onClick={async () => { const r: any = await call({ action: "shopRetryHook", id: x.id }); if (r) { call({ action: "shopOrders" }); load(); } }}>Retry webhook</button>}
               {x.status === "paid" && <button className="btn danger sm" onClick={async () => { if (confirm("Refund this order to the user?")) { if (await call({ action: "shopRefund", id: x.id }, "Refunded")) load(); } }}>Refund</button>}
             </div>
           </div>
@@ -149,6 +151,7 @@ export function ShopsPage({ call }: { call: Call }) {
 
       <div className="card">
         <div className="title">How a shop connects (give this to the shop developer)</div>
+        <div className="sub" style={{ marginBottom: 6 }}>Full guide with copy-paste code for Node, PHP, Python, WordPress and WooCommerce (WordPress plugin file: <a href="/tfuel-pay-wordpress.php" download>tfuel-pay-wordpress.php</a>): <a href="/shop-docs" target="_blank" rel="noreferrer"><b>{base}/shop-docs</b></a> — send this link to the shop owner.</div>
         <div className="sub">Everything is signed with the shop&apos;s secret. Calls go from the shop&apos;s <b>server</b> to this app — never from the browser.</div>
         <ol className="sm" style={{ paddingLeft: 18, lineHeight: 1.7 }}>
           <li><b>Login:</b> user taps the shop in the Mini App → lands on your Login URL with <code>?code=…</code> → your server exchanges the code for the Telegram user → create your own session.</li>

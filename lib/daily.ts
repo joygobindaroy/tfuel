@@ -4,6 +4,7 @@ import { dayKey } from "./log";
 import { earn, activity, lbAdd } from "./wallet";
 import { dailyMult } from "./retention";
 import { abMult } from "./abtest";
+import { vipPerks } from "./vip";
 import { newUser, UserRecord } from "./user";
 import type { Settings } from "./settings";
 
@@ -13,6 +14,8 @@ export async function claimDaily(uid: string, s: Settings, now = Date.now()) {
   const today = dayKey(now);
   const yesterday = dayKey(now - 86400000);
   const abm = await abMult(uid).catch(() => 1);
+  const vp = await vipPerks(uid);
+  const vipm = vp.active ? 1 + vp.daily_pct / 100 : 1;
   let err = "";
   let saved = 0;
   let out = { reward: 0, streak: 0, balance: 0, saved: 0 };
@@ -29,7 +32,7 @@ export async function claimDaily(uid: string, s: Settings, now = Date.now()) {
       if (s.streak_freeze_enabled && fr >= missed) { (cur as any).freezes = fr - missed; streak = cur.daily.streak + 1; saved = missed; }
       else if (cur.daily.streak >= 3) (cur as any).streak_lost = { streak: cur.daily.streak, at: now };
     }
-    const reward = Math.floor((s.daily_rewards[(streak - 1) % s.daily_rewards.length] || 0) * dailyMult(s, now) * abm);
+    const reward = Math.floor((s.daily_rewards[(streak - 1) % s.daily_rewards.length] || 0) * dailyMult(s, now) * abm * vipm);
     cur.daily = { day: today, streak };
     cur.balance += reward;
     earn(cur, "daily", reward);

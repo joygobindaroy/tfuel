@@ -59,6 +59,35 @@ function AbPanel({ call, S, Row, Sw, L }: { call: Call; S: any; Row: any; Sw: an
 }
 
 /** Sponsor marketplace: review queue, active promotions, revenue */
+const quizLine = (q: any) => typeof q === "string" ? q : [q.q, q.a[q.c], ...q.a.filter((_: any, i: number) => i !== q.c)].join(" | ");
+function ToursAdmin({ call }: { call: Call }) {
+  const [list, setList] = useState<any[]>([]);
+  const [f, setF] = useState<any>({ title: "", game: "memory", start: "", end: "", prizes: "5000, 2500, 1000" });
+  const load = useCallback(async () => { const r: any = await call({ action: "growthTours" }); if (r) setList(r.tours); }, [call]);
+  useEffect(() => { load(); }, [load]);
+  const state = (t: any) => (t.cancelled ? "cancelled" : t.paid ? "paid out" : Date.now() < t.start ? "scheduled" : Date.now() > t.end ? "ending (pays on next cron)" : "live");
+  return (
+    <div className="card">
+      <div className="title">Free tournaments</div>
+      <div className="sub">No entry fee. Players join, play Memory match or Crypto trivia, and the best scores win the prizes below (coins, paid by you automatically when it ends).</div>
+      <div className="grid2" style={{ marginTop: 8 }}>
+        <L t="Title"><input value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} /></L>
+        <L t="Game"><select value={f.game} onChange={(e) => setF({ ...f, game: e.target.value })}><option value="memory">Memory match (fewest moves)</option><option value="trivia">Crypto trivia (most correct)</option></select></L>
+        <L t="Starts"><input type="datetime-local" value={f.start} onChange={(e) => setF({ ...f, start: e.target.value })} /></L>
+        <L t="Ends"><input type="datetime-local" value={f.end} onChange={(e) => setF({ ...f, end: e.target.value })} /></L>
+      </div>
+      <L t="Prizes for #1, #2, #3… (coins, comma separated)"><input value={f.prizes} onChange={(e) => setF({ ...f, prizes: e.target.value })} /></L>
+      <button className="btn" style={{ marginTop: 10 }} onClick={async () => { const r: any = await call({ action: "growthTourSave", ...f, start: f.start ? new Date(f.start).getTime() : Date.now(), end: f.end ? new Date(f.end).getTime() : 0 }, "Tournament saved"); if (r) setList(r.tours); }}>Create tournament</button>
+      {list.map((t) => (
+        <div className="row" key={t.id} style={{ marginTop: 10 }}>
+          <div><div className="b">{t.title}</div><div className="xs muted">{t.game} · {state(t)} · {t.players} players · prizes {t.prizes.join(", ")}</div></div>
+          {!t.paid && !t.cancelled && <button className="btn danger sm" onClick={async () => { if (confirm("Cancel this tournament? No prizes will be paid.")) { const r: any = await call({ action: "growthTourCancel", id: t.id }, "Cancelled"); if (r) setList(r.tours); } }}>Cancel</button>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function AdsAdmin({ call }: { call: Call }) {
   const [d, setD] = useState<any>(null);
   const [rev, setRev] = useState<any>(null);
@@ -389,6 +418,61 @@ export default function GrowthPage({ call }: { call: Call }) {
         );
       })}
       <AdsAdmin call={call} />
+
+      <div className="mhead">Transfers & VIP</div>
+      {S("xfer", "Send & receive rules", "USDT transfers between users, held large sends, request links and money links.", (v, set) => {
+        const up = (k: string, p: any) => set({ [k]: { ...v[k], ...p } });
+        const N = (k: string, f: string, t: string) => <L t={t}><input inputMode="decimal" value={v[k]?.[f]} onChange={(e) => up(k, { [f]: e.target.value })} /></L>;
+        return (
+          <>
+            <div className="title" style={{ fontSize: 14 }}>USDT transfers</div>
+            <Row t="Enabled" h="Users can send USDT to another user's unique ID."><Sw on={!!v.usdt?.enabled} set={(x) => up("usdt", { enabled: x })} /></Row>
+            <div className="grid2">{N("usdt", "fee_pct", "Fee %")}{N("usdt", "min", "Minimum (USDT)")}{N("usdt", "daily", "Daily limit (USDT, 0 = none)")}</div>
+            <div className="title" style={{ marginTop: 14, fontSize: 14 }}>Hold & cancel for large sends</div>
+            <div className="sub">A send at or above the amount waits for the minutes below. The sender can cancel it meanwhile (0 = off).</div>
+            <div className="grid2">{N("hold", "tfuel", "TFUEL amount (coins)")}{N("hold", "usdt", "USDT amount")}{N("hold", "minutes", "Wait (minutes)")}</div>
+            <div className="title" style={{ marginTop: 14, fontSize: 14 }}>Links</div>
+            <Row t="Payment request links" h="“Pay me X” link or QR."><Sw on={!!v.links?.request} set={(x) => up("links", { request: x })} /></Row>
+            <Row t="Money links" h="Sender locks money in a link; the first person who opens it claims it. Unclaimed money returns after the days below."><Sw on={!!v.links?.claim} set={(x) => up("links", { claim: x })} /></Row>
+            <div className="grid2">{N("links", "days", "Link valid (days)")}</div>
+          </>
+        );
+      })}
+      {S("vip", "VIP pass", "Users buy it with USDT. Perks: bonus on the daily reward, a discount on send fees, and a badge.", (v, set) => (
+        <>
+          <Row t="Enabled"><Sw on={!!v.enabled} set={(x) => set({ enabled: x })} /></Row>
+          <div className="grid2">
+            <L t="Price (USDT)"><input inputMode="decimal" value={v.price} onChange={(e) => set({ price: e.target.value })} /></L>
+            <L t="Days"><input inputMode="numeric" value={v.days} onChange={(e) => set({ days: e.target.value })} /></L>
+            <L t="Daily reward bonus %"><input inputMode="decimal" value={v.daily_pct} onChange={(e) => set({ daily_pct: e.target.value })} /></L>
+            <L t="Send fee discount %"><input inputMode="decimal" value={v.fee_off_pct} onChange={(e) => set({ fee_off_pct: e.target.value })} /></L>
+            <L t="Badge (emoji)"><input value={v.badge} onChange={(e) => set({ badge: e.target.value })} /></L>
+          </div>
+        </>
+      ))}
+
+      <div className="mhead">Mini games (free to play)</div>
+      {S("mini", "Memory, trivia & treasure hunt", "No stake and no risk for players. Rewards are small coins from you, limited per day. Fast finishers (bots) get nothing.", (v, set) => {
+        const up = (k: string, p: any) => set({ [k]: { ...v[k], ...p } });
+        const N = (k: string, f: string, t: string) => <L t={t}><input inputMode="decimal" value={v[k]?.[f]} onChange={(e) => up(k, { [f]: e.target.value })} /></L>;
+        const qs = Array.isArray(v.trivia?.questions) ? v.trivia.questions.map(quizLine).join("\n") : String(v.trivia?.questions || "");
+        return (
+          <>
+            <Row t="All mini games on"><Sw on={!!v.enabled} set={(x) => set({ enabled: x })} /></Row>
+            <div className="title" style={{ marginTop: 10, fontSize: 14 }}>Memory match</div>
+            <Row t="Enabled"><Sw on={!!v.memory?.enabled} set={(x) => up("memory", { enabled: x })} /></Row>
+            <div className="grid2">{N("memory", "pairs", "Pairs (3–10)")}{N("memory", "reward", "Reward (coins)")}{N("memory", "max_moves", "Moves for full reward")}{N("memory", "per_day", "Plays per day")}</div>
+            <div className="title" style={{ marginTop: 14, fontSize: 14 }}>Crypto trivia</div>
+            <Row t="Enabled"><Sw on={!!v.trivia?.enabled} set={(x) => up("trivia", { enabled: x })} /></Row>
+            <div className="grid2">{N("trivia", "per_correct", "Coins per correct")}{N("trivia", "rounds", "Questions per game")}{N("trivia", "per_day", "Plays per day")}</div>
+            <L t="Questions — one per line: Question | RIGHT answer | wrong | wrong | wrong (at least 5 lines)"><textarea rows={8} value={qs} onChange={(e) => up("trivia", { questions: e.target.value })} /></L>
+            <div className="title" style={{ marginTop: 14, fontSize: 14 }}>Treasure hunt</div>
+            <Row t="Enabled"><Sw on={!!v.hunt?.enabled} set={(x) => up("hunt", { enabled: x })} /></Row>
+            <div className="grid2">{N("hunt", "min", "Min prize (coins)")}{N("hunt", "max", "Max prize (coins)")}{N("hunt", "per_day", "Picks per day")}</div>
+          </>
+        );
+      })}
+      <ToursAdmin call={call} />
 
       <div className="mhead">Backup & restore</div>
       <BackupPanel call={call} />

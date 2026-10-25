@@ -10,6 +10,7 @@ import { scanRisk, riskClear } from "../risk";
 import { abStats } from "../abtest";
 import { adsAdminList, adsApprove, adsReject, adsFinish } from "../ads";
 import { fromU } from "../market";
+import { tourAdminList, tourSave, tourCancel } from "../mini";
 import { creatorList, creatorSet, plateClear } from "../eng";
 
 const clean = (v: any, n: number) => String(v ?? "").replace(/[\u0000-\u001f\u007f<>]/g, " ").trim().slice(0, n);
@@ -63,6 +64,9 @@ const mod: AdminMod = async (action, b, ctx) => {
     case "growthRisk": { const r = await scanRisk(Number(b.rate) || 30000); return { risk: r.rows.slice(0, 60), scanned: r.scanned, auto: ((await db().ref("risk_auto").get()).val() || {}) }; }
     case "growthRiskClear": { const uid = String(b.uid || ""); if (!/^\d{1,20}$/.test(uid)) throw new HttpError(400, "Invalid user id"); await riskClear(uid); await adminLog(ctx.who, "risk_clear", { uid }); return {}; }
     case "growthAb": return await abStats();
+    case "growthTours": return { tours: await tourAdminList() };
+    case "growthTourSave": { const id = await tourSave(b); await adminLog(ctx.who, "tour_save", { id }); return { tours: await tourAdminList() }; }
+    case "growthTourCancel": { const id = String(b.id || ""); if (!/^[\w-]{3,40}$/.test(id)) throw new HttpError(400, "bad_request"); await tourCancel(id); await adminLog(ctx.who, "tour_cancel", { id }); return { tours: await tourAdminList() }; }
     case "growthAds": return await adsAdminList();
     case "growthAdApprove": { const id = String(b.id || ""); await adsApprove(id, ctx.who); await adminLog(ctx.who, "ad_approve", { id }); return await adsAdminList(); }
     case "growthAdReject": { const id = String(b.id || ""); await adsReject(id, clean(b.note, 120), ctx.who); await adminLog(ctx.who, "ad_reject", { id }); return await adsAdminList(); }

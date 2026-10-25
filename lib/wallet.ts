@@ -8,7 +8,7 @@ import { clanAdd } from "./clan";
 /** "কীভাবে পেল / কীভাবে খরচ হলো" — user-এর TFUEL ও USDT-র উৎসের হিসাব */
 export type EarnKey = "spin" | "promo" | "prize" | "ads" | "tap" | "articles" | "tasks" | "daily" | "referral" | "mining" | "staking" | "bought" | "adjust" | "received";
 export type SpendKey = "boosts" | "sold" | "withdrawn" | "shop" | "sent";
-export type UsdtKey = "deposited" | "sold" | "bought" | "withdrawn" | "adjusted" | "shop";
+export type UsdtKey = "deposited" | "sold" | "bought" | "withdrawn" | "adjusted" | "shop" | "sent" | "received" | "vip";
 
 /** transaction-এর ভেতরে cur-এর ওপর বসান */
 export function earn(cur: UserRecord, key: EarnKey, coins: number) {
@@ -29,7 +29,7 @@ export function usdtTot(cur: UserRecord, key: UsdtKey, micro: number) {
 
 export type ActType =
   | "article" | "task" | "daily" | "referral" | "mining" | "stake_paid" | "boost"
-  | "sell" | "buy" | "deposit" | "deposit_rejected" | "usdt_withdraw" | "usdt_paid" | "usdt_rejected" | "adjust" | "spin" | "promo" | "prize" | "ads" | "limit_buy" | "limit_sell" | "shop" | "shop_refund" | "send" | "receive" | "adbuy" | "adrefund";
+  | "sell" | "buy" | "deposit" | "deposit_rejected" | "usdt_withdraw" | "usdt_paid" | "usdt_rejected" | "adjust" | "spin" | "promo" | "prize" | "ads" | "limit_buy" | "limit_sell" | "shop" | "shop_refund" | "send" | "receive" | "adbuy" | "adrefund" | "vip" | "game";
 
 /** সাম্প্রতিক কার্যকলাপ (best-effort; tap-এর মতো ঘন ঘন ঘটনা এখানে নয়) */
 export async function activity(uid: string, type: ActType, o: { coins?: number; usdt_u?: number; note?: string } = {}) {

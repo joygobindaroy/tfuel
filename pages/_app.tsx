@@ -3,13 +3,14 @@ import Head from "next/head";
 import Script from "next/script";
 import { useEffect } from "react";
 import "@/styles/globals.css";
-import { applyTheme } from "@/lib/theme";
+import { applyTheme, applyAccent } from "@/lib/theme";
 import { startTranslator } from "@/lib/i18n";
 import { BRAND, LOGO_SOURCES } from "@/lib/brand";
 
 export default function App({ Component, pageProps }: AppProps) {
   useEffect(() => {
     applyTheme();
+    applyAccent();
     startTranslator();
     try { if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {}); } catch {}
   }, []);

@@ -93,9 +93,10 @@ export function DepositPage({ say, reload, onBack, onHistory, onBuy }: { say: Sa
     if (m?.deposit.enabled && m.deposit.networks.length) r.push({ k: "crypto", t: "Crypto", s: "USDT on-chain" });
     if (m?.deposit.binanceId) r.push({ k: "binance", t: "Binance ID", s: "No fee" });
     if (m?.deposit.stars) r.push({ k: "stars", t: "Stars", s: "Telegram" });
-    if (userOn) r.push({ k: "user", t: "From user", s: "TFUEL" });
+    if (userOn) r.push({ k: "user", t: "From user", s: "USDT" });
     return r;
   }, [m, userOn]);
+  const [coin, setCoin] = useState<"usdt" | "tfuel">("usdt");
   const [method, setMethod] = useState<Method | null>(null);
   const cur = method && methods.find((x) => x.k === method) ? method : methods[0]?.k;
   const done = () => { load(); reload(); };
@@ -113,23 +114,33 @@ export function DepositPage({ say, reload, onBack, onHistory, onBuy }: { say: Sa
               <div className="title num" style={{ fontSize: 22 }}>{usd(m.balances.usdt)} <span className="muted" style={{ fontSize: 13 }}>USDT</span></div>
             </div>
           </div>
-          {methods.length === 0 && <div className="card empty">Deposits aren&apos;t available right now.</div>}
-          {methods.length > 1 && (
+          <div className="card" style={{ paddingBottom: 12 }}>
+            <div className="title" style={{ marginBottom: 6 }}>Which coin do you want to deposit?</div>
+            <div className="chips">
+              <button className={`chip ${coin === "usdt" ? "on" : ""}`} onClick={() => setCoin("usdt")}>USDT</button>
+              {userOn && <button className={`chip ${coin === "tfuel" ? "on" : ""}`} onClick={() => setCoin("tfuel")}>TFUEL</button>}
+            </div>
+            <div className="xs muted" style={{ marginTop: 8 }}>{coin === "usdt" ? "Add USDT from a wallet, Binance or Telegram Stars — or receive it from another user." : "TFUEL can be received from another user, or earned in the app. You can also buy it with USDT."}</div>
+          </div>
+          {coin === "tfuel" && <ReceiveFromUser say={say} asset="tfuel" />}
+          {coin === "tfuel" && onBuy && <div className="card" style={{ display: "flex", alignItems: "center", gap: 12 }}><div style={{ flex: 1 }}><div className="title">Buy TFUEL with USDT</div><div className="sub">Instant at the live price.</div></div><button className="btn sm" onClick={onBuy}>Buy TFUEL</button></div>}
+          {coin === "usdt" && methods.length === 0 && <div className="card empty">Deposits aren&apos;t available right now.</div>}
+          {coin === "usdt" && methods.length > 1 && (
             <div className="mtabs">
               {methods.map((x) => <button key={x.k} className={cur === x.k ? "on" : ""} onClick={() => setMethod(x.k)}>{x.t}<small>{x.s}</small></button>)}
             </div>
           )}
-          {cur === "crypto" && <CryptoDeposit m={m} say={say} done={done} />}
-          {cur === "binance" && m.deposit.binanceId && <BinanceDeposit id={m.deposit.binanceId.id} min={m.deposit.binanceId.min} say={say} done={done} />}
-          {cur === "stars" && m.deposit.stars && <StarsDeposit cfg={m.deposit.stars} say={say} done={done} />}
-          {cur === "user" && <ReceiveFromUser say={say} />}
-          {m.balances.usdt > 0 && onBuy && (
+          {coin === "usdt" && cur === "crypto" && <CryptoDeposit m={m} say={say} done={done} />}
+          {coin === "usdt" && cur === "binance" && m.deposit.binanceId && <BinanceDeposit id={m.deposit.binanceId.id} min={m.deposit.binanceId.min} say={say} done={done} />}
+          {coin === "usdt" && cur === "stars" && m.deposit.stars && <StarsDeposit cfg={m.deposit.stars} say={say} done={done} />}
+          {coin === "usdt" && cur === "user" && <ReceiveFromUser say={say} asset="usdt" />}
+          {coin === "usdt" && m.balances.usdt > 0 && onBuy && (
             <div className="card" style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <div style={{ flex: 1 }}><div className="title">Ready to trade?</div><div className="sub">Use your USDT to buy TFUEL at the live price.</div></div>
               <button className="btn sm" onClick={onBuy}>Buy TFUEL</button>
             </div>
           )}
-          <RecentDeposits m={m} say={say} done={done} />
+          {coin === "usdt" && <RecentDeposits m={m} say={say} done={done} />}
         </>
       )}
     </>
@@ -155,38 +166,38 @@ function Steps({ items }: { items: string[] }) {
 }
 
 /** Receive TFUEL from another user: show my unique ID (+ QR), share it, and list what I received */
-function ReceiveFromUser({ say }: { say: Say }) {
+function ReceiveFromUser({ say, asset = "tfuel" }: { say: Say; asset?: "tfuel" | "usdt" }) {
   const [code, setCode] = useState("");
   const [cpt, setCpt] = useState(1000);
-  const [items, setItems] = useState<{ id: string; c: number; n: string; at: number }[] | null>(null);
+  const [items, setItems] = useState<{ id: string; c: number; u: number; n: string; at: number }[] | null>(null);
   useEffect(() => {
     api<any>("send", { action: "info" }).then((r) => { setCode(r.code || ""); if (r.cpt) setCpt(r.cpt); }).catch((e) => say(errText(e)));
     api<any>("send", { action: "received" }).then((r) => setItems(r.items)).catch(() => setItems([]));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const share = () => {
-    const text = `Send me TFUEL on TFUEL Bot — my unique ID: ${code}`;
+    const text = `Send me ${asset === "usdt" ? "USDT" : "TFUEL"} on TFUEL Bot — my unique ID: ${code}`;
     const w: any = typeof window !== "undefined" ? window : null;
     const url = `https://t.me/share/url?url=${encodeURIComponent(" ")}&text=${encodeURIComponent(text)}`;
     try { w?.Telegram?.WebApp?.openTelegramLink ? w.Telegram.WebApp.openTelegramLink(url) : w?.open(url, "_blank"); } catch {}
   };
   return (
     <div className="card">
-      <div className="row"><div className="left"><div className="ico"><Icon name="user" /></div><div><div className="title">Receive from a user</div><div className="sub">Instant · TFUEL · from another TFUEL user</div></div></div></div>
+      <div className="row"><div className="left"><div className="ico"><Icon name="user" /></div><div><div className="title">Receive from a user</div><div className="sub">Instant · {asset === "usdt" ? "USDT" : "TFUEL"} · from another TFUEL user</div></div></div></div>
       {code ? (
         <>
           <Qr text={code} />
           <div className="xs muted" style={{ textAlign: "center" }}>Your unique ID</div>
           <div className="addrbox" style={{ marginTop: 4 }}><span className="num" style={{ fontSize: 18 }}>{code}</span><Copy text={code} say={say} /></div>
           <div style={{ marginTop: 10 }}><button className="btn sec block" onClick={share}><Icon name="send" size={15} /> Share my ID</button></div>
-          <Steps items={["Share your unique ID (or let them scan the QR).", "They open Profile → Withdraw → Internal transfer and enter your ID.", "They see your name before sending. TFUEL arrives in your balance instantly."]} />
+          <Steps items={["Share your unique ID (or let them scan the QR).", "They open Profile → Withdraw → Internal transfer and enter your ID.", `They see your name before sending. ${asset === "usdt" ? "USDT" : "TFUEL"} arrives in your balance instantly.`]} />
         </>
       ) : <SkelList />}
       <div className="title" style={{ fontSize: 14, marginTop: 14 }}>Recently received</div>
       {items === null && <div className="small muted">Loading…</div>}
-      {items && items.length === 0 && <div className="small muted">Nothing received yet.</div>}
-      {items?.map((x) => (
+      {items && items.filter((x) => (asset === "usdt" ? x.u > 0 : x.c > 0)).length === 0 && <div className="small muted">Nothing received yet.</div>}
+      {items?.filter((x) => (asset === "usdt" ? x.u > 0 : x.c > 0)).map((x) => (
         <div className="hist" key={x.id}>
-          <div><div className="title" style={{ fontSize: 14 }}>+{(x.c / cpt).toLocaleString("en-US", { maximumFractionDigits: 3 })} TFUEL</div><div className="sub">{x.n.replace(/\s*·?\s*TF[0-9A-F]{40}/, "")} · {new Date(x.at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</div></div>
+          <div><div className="title" style={{ fontSize: 14 }}>{asset === "usdt" ? `+${(x.u / 1e6).toFixed(2)} USDT` : `+${(x.c / cpt).toLocaleString("en-US", { maximumFractionDigits: 3 })} TFUEL`}</div><div className="sub">{x.n.replace(/\s*·?\s*TF[0-9A-F]{40}/, "")} · {new Date(x.at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</div></div>
         </div>
       ))}
     </div>

@@ -10,6 +10,7 @@ import { getState, setState, clearState } from "./botstate";
 import { createTicket, replyTicket } from "./tickets";
 import { answerConfirm } from "./wdconfirm";
 import { itWasntMe } from "./notme";
+import { cancelHold } from "./transfer";
 import { claimRetention } from "./retention";
 import {
   View, Kb, esc, openBtn, tf, welcomeView, profileView, inviteView, tasksView, dailyView, walletView, leaderboardView, boardText,
@@ -196,6 +197,7 @@ export async function handleBot(u: any): Promise<boolean> {
     else if (d === "apl" && isAdmin(uid)) view = await adminPendingView(s);
     else if (/^a[pr]2?:/.test(d) && isAdmin(uid)) { const [k, id] = d.split(":"); view = await adminSettle(uid, k, id, s); }
     else if (d.startsWith("wc:")) { const [, yn, id] = d.split(":"); note = await answerConfirm(uid, id || "", yn === "y", s); view = { text: note, kb: [[openBtn(s, "📱 Open app", "go_history")], [{ text: "⬅ Menu", callback_data: "m" }]] }; html = false; note = ""; }
+    else if (d.startsWith("xc:")) { try { await cancelHold(uid, d.slice(3)); view = { text: "✅ Transfer cancelled. The money is back in your wallet.", kb: [] }; } catch { view = { text: "This transfer can no longer be cancelled.", kb: [] }; } html = false; }
     else if (d.startsWith("nm:")) { const t = await itWasntMe(uid, d.slice(3)); view = { text: t, kb: [[openBtn(s, "💬 Contact support", "go_support")]] }; html = false; }
     else if (d === "ok") { note = "Thanks for confirming."; view = { text: "✅ Thanks for confirming.", kb: [] }; html = false; }
     else if (d.startsWith("ac:")) {

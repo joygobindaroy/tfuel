@@ -3,6 +3,7 @@ import { CopyBtn, Empty, ConfirmSheet, SkelList, AmtInput, OfflineBar, usePullRe
 import { api, cachedApi, errText, fmtTf, fmtUsd, openLink, openTgLink, tg, haptic, tick, getUi } from "@/lib/client";
 import { ReceiptSheet, NextReward } from "@/components/Extras";
 import { ClanPage, RigsPage, PuzzlePage, CollectPage } from "@/components/Games";
+import { MiniPage, VipPage } from "@/components/Mini";
 import { InvitePlusPage, ReportPage, AutoConvertCard, MoveAlertCard, PlCard } from "@/components/More";
 import { BRAND } from "@/lib/brand";
 import Logo from "@/components/Logo";
@@ -13,6 +14,7 @@ import { DepositPage, WithdrawPage, DepositHistory, PayoutHistory, PageHead } fr
 import { Bell, Onboarding, CurrencyPick, TermsGate } from "@/components/Inbox";
 import { PaySheet, ShopsPage, SupportPage, InviteCard } from "@/components/Shops";
 import { SendPage } from "@/components/Send";
+import { ClaimSheet } from "@/components/SendExtra";
 import { MissionsCard, TodoCard, FeedCard, AwayPopup, CosmeticsPage } from "@/components/Today";
 import { AdBanner, AdsPage } from "@/components/Ads";
 import { homeOrder } from "@/components/SettingsExtra";
@@ -44,7 +46,7 @@ interface Me {
   levelup?: { from: number; to: number; coins: number } | null;
   away?: any;
   faq?: { q: string; a: string }[];
-  cfg: { send?: boolean; minWithdraw: number; methods: string[]; coinsPerUnit: number; unitLabel: string; withdrawEnabled: boolean; coinsPerTfuel: number; shops?: boolean; bdtRate?: number; games?: { clans: boolean; rigs: boolean; puzzle: boolean; collect: boolean; autoconv: boolean; invite?: boolean; cosmetics?: boolean; feed?: boolean; refpass?: boolean; ads?: boolean } };
+  cfg: { send?: boolean; minWithdraw: number; methods: string[]; coinsPerUnit: number; unitLabel: string; withdrawEnabled: boolean; coinsPerTfuel: number; shops?: boolean; bdtRate?: number; games?: { mini?: boolean; vip?: boolean; clans: boolean; rigs: boolean; puzzle: boolean; collect: boolean; autoconv: boolean; invite?: boolean; cosmetics?: boolean; feed?: boolean; refpass?: boolean; ads?: boolean } };
 }
 interface Task {
   id: string;
@@ -91,6 +93,8 @@ export default function Home() {
   const [floats, setFloats] = useState<{ id: number; x: number }[]>([]);
   const [noTg, setNoTg] = useState(false);
   const [payId, setPayId] = useState<string | null>(null);
+  const [claimTok, setClaimTok] = useState<string | null>(null);
+  const [reqId, setReqId] = useState<string | null>(null);
 
   const balance = useRef(0);
   const energy = useRef(0);
@@ -144,7 +148,7 @@ export default function Home() {
     }
     w.ready();
     w.expand();
-    try { const sp = String(w.initDataUnsafe?.start_param || ""); if (/^pay_[\w-]{1,64}$/.test(sp)) setPayId(sp.slice(4)); } catch {}
+    try { const sp = String(w.initDataUnsafe?.start_param || ""); if (/^pay_[\w-]{1,64}$/.test(sp)) setPayId(sp.slice(4)); else if (/^claim_[A-Za-z0-9]{20}$/.test(sp)) setClaimTok(sp.slice(6)); else if (/^req_[A-Za-z0-9]{6,20}$/.test(sp)) setReqId(sp.slice(4)); } catch {}
     try {
       w.setHeaderColor?.("#f4f6fb");
       w.setBackgroundColor?.("#f4f6fb");
@@ -376,6 +380,12 @@ export default function Home() {
       {tab === "profile" && <Profile initPage={deep && !["tasks", "boost", "trade"].includes(deep) ? (deep as Page) : null} me={me} cpt={cpt} balance={bal} go={go} say={say} reload={load} onCur={(c) => setMe((m) => (m ? { ...m, cur: c } : m))} />}
 
       <InAppAds />
+      {claimTok && <ClaimSheet token={claimTok} say={say} reload={load} onClose={() => setClaimTok(null)} />}
+      {reqId && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 80, background: "var(--bg, #f4f6fb)", overflowY: "auto", padding: 16 }}>
+          <SendPage say={say} cpt={cpt} reload={load} reqId={reqId} onBack={() => setReqId(null)} />
+        </div>
+      )}
       {payId && <PaySheet id={payId} cpt={cpt} say={say} reload={load} onClose={() => setPayId(null)} />}
       {me.terms && <TermsGate terms={me.terms} onDone={() => setMe((m) => (m ? { ...m, terms: null } : m))} />}
       {!me.terms && !me.showIntro && me.cur === null && !payId && <CurrencyPick onDone={(c) => setMe((m) => (m ? { ...m, cur: c } : m))} />}
@@ -644,7 +654,7 @@ function Tasks({ me, cpt, say, reload }: { me: Me; cpt: number; say: Say; reload
 }
 
 /** Profile: balance in TFUEL + USDT value, shortcuts, optional legacy payout methods, history */
-type Page = null | "rewards" | "send" | "deposit" | "deposits" | "withdraw" | "payouts" | "assets" | "history" | "settings" | "other" | "shops" | "support" | "invite" | "clan" | "rigs" | "puzzle" | "collect" | "report" | "cosmetics" | "ads" | "perks";
+type Page = null | "rewards" | "send" | "deposit" | "deposits" | "withdraw" | "payouts" | "assets" | "history" | "settings" | "other" | "shops" | "support" | "invite" | "clan" | "rigs" | "puzzle" | "mini" | "vip" | "collect" | "report" | "cosmetics" | "ads" | "perks";
 
 function Profile({ initPage, me, cpt, balance, go, say, reload, onCur }: { initPage?: Page; me: Me; cpt: number; balance: number; go: (t: Tab, sub?: string) => void; say: Say; reload: () => void; onCur: (c: "tfuel" | "usdt") => void }) {
   const [page, setPage] = useState<Page>(initPage || null);
@@ -673,12 +683,14 @@ function Profile({ initPage, me, cpt, balance, go, say, reload, onCur }: { initP
   if (page === "send") return <SendPage say={say} onBack={back} cpt={cpt} reload={refresh} />;
   if (page === "deposit") return <DepositPage say={say} reload={refresh} onBack={back} onHistory={() => nav("deposits", "deposit")} onBuy={() => { nav(null); go("tfuel", "trade"); }} />;
   if (page === "deposits") return <DepositHistory say={say} onBack={back} />;
-  if (page === "withdraw") return <WithdrawChoice say={say} reload={refresh} onBack={back} onHistory={() => nav("payouts", "withdraw")} cpt={cpt} internal={!!me.cfg.send} />;
+  if (page === "withdraw") return <WithdrawChoice say={say} reload={refresh} onBack={back} onHistory={() => nav("payouts", "withdraw")} cpt={cpt} internal={!!me.cfg.send} onTrade={() => { nav(null); go("tfuel", "trade"); }} />;
   if (page === "payouts") return <PayoutHistory say={say} onBack={back} legacy={me.withdrawals} cpt={cpt} fmtTf={fmtTf} />;
   if (page === "shops") return <ShopsPage say={say} onBack={back} cpt={cpt} />;
   if (page === "invite") return <InvitePlusPage say={say} onBack={back} cpt={cpt} reload={refresh} eng={me.eng} />;
   if (page === "clan") return <ClanPage say={say} onBack={back} cpt={cpt} reload={refresh} tip={me.eng?.tip} />;
   if (page === "rigs") return <RigsPage say={say} onBack={back} cpt={cpt} reload={refresh} />;
+  if (page === "mini") return <MiniPage say={say} onBack={back} cpt={cpt} reload={refresh} />;
+  if (page === "vip") return <VipPage say={say} onBack={back} cpt={cpt} reload={refresh} />;
   if (page === "puzzle") return <PuzzlePage say={say} onBack={back} cpt={cpt} reload={refresh} />;
   if (page === "collect") return <CollectPage say={say} onBack={back} cpt={cpt} reload={refresh} />;
   if (page === "report") return <ReportPage say={say} onBack={back} cpt={cpt} reload={refresh} />;
@@ -734,11 +746,13 @@ function Profile({ initPage, me, cpt, balance, go, say, reload, onCur }: { initP
         <Row icon="gift" t="Rewards & progress" s="Level, weekly challenge, achievements, streak freeze" onClick={() => nav("rewards")} />
       </div>
 
-      {(me.cfg.games?.clans || me.cfg.games?.rigs || me.cfg.games?.puzzle || me.cfg.games?.collect) && (<>
+      {(me.cfg.games?.clans || me.cfg.games?.rigs || me.cfg.games?.puzzle || me.cfg.games?.collect || me.cfg.games?.mini || me.cfg.games?.vip) && (<>
         <div className="mhead">Play & collect</div>
         <div className="menu">
           {me.cfg.games?.clans && <Row icon="users" t="Clan & raid boss" s="Team up, beat the boss, win weekly prizes" onClick={() => nav("clan")} />}
           {me.cfg.games?.rigs && <Row icon="zap" t="Mining rigs" s="Buy rigs that earn TFUEL for you" onClick={() => nav("rigs")} />}
+          {me.cfg.games?.mini && <Row icon="star" t="Mini games" s="Memory, trivia, treasure hunt + free tournaments" onClick={() => nav("mini")} />}
+          {me.cfg.games?.vip && <Row icon="gift" t="VIP pass" s="Bonus daily reward, cheaper sends, badge" onClick={() => nav("vip")} />}
           {me.cfg.games?.puzzle && <Row icon="star" t="Daily word" s="One free puzzle a day, small reward" onClick={() => nav("puzzle")} />}
           {me.cfg.games?.collect && <Row icon="gift" t="Collectibles" s="Collect items and share the season pool" onClick={() => nav("collect")} />}
         </div>
@@ -858,7 +872,7 @@ const ACT_LABEL: Record<string, string> = {
   article: "Article reward", task: "Task reward", daily: "Daily reward", referral: "Referral bonus", mining: "Mining collected",
   stake_paid: "Staking payout", boost: "Boost purchased", sell: "Sold TFUEL", buy: "Bought TFUEL", deposit: "USDT deposit",
   deposit_rejected: "Deposit rejected", usdt_withdraw: "USDT withdrawal", usdt_paid: "Withdrawal paid", usdt_rejected: "Withdrawal refunded", adjust: "Balance adjustment",
-  spin: "Lucky Spin", promo: "Promo code", prize: "Leaderboard prize", ads: "Ad reward", limit_buy: "Limit buy filled", limit_sell: "Limit sell filled", send: "Sent to a friend", receive: "Received from a friend", shop: "Shop payment", shop_refund: "Shop refund", adbuy: "Promotion purchased", adrefund: "Promotion refund",
+  spin: "Lucky Spin", promo: "Promo code", prize: "Leaderboard prize", ads: "Ad reward", limit_buy: "Limit buy filled", limit_sell: "Limit sell filled", send: "Sent to a friend", receive: "Received from a friend", shop: "Shop payment", shop_refund: "Shop refund", adbuy: "Promotion purchased", adrefund: "Promotion refund", vip: "VIP pass", game: "Mini game",
 };
 
 interface Wallet {

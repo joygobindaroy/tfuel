@@ -25,7 +25,23 @@ export interface Eng {
   plate: { enabled: boolean; price: number; max: number };
   tip: { enabled: boolean; fee_pct: number; amounts: number[] };
 }
+export interface Xfer {
+  usdt: { enabled: boolean; fee_pct: number; min: number; daily: number }; // internal USDT transfers (USDT units; daily 0 = no limit)
+  hold: { tfuel: number; usdt: number; minutes: number }; // sends at/above this amount wait N minutes and can be cancelled (0 = off)
+  links: { request: boolean; claim: boolean; days: number };
+}
+export interface Vip { enabled: boolean; price: number; days: number; daily_pct: number; fee_off_pct: number; badge: string }
+export interface Quiz { q: string; a: string[]; c: number }
+export interface Mini {
+  enabled: boolean;
+  memory: { enabled: boolean; pairs: number; reward: number; per_day: number; max_moves: number };
+  trivia: { enabled: boolean; per_correct: number; per_day: number; rounds: number; questions: Quiz[] };
+  hunt: { enabled: boolean; min: number; max: number; per_day: number };
+}
 export interface Cfg2 {
+  xfer: Xfer;
+  vip: Vip;
+  mini: Mini;
   ab: { enabled: boolean; name: string; mult_b: number };
   autoban: { enabled: boolean; min_score: number; action: "freeze" | "flag"; max_per_run: number };
   moves: { enabled: boolean; options: number[] };
@@ -48,7 +64,33 @@ export interface Cfg2 {
 
 const WORDS = "planet rocket silver golden market wallet crypto token energy mining tapper streak reward coffee garden bridge pocket window yellow orange purple castle forest island desert ocean thunder dragon knight wizard pirate anchor candle mirror ticket jacket button pencil marble camera guitar violin piano tiger rabbit monkey turtle falcon dolphin cherry banana potato tomato lemon butter cheese honey sugar pepper summer winter autumn spring river mountain valley cloud storm breeze shadow flame crystal diamond emerald ruby sapphire".split(" ");
 
+const QUIZ: Quiz[] = [
+  { q: "Who created Bitcoin?", a: ["Satoshi Nakamoto", "Vitalik Buterin", "Elon Musk", "Charlie Lee"], c: 0 },
+  { q: "What is a blockchain?", a: ["A shared ledger of linked blocks", "A type of bank card", "A Telegram bot", "A mining chair"], c: 0 },
+  { q: "What does USDT try to stay equal to?", a: ["1 US dollar", "1 gram of gold", "1 Bitcoin", "1 euro"], c: 0 },
+  { q: "What is a private key used for?", a: ["Proving you own a wallet", "Logging in to Telegram", "Buying coffee", "Speeding up the internet"], c: 0 },
+  { q: "You should share your seed phrase with…", a: ["Nobody, ever", "Support staff", "Your friends", "Anyone who asks nicely"], c: 0 },
+  { q: "What does 'HODL' mean in crypto slang?", a: ["Hold your coins long term", "Hurry up and sell", "Hide your wallet", "High order delivery"], c: 0 },
+  { q: "What is a wallet address?", a: ["Where others can send you crypto", "Your home address", "Your password", "A secret key"], c: 0 },
+  { q: "What is a transaction hash (TXID)?", a: ["A unique ID of a transfer", "A password", "A coin price", "A mining tool"], c: 0 },
+  { q: "Which network is cheapest for many USDT transfers?", a: ["Usually BEP20 / TRC20", "Never any", "Only Bitcoin", "Only paper mail"], c: 0 },
+  { q: "What is 'phishing'?", a: ["Fake sites that steal your info", "A fishing game", "A coin type", "A wallet backup"], c: 0 },
+  { q: "What is two-factor authentication (2FA)?", a: ["A second proof besides your password", "Two passwords the same", "Two wallets", "Double fees"], c: 0 },
+  { q: "What does 'volatile' mean for a price?", a: ["It moves up and down a lot", "It never changes", "It is free", "It is fixed by law"], c: 0 },
+  { q: "What is staking?", a: ["Locking coins to earn rewards", "Throwing coins away", "Buying a stake of land", "Printing coins"], c: 0 },
+  { q: "What is a 'stablecoin'?", a: ["A coin designed to hold a steady price", "A very old coin", "A coin that only goes up", "A coin from a horse farm"], c: 0 },
+  { q: "Is a message from 'support' asking for your OTP safe?", a: ["No, never share OTP codes", "Yes, if they are polite", "Yes, on weekends", "Yes, if it has a logo"], c: 0 },
+];
+
 export const CFG2_DEFAULTS: Cfg2 = {
+  xfer: { usdt: { enabled: true, fee_pct: 0.5, min: 1, daily: 500 }, hold: { tfuel: 0, usdt: 0, minutes: 10 }, links: { request: true, claim: true, days: 7 } },
+  vip: { enabled: false, price: 3, days: 30, daily_pct: 25, fee_off_pct: 50, badge: "💎" },
+  mini: {
+    enabled: true,
+    memory: { enabled: true, pairs: 6, reward: 40, per_day: 3, max_moves: 16 },
+    trivia: { enabled: true, per_correct: 15, per_day: 2, rounds: 5, questions: QUIZ },
+    hunt: { enabled: true, min: 10, max: 120, per_day: 3 },
+  },
   ab: { enabled: false, name: "Daily reward test", mult_b: 1.2 },
   autoban: { enabled: false, min_score: 5, action: "freeze", max_per_run: 20 },
   moves: { enabled: true, options: [5, 10, 20] },
@@ -111,7 +153,36 @@ const bool = (v: any) => v === true || v === "true" || v === 1;
 const idOk = (v: any, fb: string) => { const s = String(v ?? "").toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 20); return s || fb; };
 
 /** sanitise one section; throws Error(message) on invalid input */
+const parseQuiz = (v: any): Quiz[] => {
+  const rows = Array.isArray(v) ? v : String(v ?? "").split("\n");
+  const out: Quiz[] = [];
+  for (const r of rows) {
+    if (typeof r === "string") {
+      // "Question | right answer | wrong 1 | wrong 2 | wrong 3"
+      const p = r.split("|").map((x) => str(x, 120)).filter(Boolean);
+      if (p.length >= 3 && p.length <= 5) out.push({ q: p[0], a: p.slice(1), c: 0 });
+    } else if (r && typeof r.q === "string" && Array.isArray(r.a) && r.a.length >= 2) {
+      const a = r.a.map((x: any) => str(x, 120)).filter(Boolean).slice(0, 4);
+      const c = Math.floor(Number(r.c));
+      if (a.length >= 2 && Number.isFinite(c) && c >= 0 && c < a.length) out.push({ q: str(r.q, 160), a, c });
+    }
+  }
+  return out.slice(0, 300);
+};
+
 export const SECTIONS: { [K in keyof Cfg2]: (v: any, cur: Cfg2[K]) => Cfg2[K] } = {
+  xfer: (v) => ({
+    usdt: { enabled: bool(v?.usdt?.enabled), fee_pct: num(v?.usdt?.fee_pct, 0, 20, 0.5), min: num(v?.usdt?.min, 0.01, 1e6, 1), daily: num(v?.usdt?.daily, 0, 1e7, 500) },
+    hold: { tfuel: int(v?.hold?.tfuel, 0, 1e13, 0), usdt: num(v?.hold?.usdt, 0, 1e7, 0), minutes: int(v?.hold?.minutes, 1, 1440, 10) },
+    links: { request: bool(v?.links?.request), claim: bool(v?.links?.claim), days: int(v?.links?.days, 1, 60, 7) },
+  }),
+  vip: (v) => ({ enabled: bool(v?.enabled), price: Math.round(num(v?.price, 0.01, 10000, 3) * 100) / 100, days: int(v?.days, 1, 365, 30), daily_pct: num(v?.daily_pct, 0, 500, 25), fee_off_pct: num(v?.fee_off_pct, 0, 100, 50), badge: str(v?.badge, 4) || "💎" }),
+  mini: (v) => ({
+    enabled: bool(v?.enabled),
+    memory: { enabled: bool(v?.memory?.enabled), pairs: int(v?.memory?.pairs, 3, 10, 6), reward: int(v?.memory?.reward, 0, 1e7, 40), per_day: int(v?.memory?.per_day, 1, 50, 3), max_moves: int(v?.memory?.max_moves, 4, 100, 16) },
+    trivia: { enabled: bool(v?.trivia?.enabled), per_correct: int(v?.trivia?.per_correct, 0, 1e6, 15), per_day: int(v?.trivia?.per_day, 1, 20, 2), rounds: int(v?.trivia?.rounds, 1, 20, 5), questions: (() => { const q = parseQuiz(v?.trivia?.questions); return q.length >= 5 ? q : QUIZ; })() },
+    hunt: { enabled: bool(v?.hunt?.enabled), min: int(v?.hunt?.min, 0, 1e7, 10), max: Math.max(int(v?.hunt?.min, 0, 1e7, 10), int(v?.hunt?.max, 0, 1e7, 120)), per_day: int(v?.hunt?.per_day, 1, 50, 3) },
+  }),
   ab: (v) => ({ enabled: bool(v?.enabled), name: str(v?.name, 40) || "Reward test", mult_b: Math.round(num(v?.mult_b, 0.1, 5, 1.2) * 100) / 100 }),
   autoban: (v) => ({ enabled: bool(v?.enabled), min_score: int(v?.min_score, 2, 20, 5), action: v?.action === "flag" ? "flag" : "freeze", max_per_run: int(v?.max_per_run, 1, 200, 20) }),
   moves: (v) => ({ enabled: bool(v?.enabled), options: arrN(v?.options, 5, 90) }),
