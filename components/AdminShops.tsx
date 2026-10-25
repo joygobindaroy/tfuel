@@ -26,6 +26,7 @@ export function ShopsPage({ call }: { call: Call }) {
   const [f, setF] = useState<any>(null);
   const [secret, setSecret] = useState<{ id: string; secret: string } | null>(null);
   const [filter, setFilter] = useState("all");
+  const [tests, setTests] = useState<Record<string, any>>({});
   const load = useCallback(async () => {
     const [a, b] = await Promise.all([call({ action: "shopList" }), call({ action: "shopOrders" })]);
     if (a) setD(a);
@@ -90,11 +91,26 @@ export function ShopsPage({ call }: { call: Call }) {
               <div className="xs muted">ID {s.id} · {s.allow_tfuel ? "TFUEL " : ""}{s.allow_usdt ? "USDT" : ""}{s.webhook ? " · webhook on" : ""}</div>
             </div>
             <div className="gap">
+              <button className="btn sec sm" onClick={async () => { const r: any = await call({ action: "shopTest", id: s.id }); if (r) setTests((t) => ({ ...t, [s.id]: r })); }}>Test connection</button>
               <button className="btn sec sm" onClick={() => setF({ ...s, fee_pct: String(s.fee_pct), max_usd: String(s.max_usd) })}>Edit</button>
               <button className="btn sec sm" onClick={async () => { if (confirm("Create a new secret? The old one stops working immediately.")) { const r: any = await call({ action: "shopRotate", id: s.id }, "New secret created"); if (r) setSecret({ id: s.id, secret: r.secret }); } }}>New secret</button>
               <button className="btn danger sm" onClick={async () => { if (confirm("Delete this shop? Existing orders stay in the log.")) { if (await call({ action: "shopDelete", id: s.id }, "Deleted")) load(); } }}><Icon name="trash" size={14} /></button>
             </div>
           </div>
+          {tests[s.id] && (
+            <div style={{ marginTop: 10 }}>
+              <div className="b sm">{tests[s.id].ok ? "✅ All checks passed" : "⚠️ Something needs attention"}</div>
+              {tests[s.id].checks.map((c: any, i: number) => <div key={i} className="xs" style={{ marginTop: 3 }}>{c.ok ? "✅" : "❌"} <b>{c.name}</b> — {c.note}</div>)}
+            </div>
+          )}
+          <details style={{ marginTop: 10 }}>
+            <summary className="b sm" style={{ cursor: "pointer" }}>Copy-paste code for {s.name}</summary>
+            <div className="xs muted" style={{ margin: "6px 0" }}>1) Paste once before &lt;/body&gt; on the shop website (works only on {s.domain}):</div>
+            <Code>{`<script src="${base}/shop.js" data-key="${s.pk}" async></script>`}</Code>
+            <div className="xs muted" style={{ margin: "6px 0" }}>2) Any button like this now opens the payment in the Mini App:</div>
+            <Code>{`<button data-tfuel-pay data-amount="5" data-title="Pro plan">Pay $5 with TFUEL / USDT</button>`}</Code>
+            <div className="xs muted" style={{ marginTop: 6 }}>Optional: <code>data-ref</code> (your order id), <code>data-return</code> (page to return to). The amount comes from the browser, so confirm the paid order in the webhook or Orders list before delivering. For full user login and secure server-side orders use the Node.js example below.</div>
+          </details>
         </div>
       ))}
 

@@ -26,7 +26,7 @@ interface Me {
   banned?: boolean;
   maintenance?: boolean;
   message?: string;
-  user: { id: string; name?: string; balance: number; energy: number; energyCost: number; refillAt: number | null; refillHours: number; maxEnergy: number; regen: number; perTap: number };
+  user: { id: string; code?: string; name?: string; balance: number; energy: number; energyCost: number; refillAt: number | null; refillHours: number; maxEnergy: number; regen: number; perTap: number };
   tasks: Task[];
   sites: Site[];
   run: { site_id: string; step_done: number; total: number; status: string } | null;
@@ -703,8 +703,8 @@ function Profile({ initPage, me, cpt, balance, go, say, reload, onCur }: { initP
   return (
     <>
       <div className="section">
-        <h2>{me.user.name || "Profile"}</h2>
-        <span className="pill">ID {me.user.id}</span>
+        <h2 style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{me.user.name || "Profile"}</h2>
+        <button type="button" className="pill" aria-label="Copy my unique ID" style={{ display: "inline-flex", alignItems: "center", gap: 5 }} onClick={() => { try { navigator.clipboard.writeText(me.user.code || ""); say("Your unique ID was copied", true); } catch {} }}>ID {me.user.code || "…"} <Icon name="copy" size={12} /></button>
         <LevelPill ret={me.ret} />
       </div>
 

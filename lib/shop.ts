@@ -50,7 +50,7 @@ const SKEW_MS = 5 * 60000;
 
 export const sign = (secret: string, ts: string, body: string) => crypto.createHmac("sha256", secret).update(`${ts}.${body}`).digest("hex");
 
-async function rawBody(req: NextApiRequest): Promise<string> {
+export async function rawBody(req: NextApiRequest): Promise<string> {
   const chunks: Buffer[] = [];
   let n = 0;
   for await (const c of req) {
@@ -225,3 +225,69 @@ export async function refundOrder(orderId: string, by: string): Promise<Order> {
 
 export const newOrderId = () => sortableId() + randomToken().slice(0, 8);
 export { toU };
+
+
+/** Creates (or returns the same) order for a shop reference. Used by the signed server API and by the public pay button. */
+export async function createShopOrder(id: string, shop: Shop, s: Settings, a: { ref: string; usd: number; title: string; uid?: string; ret?: string }) {
+  const { ref, usd, uid } = a;
+  const title = String(a.title || "").replace(/[\u0000-\u001f]/g, " ").trim().slice(0, 80);
+  const ret = String(a.ret || "");
+  if (!/^[\w.-]{1,64}$/.test(ref)) throw new HttpError(400, "bad_ref");
+  if (!Number.isFinite(usd) || usd < 0.01 || usd > shop.max_usd) throw new HttpError(400, "bad_amount");
+  if (uid !== undefined && !/^\d{1,20}$/.test(uid)) throw new HttpError(400, "bad_user");
+  if (ret && !ret.startsWith(shop.domain + "/") && ret !== shop.domain) throw new HttpError(400, "bad_return_url");
+  if (!s.referral_link) throw new HttpError(503, "app_link_not_set");
+  if (uid && !(await db().ref(`shop_links/${uid}/${id}`).get()).exists()) throw new HttpError(403, "not_connected");
+  const now = Date.now();
+  const oid = newOrderId();
+  const claim = await db().ref(`shop_orders_ref/${id}/${ref}`).transaction((c: any) => (c === null ? oid : undefined));
+  const link = (x: string) => `${s.referral_link}?startapp=pay_${x}`;
+  if (!claim.committed) {
+    const orderId = String((await db().ref(`shop_orders_ref/${id}/${ref}`).get()).val());
+    const ex = (await db().ref(`shop_orders/${orderId}`).get()).val() as Order | null;
+    if (ex && Math.abs(ex.usd_u - toU(usd)) > 0) throw new HttpError(409, "ref_conflict");
+    if (ex && ex.status === "open" && ex.exp < now) await db().ref(`shop_orders/${orderId}`).update({ exp: now + ORDER_TTL_MS });
+    const cur = (await db().ref(`shop_orders/${orderId}`).get()).val() as Order;
+    return { order_id: orderId, status: cur.status, pay_url: link(orderId), expires_at: cur.exp };
+  }
+  const o: Order = { shop: id, ref, usd_u: toU(usd), title, status: "open", created_at: now, exp: now + ORDER_TTL_MS, ...(uid ? { uid } : {}), ...(ret ? { return_url: ret } : {}) };
+  await db().ref(`shop_orders/${oid}`).set(o);
+  return { order_id: oid, status: "open" as const, pay_url: link(oid), expires_at: o.exp, usd: fromU(o.usd_u) };
+}
+
+/** Public (non-secret) key for the pay button; created on first use */
+export async function shopPk(id: string): Promise<string> {
+  const cur = (await db().ref(`shops/${id}/pk`).get()).val();
+  if (typeof cur === "string" && cur) return cur;
+  const pk = "pk_" + randomToken().slice(0, 20);
+  await db().ref(`shops/${id}/pk`).set(pk);
+  await db().ref(`shop_pk/${pk}`).set(id);
+  return pk;
+}
+
+/** Admin: checklist so a broken connection is easy to find */
+export async function shopTest(id: string): Promise<{ ok: boolean; checks: { name: string; ok: boolean; note: string }[] }> {
+  const s = await getSettings(true);
+  const shop = (await db().ref(`shops/${id}`).get()).val() as Shop | null;
+  if (!shop) throw new HttpError(404, "Shop not found");
+  const checks: { name: string; ok: boolean; note: string }[] = [];
+  const add = (name: string, ok: boolean, note: string) => checks.push({ name, ok, note });
+  add("Shop payments switched on", s.shops_enabled && shop.enabled, s.shops_enabled ? (shop.enabled ? "On" : "This shop is switched off") : "The master switch (Enable shop payments) is off");
+  add("Bot link set", !!s.referral_link, s.referral_link ? s.referral_link : "Set Settings → Referral link (https://t.me/yourbot/app). Payment links open the Mini App through it.");
+  add("Currencies", shop.allow_tfuel || shop.allow_usdt, [shop.allow_tfuel ? "TFUEL" : "", shop.allow_usdt ? "USDT" : ""].filter(Boolean).join(" + ") || "None allowed");
+  const probe = async (name: string, url: string, init?: RequestInit) => {
+    try {
+      const r = await fetch(url, { ...init, signal: AbortSignal.timeout(6000), redirect: "manual" });
+      add(name, r.status < 500, `HTTP ${r.status}`);
+    } catch (e: any) { add(name, false, "Not reachable: " + String(e?.message || e).slice(0, 80)); }
+  };
+  await probe("Shop website", shop.domain);
+  await probe("Login page", shop.login_url + (shop.login_url.includes("?") ? "&" : "?") + "code=test");
+  if (shop.webhook) {
+    const secret = open(shop.secret);
+    const body = JSON.stringify({ event: "ping", shop: id, at: Date.now() });
+    const ts = String(Date.now());
+    await probe("Webhook (signed ping)", shop.webhook, { method: "POST", headers: { "content-type": "application/json", "x-shop-id": id, "x-timestamp": ts, "x-signature": sign(secret || "", ts, body) }, body });
+  } else add("Webhook", true, "Not set (optional). Without it, check paid orders in Admin → Shops → Orders.");
+  return { ok: checks.every((c) => c.ok), checks };
+}

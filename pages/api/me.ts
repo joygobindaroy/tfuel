@@ -12,6 +12,7 @@ import { markComeback, retentionState } from "@/lib/retention";
 import { trackLogin } from "@/lib/devices";
 import { missionsView } from "@/lib/missions";
 import { pickAd } from "@/lib/ads";
+import { getRefCode } from "@/lib/refcode";
 import { engState, levelCheck } from "@/lib/eng";
 import { pendingMining } from "@/lib/user";
 import { rigsView } from "@/lib/rigs";
@@ -128,6 +129,7 @@ export default route(async (req, res) => {
     success: true,
     user: {
       id: user.id,
+      code: await getRefCode(user.id).catch(() => ""),
       name: user.first_name,
       balance: u.balance,
       energy: Math.round(en * 100) / 100,

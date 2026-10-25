@@ -1,0 +1,38 @@
+import { makeDb } from "./fakedb";
+(globalThis as any).__fakeDb = makeDb();
+process.env.SERVER_SECRET = "x".repeat(32);
+process.env.BOT_TOKEN = "123:abc";
+import assert from "node:assert/strict";
+(globalThis as any).__fakeMail = async () => {};
+(globalThis as any).fetch = async (u: string) => ({ status: 200, json: async () => ({ ok: true, result: {} }) });
+(async () => {
+  const { db } = await import("../lib/firebase");
+  const { sendCoins } = await import("../lib/transfer");
+  const { createShopOrder, shopPk, shopTest } = await import("../lib/shop");
+  const { seal } = await import("../lib/secretbox");
+  const { getSettings, invalidateSettings } = await import("../lib/settings");
+  const old = Date.now() - 3 * 86400000;
+  await db().ref("users/1").set({ name: "Alice", balance: 100000, created_at: old });
+  await db().ref("users/2").set({ name: "Bob", balance: 0, created_at: old });
+  await db().ref("settings").set({ send_enabled: true, send_fee_pct: 1, send_min: 1000, send_daily_limit: 50000, send_min_age_hours: 24, shops_enabled: true, referral_link: "https://t.me/b/app" });
+  invalidateSettings();
+  const s = await getSettings(true);
+  const r: any = await sendCoins({ id: "1", name: "Alice" }, "2", 5000, s);
+  assert.ok(/^TF[0-9A-F]{40}$/.test(String(r.txid)), "transaction hash present: " + r.txid);
+
+  const shop = { name: "Shop", domain: "https://shop.example.com", login_url: "https://shop.example.com/auth", secret: seal("tfs_x"), enabled: true, fee_pct: 0, allow_tfuel: true, allow_usdt: true, max_usd: 100, created_at: 1 };
+  await db().ref("shops/shop-1").set(shop);
+  const pk = await shopPk("shop-1");
+  assert.ok(/^pk_/.test(pk));
+  assert.equal(await shopPk("shop-1"), pk, "stable key");
+  assert.equal((await db().ref(`shop_pk/${pk}`).get()).val(), "shop-1");
+  const o1: any = await createShopOrder("shop-1", shop as any, s, { ref: "r1", usd: 5, title: "Plan" });
+  assert.ok(o1.pay_url.includes("startapp=pay_"));
+  const o2: any = await createShopOrder("shop-1", shop as any, s, { ref: "r1", usd: 5, title: "Plan" });
+  assert.equal(o1.order_id, o2.order_id, "same ref → same order");
+  await assert.rejects(createShopOrder("shop-1", shop as any, s, { ref: "r1", usd: 6, title: "x" }), /ref_conflict/);
+  await assert.rejects(createShopOrder("shop-1", shop as any, s, { ref: "r2", usd: 500, title: "x" }), /bad_amount/);
+  const t = await shopTest("shop-1");
+  assert.ok(t.checks.length >= 5 && t.checks[0].ok);
+  console.log("v19.3 OK");
+})().catch((e) => { console.error("FAIL", e); process.exit(1); });

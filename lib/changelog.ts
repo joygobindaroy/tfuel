@@ -1,5 +1,6 @@
 /** Short highlights shown in Admin → Controls → Version (full history is in CHANGELOG.md) */
 export const CHANGELOG_HIGHLIGHTS: { v: string; text: string }[] = [
+  { v: "19.3", text: "Unique ID in profile, Send with receiver name + OTP + TRX hash, deposit from user, shop copy-paste code + connection test." },
   { v: "19.2", text: "Price-move alerts, weekly auto-convert, CSV export, address chips, Bangla language, home layout, A/B reward test, auto-protect, backup & money snapshots." },
   { v: "19.1", text: "Level-up rewards, lucky box, rewarded boost, clan announcement, friend gift, invite milestones, creator program, season pass, name plate, clan tips." },
   { v: "19.0", text: "Sponsor marketplace (paid promotion slots, admin review, refunds, reports), mission packs, pinned messages, bulk discounts, revenue panel." },

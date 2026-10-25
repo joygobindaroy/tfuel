@@ -82,17 +82,20 @@ function Tracker({ status }: { status: string }) {
 }
 
 /* ------------------------------ Deposit ------------------------------ */
-type Method = "crypto" | "binance" | "stars";
+type Method = "crypto" | "binance" | "stars" | "user";
 
 export function DepositPage({ say, reload, onBack, onHistory, onBuy }: { say: Say; reload: () => void; onBack: () => void; onHistory: () => void; onBuy?: () => void }) {
   const { m, load } = useCash(say);
+  const [userOn, setUserOn] = useState(false);
+  useEffect(() => { api<any>("send", { action: "info" }).then((r) => setUserOn(!!r.enabled)).catch(() => {}); }, []);
   const methods = useMemo(() => {
     const r: { k: Method; t: string; s: string }[] = [];
     if (m?.deposit.enabled && m.deposit.networks.length) r.push({ k: "crypto", t: "Crypto", s: "USDT on-chain" });
     if (m?.deposit.binanceId) r.push({ k: "binance", t: "Binance ID", s: "No fee" });
     if (m?.deposit.stars) r.push({ k: "stars", t: "Stars", s: "Telegram" });
+    if (userOn) r.push({ k: "user", t: "From user", s: "TFUEL" });
     return r;
-  }, [m]);
+  }, [m, userOn]);
   const [method, setMethod] = useState<Method | null>(null);
   const cur = method && methods.find((x) => x.k === method) ? method : methods[0]?.k;
   const done = () => { load(); reload(); };
@@ -119,6 +122,7 @@ export function DepositPage({ say, reload, onBack, onHistory, onBuy }: { say: Sa
           {cur === "crypto" && <CryptoDeposit m={m} say={say} done={done} />}
           {cur === "binance" && m.deposit.binanceId && <BinanceDeposit id={m.deposit.binanceId.id} min={m.deposit.binanceId.min} say={say} done={done} />}
           {cur === "stars" && m.deposit.stars && <StarsDeposit cfg={m.deposit.stars} say={say} done={done} />}
+          {cur === "user" && <ReceiveFromUser say={say} />}
           {m.balances.usdt > 0 && onBuy && (
             <div className="card" style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <div style={{ flex: 1 }}><div className="title">Ready to trade?</div><div className="sub">Use your USDT to buy TFUEL at the live price.</div></div>
@@ -148,6 +152,45 @@ function useIntent(netId: string, say: Say) {
 
 function Steps({ items }: { items: string[] }) {
   return <ol className="steps">{items.map((s, i) => <li key={i}>{s}</li>)}</ol>;
+}
+
+/** Receive TFUEL from another user: show my unique ID (+ QR), share it, and list what I received */
+function ReceiveFromUser({ say }: { say: Say }) {
+  const [code, setCode] = useState("");
+  const [cpt, setCpt] = useState(1000);
+  const [items, setItems] = useState<{ id: string; c: number; n: string; at: number }[] | null>(null);
+  useEffect(() => {
+    api<any>("send", { action: "info" }).then((r) => { setCode(r.code || ""); if (r.cpt) setCpt(r.cpt); }).catch((e) => say(errText(e)));
+    api<any>("send", { action: "received" }).then((r) => setItems(r.items)).catch(() => setItems([]));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const share = () => {
+    const text = `Send me TFUEL on TFUEL Bot — my unique ID: ${code}`;
+    const w: any = typeof window !== "undefined" ? window : null;
+    const url = `https://t.me/share/url?url=${encodeURIComponent(" ")}&text=${encodeURIComponent(text)}`;
+    try { w?.Telegram?.WebApp?.openTelegramLink ? w.Telegram.WebApp.openTelegramLink(url) : w?.open(url, "_blank"); } catch {}
+  };
+  return (
+    <div className="card">
+      <div className="row"><div className="left"><div className="ico"><Icon name="user" /></div><div><div className="title">Receive from a user</div><div className="sub">Instant · TFUEL · from another TFUEL user</div></div></div></div>
+      {code ? (
+        <>
+          <Qr text={code} />
+          <div className="xs muted" style={{ textAlign: "center" }}>Your unique ID</div>
+          <div className="addrbox" style={{ marginTop: 4 }}><span className="num" style={{ fontSize: 18 }}>{code}</span><Copy text={code} say={say} /></div>
+          <div style={{ marginTop: 10 }}><button className="btn sec block" onClick={share}><Icon name="send" size={15} /> Share my ID</button></div>
+          <Steps items={["Share your unique ID (or let them scan the QR).", "They open Profile → Withdraw → Internal transfer and enter your ID.", "They see your name before sending. TFUEL arrives in your balance instantly."]} />
+        </>
+      ) : <SkelList />}
+      <div className="title" style={{ fontSize: 14, marginTop: 14 }}>Recently received</div>
+      {items === null && <div className="small muted">Loading…</div>}
+      {items && items.length === 0 && <div className="small muted">Nothing received yet.</div>}
+      {items?.map((x) => (
+        <div className="hist" key={x.id}>
+          <div><div className="title" style={{ fontSize: 14 }}>+{(x.c / cpt).toLocaleString("en-US", { maximumFractionDigits: 3 })} TFUEL</div><div className="sub">{x.n.replace(/\s*·?\s*TF[0-9A-F]{40}/, "")} · {new Date(x.at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</div></div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function CryptoDeposit({ m, say, done }: { m: CashM; say: Say; done: () => void }) {

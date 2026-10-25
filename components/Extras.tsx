@@ -8,13 +8,15 @@ export interface ReceiptItem { id: string; t: string; c: number; u: number; n: s
 export function ReceiptSheet({ item, label, cpt, onClose }: { item: ReceiptItem; label: string; cpt: number; onClose: () => void }) {
   const when = new Date(item.at).toLocaleString();
   const amt = [item.c ? `${item.c > 0 ? "+" : ""}${fmtTf(item.c, cpt)} TFUEL` : "", item.u ? `${item.u > 0 ? "+" : ""}${fmtUsd(Math.abs(item.u))} USDT` : ""].filter(Boolean).join("  ");
-  const text = `Receipt\n${label}\n${amt}\n${when}\nTransaction ID: ${item.id}`;
+  const text = `Receipt\n${label}\n${amt}\n${when}\n${(item.n || "").match(/TF[0-9A-F]{40}/) ? "Transaction hash: " + (item.n || "").match(/TF[0-9A-F]{40}/)![0] : "Transaction ID: " + item.id}`;
   const share = () => {
     const w: any = typeof window !== "undefined" ? window : null;
     const url = `https://t.me/share/url?url=${encodeURIComponent(" ")}&text=${encodeURIComponent(text)}`;
     try { w?.Telegram?.WebApp?.openTelegramLink ? w.Telegram.WebApp.openTelegramLink(url) : w?.open(url, "_blank"); } catch {}
   };
-  const rows: [string, string][] = [["Type", label], ["Amount", amt || "—"], ["Date", when], ["Note", item.n || ""], ["Transaction ID", item.id]];
+  const hash = (item.n || "").match(/TF[0-9A-F]{40}/)?.[0] || "";
+  const note = (item.n || "").replace(/\s*·?\s*TF[0-9A-F]{40}/, "").trim();
+  const rows: [string, string][] = [["Type", label], ["Amount", amt || "—"], ["Date", when], ["Note", note], ...(hash ? [["Transaction hash", hash] as [string, string]] : [["Transaction ID", item.id] as [string, string]])];
   return (
     <div className="sheet-bg" onClick={onClose}>
       <div className="sheet" onClick={(e) => e.stopPropagation()}>

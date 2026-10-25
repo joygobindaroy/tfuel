@@ -7,7 +7,7 @@ import { ServerValue } from "firebase-admin/database";
 import { ArticleSite, normUrl } from "@/lib/chain";
 import { sortableId, randomToken } from "@/lib/crypto";
 import { seal } from "@/lib/secretbox";
-import { refundOrder } from "@/lib/shop";
+import { refundOrder, shopPk, shopTest } from "@/lib/shop";
 import { adminLog, dayKey } from "@/lib/log";
 import { getSettings, invalidateSettings, parseSettings } from "@/lib/settings";
 import { tgCall, webhookSecret } from "@/lib/telegram";
@@ -493,7 +493,8 @@ export default route(async (req, res) => {
     case "shopList": {
       const shops = ((await db().ref("shops").get()).val() || {}) as Record<string, any>;
       const st = await getSettings(true);
-      return void res.json({ success: true, enabled: st.shops_enabled, shops: Object.entries(shops).map(([id, x]) => ({ id, name: x.name, domain: x.domain, login_url: x.login_url, webhook: x.webhook || "", enabled: !!x.enabled, fee_pct: x.fee_pct, allow_tfuel: !!x.allow_tfuel, allow_usdt: !!x.allow_usdt, max_usd: x.max_usd, created_at: x.created_at })) });
+      for (const [sid, x] of Object.entries(shops)) if (!x.pk) x.pk = await shopPk(sid);
+      return void res.json({ success: true, enabled: st.shops_enabled, shops: Object.entries(shops).map(([id, x]) => ({ id, pk: x.pk, name: x.name, domain: x.domain, login_url: x.login_url, webhook: x.webhook || "", enabled: !!x.enabled, fee_pct: x.fee_pct, allow_tfuel: !!x.allow_tfuel, allow_usdt: !!x.allow_usdt, max_usd: x.max_usd, created_at: x.created_at })) });
     }
     case "shopSave": {
       const name = clean(b.name, 40);
@@ -522,6 +523,11 @@ export default route(async (req, res) => {
       await adminLog(who, "shop_saved", { id, name });
       return void res.json({ success: true, id, secret });
     }
+    case "shopTest": {
+      const id = String(b.id || "");
+      if (!idRe.test(id)) throw new HttpError(400, "Invalid id");
+      return void res.json({ success: true, ...(await shopTest(id)) });
+    }
     case "shopRotate": {
       const id = String(b.id || "");
       if (!idRe.test(id) || !(await db().ref(`shops/${id}`).get()).exists()) throw new HttpError(404, "Shop not found");
@@ -533,6 +539,8 @@ export default route(async (req, res) => {
     case "shopDelete": {
       const id = String(b.id || "");
       if (!idRe.test(id)) throw new HttpError(400, "Invalid id");
+      const oldPk = (await db().ref(`shops/${id}/pk`).get()).val();
+      if (oldPk) await db().ref(`shop_pk/${oldPk}`).remove();
       await db().ref(`shops/${id}`).remove();
       await adminLog(who, "shop_deleted", { id });
       return void res.json({ success: true });
