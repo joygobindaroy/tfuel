@@ -64,9 +64,9 @@ import assert from "node:assert/strict";
   await assert.rejects(X.reqHold(rq.id, "2"), /send_self/);
   await X.reqHold(rq.id, "1");
   await assert.rejects(X.reqHold(rq.id, "1"), /request_closed/);
-  await X.reqDone(rq.id, false);
+  await X.reqDone(rq.id, false, "", "1");
   await X.reqHold(rq.id, "1");
-  await X.reqDone(rq.id, true, "TFX");
+  await X.reqDone(rq.id, true, "TFX", "1");
   assert.equal((await X.getRequest(rq.id)).st, "paid");
 
   // claim link

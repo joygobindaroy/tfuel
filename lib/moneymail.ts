@@ -19,13 +19,13 @@ const META: Record<MoneyKind, { subject: string; title: string; intro: string; t
 };
 
 /** লেনদেনের ইমেইল: admin "email_money" চালু + user বন্ধ না করলে + verified email থাকলে। best-effort */
-export async function mailMoney(uid: string, kind: MoneyKind, rows: [string, string][], extra: { intro?: string } = {}) {
+export async function mailMoney(uid: string, kind: MoneyKind, rows: [string, string][], extra: { intro?: string; button?: { label: string; url: string } } = {}) {
   try {
     const s = await getSettings();
     if (!s.email_money) return;
     if ((await db().ref(`user_prefs/${uid}/mail_money`).get()).val() === false) return;
     const m = META[kind];
-    await mailUser(uid, m.subject, { title: m.title, intro: extra.intro || m.intro, tone: m.tone, rows: [...rows, ["Time", new Date().toISOString().replace("T", " ").slice(0, 19) + " (UTC)"]], warning: kind === "sent" ? "If you didn't make this transfer, contact support immediately." : undefined });
+    await mailUser(uid, m.subject, { title: m.title, intro: extra.intro || m.intro, tone: m.tone, button: extra.button, rows: [...rows, ["Time", new Date().toISOString().replace("T", " ").slice(0, 19) + " (UTC)"]], warning: kind === "sent" ? "If you didn't make this transfer, contact support immediately." : undefined });
   } catch (e) {
     console.error("mailMoney", e);
   }

@@ -14,6 +14,14 @@ export default function EngagePage({ call }: { call: Call }) {
   const [promos, setPromos] = useState<any[]>([]);
   const [lb, setLb] = useState<any>(null);
   const [np, setNp] = useState({ code: "", coins: "", max: "100", days: "7", note: "" });
+  const [gb, setGb] = useState({ count: "50", coins: "", days: "30", prefix: "GIFT" });
+  const makeBatch = async () => {
+    const r: any = await call({ action: "promoBatch", ...gb }, "Codes created");
+    if (!r) return;
+    const blob = new Blob(["code,coins\n" + r.codes.map((c: string) => `${c},${gb.coins}`).join("\n")], { type: "text/csv" });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `gift-codes-${gb.prefix}.csv`; a.click();
+    loadAll();
+  };
 
   const loadAll = useCallback(async () => {
     const [a, b, c, d] = await Promise.all([
@@ -193,6 +201,18 @@ export default function EngagePage({ call }: { call: Call }) {
         <div className="xs muted" style={{ marginTop: 8 }}>
           Anti-cheat: the server times each ad and enforces daily limits. For stronger proof, set <code>ADS_SECRET</code> in Vercel and add this Reward URL in Adsgram:
           {" "}<code>https://YOUR-SITE/api/ad-callback?userid=[userId]&amp;secret=ADS_SECRET</code> — then rewards are only paid after Adsgram confirms the view.
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="title">Gift code batch</div>
+        <div className="sub">Create many single-use codes at once (each works for one person, once). A CSV file downloads right away — hand the codes out one by one. Users redeem them under Promo code.</div>
+        <div className="grid3" style={{ alignItems: "end" }}>
+          <div><label>How many (max 500)</label><input inputMode="numeric" value={gb.count} onChange={(e) => setGb({ ...gb, count: e.target.value })} /></div>
+          <div><label>Reward each (coins)</label><input inputMode="numeric" value={gb.coins} onChange={(e) => setGb({ ...gb, coins: e.target.value })} /></div>
+          <div><label>Valid for (days, 0 = forever)</label><input inputMode="numeric" value={gb.days} onChange={(e) => setGb({ ...gb, days: e.target.value })} /></div>
+          <div><label>Prefix</label><input value={gb.prefix} onChange={(e) => setGb({ ...gb, prefix: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8) })} /></div>
+          <div><button className="btn" disabled={!(Number(gb.coins) > 0) || !(Number(gb.count) > 0)} onClick={makeBatch}>Create &amp; download CSV</button></div>
         </div>
       </div>
 

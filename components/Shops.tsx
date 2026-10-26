@@ -10,7 +10,7 @@ const when = (t: number) => new Date(t).toLocaleString("en-GB", { day: "numeric"
 
 /* ---------------- Pay a shop order (opened from the shop via ?startapp=pay_<id>) ---------------- */
 interface Order {
-  order: { id: string; shop: string; title: string; usd: number; status: string; exp: number; return_url: string };
+  order: { id: string; shop: string; title: string; usd: number; status: string; exp: number; return_url: string; sub?: number };
   pay: { tfuel: { coins: number; balance: number } | null; usdt: { amount: number; balance: number } | null };
   pin: boolean;
   pref: "tfuel" | "usdt";
@@ -78,6 +78,7 @@ export function PaySheet({ id, cpt, say, onClose, reload }: { id: string; cpt: n
                 {opt("tfuel")}
                 {opt("usdt")}
                 {o.pin && (<><label>Withdraw PIN</label><input type="password" inputMode="numeric" maxLength={6} autoComplete="off" value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} /></>)}
+                {!!o.order.sub && <div className="banner warn" style={{ marginTop: 10 }}><Icon name="clock" size={18} /><span>Subscription: this amount is charged now and again every {o.order.sub} days from your balance. Cancel any time in Profile → Partner shops.</span></div>}
                 <div style={{ marginTop: 12 }}><button className="btn block" disabled={busy || !can || (o.pin && pin.length < 4)} onClick={pay}>{busy ? "Paying…" : "Confirm payment"}</button></div>
                 <div className="xs muted" style={{ marginTop: 8, textAlign: "center" }}>TFUEL price is locked at the live rate when you confirm.</div>
               </>
@@ -96,6 +97,8 @@ interface OrderRow { id: string; shop_name?: string; shop?: string; title?: stri
 export function ShopsPage({ say, onBack, cpt }: { say: Say; onBack: () => void; cpt: number }) {
   const [d, setD] = useState<{ enabled: boolean; shops: ShopRow[]; orders: OrderRow[] } | null>(null);
   const [busy, setBusy] = useState("");
+  const [subs, setSubs] = useState<any[]>([]);
+  useEffect(() => { api<any>("shop-user", { action: "subs" }).then((r) => setSubs(r.items)).catch(() => {}); }, []);
   const load = useCallback(() => { cachedApi<any>("shop-user", { action: "list" }, setD).catch((e) => say(errText(e))); }, [say]);
   useEffect(() => { load(); }, [load]);
   const open = async (s: ShopRow) => {
@@ -138,6 +141,19 @@ export function ShopsPage({ say, onBack, cpt }: { say: Say; onBack: () => void; 
               </div>
             </div>
           ))}
+          {subs.length > 0 && (
+            <>
+              <div className="mhead">Subscriptions</div>
+              <div className="card">
+                {subs.map((x) => (
+                  <div className="hist" key={x.id}>
+                    <div style={{ minWidth: 0 }}><div className="title num">{fmtUsd(x.usd)} / {x.every} days</div><div className="sub">{x.shop}{x.title ? " · " + x.title : ""} · next {when(x.next)}</div></div>
+                    <button className="btn danger sm" onClick={async () => { if (!confirm("Cancel this subscription?")) return; try { const r: any = await api("shop-user", { action: "sub_cancel", id: x.id }); setSubs(r.items); say("Cancelled", true); } catch (e: any) { say(errText(e)); } }}>Cancel</button>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
           <div className="mhead">Purchases</div>
           {d.orders.length === 0 && <Empty icon="wallet" title="No purchases yet" hint="Your shop payments will be listed here." />}
           {d.orders.length > 0 && (
@@ -230,13 +246,15 @@ export function SupportPage({ say, onBack, faq = [] }: { say: Say; onBack: () =>
 /* ---------------- Invite card (Settings → Account) ---------------- */
 export function InviteCard({ say }: { say: Say }) {
   const [link, setLink] = useState<string | null>(null);
-  useEffect(() => { api<any>("growth").then((g) => setLink(g.referral?.enabled ? g.referral.link : "")).catch(() => setLink("")); }, []);
+  const [poster, setPoster] = useState("");
+  useEffect(() => { api<any>("growth").then((g) => { setLink(g.referral?.enabled ? g.referral.link : ""); setPoster(g.referral?.poster || ""); }).catch(() => setLink("")); }, []);
   if (!link) return link === "" ? <div className="small muted">Referral link isn&apos;t available right now.</div> : <div className="small muted">Loading…</div>;
   return (
     <div>
       <div className="title">Your referral link</div>
       <Qr text={link} size={150} />
       <div className="addrbox"><span>{link}</span><CopyBtn text={link} /></div>
+      {poster && <button className="btn sec block" style={{ marginTop: 10 }} onClick={() => openLink(poster)}>🖼 Poster (print / save)</button>}
       <button className="btn sec block" style={{ marginTop: 10 }} onClick={() => openTgLink(`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent("Earn TFUEL by tapping and reading — join me!")}`)}>Share on Telegram</button>
     </div>
   );

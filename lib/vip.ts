@@ -24,7 +24,9 @@ import type { UserRecord } from "./user";
 export async function vipView(uid: string) {
   const c = (await getCfg2()).vip;
   const p = await vipPerks(uid);
-  return { enabled: c.enabled, price: c.price, days: c.days, daily_pct: c.daily_pct, fee_off_pct: c.fee_off_pct, badge: c.badge, active: p.active, until: p.active ? p.until : 0 };
+  const pc = (await getCfg2()).plus;
+  const trialUsed = !!(await db().ref(`vip/${uid}/trial`).get()).val();
+  return { trial: pc.trial_days > 0 && !trialUsed ? pc.trial_days : 0, enabled: c.enabled, price: c.price, days: c.days, daily_pct: c.daily_pct, fee_off_pct: c.fee_off_pct, badge: c.badge, active: p.active, until: p.active ? p.until : 0 };
 }
 /** Buy / extend the VIP pass with USDT balance */
 export async function vipBuy(uid: string) {

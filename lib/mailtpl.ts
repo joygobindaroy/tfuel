@@ -24,9 +24,10 @@ export interface MailSpec {
   warning?: string; // লাল সতর্কতা
   preheader?: string;
   socials?: { kind: string; url: string }[];
+  button?: { label: string; url: string }; // big call-to-action button (e.g. Open receipt)
 }
 
-const appBase = () => {
+export const appBase = () => {
   const u = process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? "https://" + process.env.VERCEL_PROJECT_PRODUCTION_URL : "") || (process.env.VERCEL_URL ? "https://" + process.env.VERCEL_URL : "");
   return u.replace(/\/+$/, "");
 };
@@ -72,11 +73,12 @@ export function renderMail(m: MailSpec): { html: string; text: string } {
 ${rows.length ? `<tr><td style="padding:14px 24px 0;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f7f8fb;border-radius:10px;">${rows.map(([k, v]) => `<tr><td style="padding:10px 14px;font-size:13px;color:#6b7280;width:38%;vertical-align:top;">${esc(k)}</td><td style="padding:10px 14px;font-size:13px;color:#111827;font-weight:600;word-break:break-all;">${esc(v)}</td></tr>`).join("")}</table></td></tr>` : ""}
 ${m.warning ? `<tr><td style="padding:14px 24px 0;"><div style="background:#fef2f2;border-left:4px solid #dc2626;border-radius:6px;padding:10px 12px;font-size:13px;line-height:1.5;color:#b91c1c;font-weight:600;">${esc(m.warning)}</div></td></tr>` : ""}
 ${m.code ? `<tr><td style="padding:18px 24px 0;"><div style="font-size:12px;color:#6b7280;margin-bottom:6px;">Verification code</div><div style="background:${t.soft};border:1px dashed ${t.bar};border-radius:10px;padding:14px;text-align:center;font-size:34px;font-weight:800;letter-spacing:10px;color:${t.ink};font-family:Consolas,Menlo,monospace;">${esc(m.code)}</div><div style="font-size:12px;color:#6b7280;margin-top:8px;">${esc(m.codeNote || "This code expires in 10 minutes. Never share it with anyone — our team will never ask for it.")}</div></td></tr>` : ""}
+${m.button && /^https:\/\//.test(m.button.url) ? `<tr><td style="padding:18px 24px 0;" align="center"><a href="${esc(m.button.url)}" style="display:inline-block;background:#f5a623;color:#111827;font-weight:800;font-size:15px;text-decoration:none;padding:12px 26px;border-radius:10px;">${esc(m.button.label)}</a></td></tr>` : ""}
 ${socialRow(m.socials)}
 <tr><td style="padding:22px 24px 24px;"><div style="border-top:1px solid #e5e7eb;padding-top:14px;font-size:12px;line-height:1.6;color:#6b7280;"><b style="color:#374151;">Security note</b><br>Always check the details above. If you don't recognise this activity, ignore this email, turn on your Withdraw PIN in Settings and contact support right away.<br><br>This is an automated message, please do not reply.</div></td></tr>
 </table>
 <div style="font-size:11px;color:#9ca3af;margin-top:12px;">&copy; ${new Date().getUTCFullYear()} ${esc(BRAND)}</div>
 </td></tr></table></body></html>`;
-  const text = [m.title, "", m.intro, "", ...rows.map(([k, v]) => `${k}: ${v}`), m.warning ? `\n${m.warning}` : "", m.code ? `\nVerification code: ${m.code}\n${m.codeNote || "Expires in 10 minutes. Never share it."}` : "", "\nIf you don't recognise this activity, ignore this email and contact support.", `— ${BRAND}`].filter((x) => x !== "").join("\n");
+  const text = [m.title, "", m.intro, "", ...rows.map(([k, v]) => `${k}: ${v}`), m.warning ? `\n${m.warning}` : "", m.button ? `\n${m.button.label}: ${m.button.url}` : "", m.code ? `\nVerification code: ${m.code}\n${m.codeNote || "Expires in 10 minutes. Never share it."}` : "", "\nIf you don't recognise this activity, ignore this email and contact support.", `— ${BRAND}`].filter((x) => x !== "").join("\n");
   return { html, text };
 }

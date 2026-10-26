@@ -451,6 +451,27 @@ export default function GrowthPage({ call }: { call: Call }) {
         </>
       ))}
 
+      {S("plus", "Extras: schedules, alerts, quest, trial, subscriptions", "Small switches for the newer Send / games / shop features.", (v, set) => {
+        const up = (k: string, p: any) => set({ [k]: { ...v[k], ...p } });
+        const N = (k: string, f: string, t: string) => <L t={t}><input inputMode="decimal" value={v[k]?.[f]} onChange={(e) => up(k, { [f]: e.target.value })} /></L>;
+        return (
+          <>
+            <div className="title" style={{ fontSize: 14 }}>Scheduled & repeating sends</div>
+            <Row t="Enabled"><Sw on={!!v.sched?.enabled} set={(x) => up("sched", { enabled: x })} /></Row>
+            <div className="grid2">{N("sched", "max", "Active schedules per user")}</div>
+            <div className="title" style={{ marginTop: 14, fontSize: 14 }}>Large-send alert (bot message with “It wasn’t me”)</div>
+            <div className="grid2">{N("alert", "tfuel", "From TFUEL amount (coins, 0 = off)")}{N("alert", "usdt", "From USDT amount (0 = off)")}</div>
+            <div className="title" style={{ marginTop: 14, fontSize: 14 }}>Mini-game daily quest + streak</div>
+            <Row t="Enabled" h="“Play N games today” bonus; a longer streak pays an extra bonus."><Sw on={!!v.quest?.enabled} set={(x) => up("quest", { enabled: x })} /></Row>
+            <div className="grid2">{N("quest", "plays", "Games to play")}{N("quest", "bonus", "Bonus (coins)")}{N("quest", "streak_days", "Streak length (days)")}{N("quest", "streak_bonus", "Streak bonus (coins)")}</div>
+            <div className="title" style={{ marginTop: 14, fontSize: 14 }}>VIP free trial</div>
+            <div className="grid2"><L t="Trial days (0 = no trial)"><input inputMode="numeric" value={v.trial_days} onChange={(e) => set({ trial_days: e.target.value })} /></L></div>
+            <Row t="Tournament reminder" h="Bot message to joined players 1 hour before the end."><Sw on={!!v.tour_remind} set={(x) => set({ tour_remind: x })} /></Row>
+            <Row t="Shop subscriptions" h="Shops can ask for a recurring payment; users approve it once and can cancel any time."><Sw on={!!v.subs} set={(x) => set({ subs: x })} /></Row>
+          </>
+        );
+      })}
+
       <div className="mhead">Mini games (free to play)</div>
       {S("mini", "Memory, trivia & treasure hunt", "No stake and no risk for players. Rewards are small coins from you, limited per day. Fast finishers (bots) get nothing.", (v, set) => {
         const up = (k: string, p: any) => set({ [k]: { ...v[k], ...p } });

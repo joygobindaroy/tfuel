@@ -141,6 +141,7 @@ export async function sendAsset(from: { id: string; name: string }, toUid: strin
   const id = sortableId();
   const txid = makeTxid(id, from.id, toUid, amount, now);
   const [toName, toCode, fromCode] = await Promise.all([displayName(toUid), getRefCode(toUid).catch(() => ""), getRefCode(from.id).catch(() => "")]);
+  import("./plus").then((P) => P.bigSendAlert(from.id, toName, asset, amount, s.coins_per_tfuel)).catch(() => {});
   const holdAt = asset === "usdt" ? toU(c2.xfer.hold.usdt) : c2.xfer.hold.tfuel;
   const hold = holdAt > 0 && amount >= holdAt;
   const rel = now + c2.xfer.hold.minutes * 60000;
@@ -188,8 +189,15 @@ export async function afterSend(fromId: string, fromName: string, toUid: string,
   await activity(fromId, "send", { ...a, note: `To ${toName} (${toCode}) · ${txid}` });
   await activity(toUid, "receive", { ...b, note: `From ${maskName(fromName)} (${fromCode}) · ${txid}` });
   await notify(toUid, `💸 You received ${amtStr(asset, amount, cpt)} from ${maskName(fromName)}.`);
-  await mailMoney(fromId, "sent", [["Status", "Completed"], ["Amount", amtStr(asset, amount, cpt)], ["Fee", amtStr(asset, fee, cpt)], ["Total deducted", amtStr(asset, amount + fee, cpt)], ["Recipient", toName], ["Recipient ID", toCode], ["Transaction hash", txid], ["Note", note]]);
-  await mailMoney(toUid, "received", [["Status", "Completed"], ["Amount", amtStr(asset, amount, cpt)], ["From", maskName(fromName)], ["Sender ID", fromCode], ["Transaction hash", txid], ["Note", note]]);
+  import("./plus").then((P) => P.xferStat(asset, amount, fee)).catch(() => {});
+  // receipt: link in the email + picture in the bot chat (both sides, automatically)
+  const R = await import("./receipt");
+  const rv = new Map<string, import("./receipt").RView>();
+  await Promise.all([fromId, toUid].map(async (u) => { try { rv.set(u, await R.loadReceipt(txid, u)); } catch {} }));
+  const btn = (u: string) => { const r = rv.get(u); return r ? { label: "🧾 Open receipt (print / download)", url: R.receiptLinks(r, u, cpt).page } : undefined; };
+  await mailMoney(fromId, "sent", [["Status", "Completed"], ["Amount", amtStr(asset, amount, cpt)], ["Fee", amtStr(asset, fee, cpt)], ["Total deducted", amtStr(asset, amount + fee, cpt)], ["Recipient", toName], ["Recipient ID", toCode], ["Transaction hash", txid], ["Note", note]], { button: btn(fromId) });
+  await mailMoney(toUid, "received", [["Status", "Completed"], ["Amount", amtStr(asset, amount, cpt)], ["From", maskName(fromName)], ["Sender ID", fromCode], ["Transaction hash", txid], ["Note", note]], { button: btn(toUid) });
+  for (const u of [fromId, toUid]) { const r = rv.get(u); if (r) await R.botReceipt(u, r, cpt).catch(() => {}); }
 }
 /** TFUEL wrapper (original signature) */
 export const sendCoins = (from: { id: string; name: string }, toUid: string, amount: number, s: Settings, note = "") => sendAsset(from, toUid, "tfuel", amount, s, note);

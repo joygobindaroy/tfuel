@@ -27,9 +27,12 @@ export function ShopsPage({ call }: { call: Call }) {
   const [secret, setSecret] = useState<{ id: string; secret: string } | null>(null);
   const [filter, setFilter] = useState("all");
   const [tests, setTests] = useState<Record<string, any>>({});
+  const [subs, setSubs] = useState<any[]>([]);
+  const [testLink, setTestLink] = useState<Record<string, string>>({});
   const load = useCallback(async () => {
-    const [a, b] = await Promise.all([call({ action: "shopList" }), call({ action: "shopOrders" })]);
+    const [a, b, c] = await Promise.all([call({ action: "shopList" }), call({ action: "shopOrders" }), call({ action: "shopSubs" })]);
     if (a) setD(a);
+    if (c) setSubs((c as any).items);
     if (b) setO(b);
   }, [call]);
   useEffect(() => { load(); }, [load]);
@@ -92,12 +95,16 @@ export function ShopsPage({ call }: { call: Call }) {
               <div className="xs muted">ID {s.id} · {s.allow_tfuel ? "TFUEL " : ""}{s.allow_usdt ? "USDT" : ""}{s.webhook ? " · webhook on" : ""}</div>
             </div>
             <div className="gap">
+              <button className="btn sec sm" onClick={async () => { const r: any = await call({ action: "shopTestOrder", id: s.id }, "Test order created"); if (r) setTestLink((t) => ({ ...t, [s.id]: r.pay_url })); }}>Test order $0.01</button>
               <button className="btn sec sm" onClick={async () => { const r: any = await call({ action: "shopTest", id: s.id }); if (r) setTests((t) => ({ ...t, [s.id]: r })); }}>Test connection</button>
               <button className="btn sec sm" onClick={() => setF({ ...s, fee_pct: String(s.fee_pct), max_usd: String(s.max_usd) })}>Edit</button>
               <button className="btn sec sm" onClick={async () => { if (confirm("Create a new secret? The old one stops working immediately.")) { const r: any = await call({ action: "shopRotate", id: s.id }, "New secret created"); if (r) setSecret({ id: s.id, secret: r.secret }); } }}>New secret</button>
               <button className="btn danger sm" onClick={async () => { if (confirm("Delete this shop? Existing orders stay in the log.")) { if (await call({ action: "shopDelete", id: s.id }, "Deleted")) load(); } }}><Icon name="trash" size={14} /></button>
             </div>
           </div>
+          {testLink[s.id] && (
+            <div className="addrbox" style={{ marginTop: 10 }}><span style={{ fontSize: 12, wordBreak: "break-all" }}>Open this link on your phone, pay $0.01 and watch Orders + the shop webhook: {testLink[s.id]}</span><button className="btn sec sm" onClick={() => copy(testLink[s.id])}><Icon name="copy" size={14} /></button></div>
+          )}
           {tests[s.id] && (
             <div style={{ marginTop: 10 }}>
               <div className="b sm">{tests[s.id].ok ? "✅ All checks passed" : "⚠️ Something needs attention"}</div>
@@ -148,6 +155,18 @@ export function ShopsPage({ call }: { call: Call }) {
           </div>
         </div>
       ))}
+
+      {subs.length > 0 && (
+        <div className="card">
+          <div className="title">Active subscriptions ({subs.length})</div>
+          {subs.map((x) => (
+            <div className="row" key={x.id} style={{ marginTop: 8 }}>
+              <div><div className="b">{x.shop} · ${x.usd.toFixed(2)} / {x.every} days</div><div className="xs muted">user {x.uid} · charged {x.n}× · next {when(x.next)}{x.fails ? ` · ${x.fails} failed` : ""}</div></div>
+              <button className="btn danger sm" onClick={async () => { if (confirm("Cancel this subscription?")) { if (await call({ action: "shopSubCancel", id: x.id }, "Cancelled")) load(); } }}>Cancel</button>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="card">
         <div className="title">How a shop connects (give this to the shop developer)</div>

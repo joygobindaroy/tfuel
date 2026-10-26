@@ -1,3 +1,4 @@
+import { randomInt } from "crypto";
 import { BOT_COMMANDS } from "@/lib/bot";
 import { announceTask } from "@/lib/taskalert";
 import { requireAdmin, HttpError } from "@/lib/auth";
@@ -7,7 +8,7 @@ import { ServerValue } from "firebase-admin/database";
 import { ArticleSite, normUrl } from "@/lib/chain";
 import { sortableId, randomToken } from "@/lib/crypto";
 import { seal } from "@/lib/secretbox";
-import { refundOrder, shopPk, shopTest, retryHook } from "@/lib/shop";
+import { refundOrder, shopPk, shopTest, retryHook, createShopOrder, subCancel } from "@/lib/shop";
 import { adminLog, dayKey } from "@/lib/log";
 import { getSettings, invalidateSettings, parseSettings } from "@/lib/settings";
 import { tgCall, webhookSecret } from "@/lib/telegram";
@@ -533,6 +534,46 @@ export default route(async (req, res) => {
       }
       await adminLog(who, "shop_saved", { id, name });
       return void res.json({ success: true, id, secret });
+    }
+    case "shopTestOrder": {
+      const id = String(b.id || "");
+      if (!idRe.test(id)) throw new HttpError(400, "Invalid id");
+      const shop = (await db().ref(`shops/${id}`).get()).val();
+      if (!shop) throw new HttpError(404, "Shop not found");
+      const r = await createShopOrder(id, shop, await getSettings(true), { ref: "test-" + Date.now().toString(36), usd: 0.01, title: "Test order (admin)" });
+      await adminLog(who, "shop_test_order", { id, order: r.order_id });
+      return void res.json({ success: true, pay_url: r.pay_url, order_id: r.order_id });
+    }
+    case "shopSubs": {
+      const all = ((await db().ref("shop_subs").get()).val() || {}) as Record<string, any>;
+      return void res.json({ success: true, items: Object.entries(all).filter(([, x]) => x.st === "active").map(([id, x]) => ({ id, shop: x.shop_name, uid: x.uid, title: x.title, usd: fromU(x.usd_u), every: x.every, next: x.next, n: x.n, fails: x.fails || 0 })).slice(0, 200) });
+    }
+    case "shopSubCancel": {
+      const id = String(b.id || "");
+      if (!idRe.test(id)) throw new HttpError(400, "Invalid id");
+      await subCancel("", id, "admin");
+      await adminLog(who, "shop_sub_cancel", { id });
+      return void res.json({ success: true });
+    }
+    case "promoBatch": {
+      const n = Math.floor(Number(b.count)), coins = Math.floor(Number(b.coins)), days = Number(b.days) || 0;
+      if (!Number.isFinite(n) || n < 1 || n > 500) throw new HttpError(400, "Count must be 1–500");
+      if (!Number.isFinite(coins) || coins < 1 || coins > 1e9) throw new HttpError(400, "Invalid reward");
+      if (days < 0 || days > 3650) throw new HttpError(400, "Invalid expiry");
+      const prefix = String(b.prefix || "GIFT").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8) || "GIFT";
+      const A = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+      const codes: string[] = [];
+      const now = Date.now();
+      const upd: Record<string, any> = {};
+      while (codes.length < n) {
+        const c = prefix + "-" + Array.from({ length: 8 }, () => A[randomInt(A.length)]).join("");
+        if (codes.includes(c)) continue;
+        codes.push(c);
+        upd[`promo/${c}`] = { coins, max: 1, used: 0, active: true, exp: days > 0 ? now + days * 86400000 : 0, created: now, batch: prefix };
+      }
+      await db().ref().update(upd);
+      await adminLog(who, "promo_batch", { n, coins, prefix });
+      return void res.json({ success: true, codes });
     }
     case "shopTest": {
       const id = String(b.id || "");

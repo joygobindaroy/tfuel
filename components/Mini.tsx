@@ -28,6 +28,11 @@ export function VipPage({ say, onBack, reload }: P) {
     try { await api("play", { action: "vipBuy" }); confetti(); haptic("success"); say("VIP pass active!", true); reload(); load(); } catch (e: any) { say(errText(e)); }
     setBusy(false);
   };
+  const trial = async () => {
+    if (busy) return; setBusy(true);
+    try { await api("play", { action: "vipTrial" }); confetti(); haptic("success"); say("Free trial started!", true); reload(); load(); } catch (e: any) { say(errText(e)); }
+    setBusy(false);
+  };
   return (
     <>
       {head}
@@ -42,6 +47,7 @@ export function VipPage({ say, onBack, reload }: P) {
           <div className="sumrow"><span className="muted">Duration</span><b>{v.days} days</b></div>
         </div>
         <button className="btn" style={{ width: "100%" }} disabled={busy} onClick={buy}>{busy ? "Please wait…" : `${v.active ? "Extend" : "Buy"} for ${v.price} USDT`}</button>
+        {v.trial > 0 && !v.active && <button className="btn sec" style={{ width: "100%", marginTop: 8 }} disabled={busy} onClick={trial}>🎁 Try free for {v.trial} days</button>}
         <div className="xs muted" style={{ marginTop: 8 }}>Paid from your USDT balance. Extending adds days to your current pass.</div>
       </div>
     </>
@@ -214,6 +220,13 @@ export function MiniPage({ say, onBack, reload }: P) {
     <>
       {head}
       <div className="sub" style={{ margin: "4px 2px 12px" }}>Free to play — no stake, no risk. Rewards are small coins from the app, limited per day.</div>
+      {m.quest && (
+        <div className="card">
+          <div className="title" style={{ fontSize: 14 }}>🎯 Daily quest</div>
+          <div className="sub">Play {m.quest.plays} games today for <b>+{m.quest.bonus} coins</b>. {m.quest.played >= m.quest.plays ? "Done for today ✅" : `${m.quest.played}/${m.quest.plays} played.`}</div>
+          <div className="xs muted" style={{ marginTop: 4 }}>🔥 Streak: {m.quest.streak} day{m.quest.streak === 1 ? "" : "s"} · every {m.quest.streak_days} days: +{m.quest.streak_bonus} coins</div>
+        </div>
+      )}
       {m.memory && <Memory cfg={m.memory} say={say} reload={reload} done={load} />}
       {m.trivia && <Trivia cfg={m.trivia} say={say} reload={reload} done={load} />}
       {m.hunt && <Hunt cfg={m.hunt} say={say} reload={reload} done={load} />}

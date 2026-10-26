@@ -4,7 +4,7 @@ import { db } from "@/lib/firebase";
 import { ensureUser, MAX_AUTH_AGE_MONEY } from "@/lib/user";
 import { checkPin } from "@/lib/prefs";
 import { getPrice, fromU } from "@/lib/market";
-import { makeLoginCode, payOrder, quoteFor, Shop, Order } from "@/lib/shop";
+import { subList, subCancel, makeLoginCode, payOrder, quoteFor, Shop, Order } from "@/lib/shop";
 
 /** Mini App-এর শপ অংশ: তালিকা / সংযোগ / লগইন-লিংক / পেমেন্ট */
 export default route(async (req, res) => {
@@ -26,6 +26,9 @@ export default route(async (req, res) => {
       orders: Object.entries(mine).sort(([a], [b]) => (a < b ? 1 : -1)).slice(0, 30).map(([id, o]) => ({ id, ...o, usd: fromU(o.usd_u), usdt: fromU(o.usdt_u || 0) })),
     });
   }
+
+  if (action === "subs") return void res.json({ success: true, items: await subList(user.id) });
+  if (action === "sub_cancel") { await subCancel(user.id, String(req.body?.id || "")); return void res.json({ success: true, items: await subList(user.id) }); }
 
   if (action === "launch" || action === "disconnect") {
     if (!/^[\w-]{1,40}$/.test(sid)) throw new HttpError(400, "bad_request");
@@ -68,7 +71,7 @@ export default route(async (req, res) => {
     const status = o.status === "open" && o.exp < Date.now() ? "expired" : o.status === "paying" ? "open" : o.status;
     return void res.json({
       success: true,
-      order: { id: oid, shop: shop.name, title: o.title, usd: q.usd, status, exp: o.exp, return_url: o.return_url || shop.domain },
+      order: { id: oid, shop: shop.name, title: o.title, usd: q.usd, status, exp: o.exp, return_url: o.return_url || shop.domain, sub: o.sub || 0 },
       pay: { tfuel: shop.allow_tfuel && q.tfuel_coins !== null ? { coins: q.tfuel_coins, balance: u.balance } : null, usdt: shop.allow_usdt ? { amount: q.usdt, balance: fromU(u.usdt_u || 0) } : null },
       pin,
       pref: pref === "usdt" ? "usdt" : "tfuel",

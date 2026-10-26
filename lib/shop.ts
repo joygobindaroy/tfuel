@@ -6,6 +6,7 @@ import { open } from "./secretbox";
 import { rateLimit } from "./api";
 import { sha256, sortableId, randomToken } from "./crypto";
 import { getSettings, Settings } from "./settings";
+import { getCfg2 } from "./cfg2";
 import { getPrice, toU, fromU } from "./market";
 import { spend, usdtTot, activity } from "./wallet";
 import { notify } from "./notify";
@@ -43,6 +44,9 @@ export interface Order {
   usdt_u?: number;
   fee_u?: number;
   webhook_ok?: boolean;
+  sub?: number; // first payment of a subscription: renews every N days
+  sub_of?: string; // renewal order of this subscription
+  sub_id?: string;
 }
 
 export const ORDER_TTL_MS = 30 * 60000;
@@ -173,6 +177,14 @@ export async function payOrder(uid: string, name: string, orderId: string, cur: 
     [`user_shop/${uid}/${orderId}`]: { shop: o0.shop, shop_name: shop.name, title: o0.title, usd_u: o0.usd_u, cur, coins, usdt_u: usdtU, status: "paid", at: now },
     [`shop_links/${uid}/${o0.shop}`]: { at: now },
   }).catch((e) => console.error("SHOP ORDER WRITE FAILED after debit", orderId, uid, e));
+  if (o0.sub && !o0.sub_of) {
+    try {
+      const sid = sortableId();
+      const rec = { shop: o0.shop, shop_name: shop.name, uid, title: o0.title, ref: o0.ref, usd_u: o0.usd_u, every: o0.sub, next: now + o0.sub * 86400000, n: 1, fails: 0, cur, st: "active", at: now };
+      await db().ref().update({ [`shop_subs/${sid}`]: rec, [`user_subs/${uid}/${sid}`]: { shop: o0.shop, shop_name: shop.name, title: o0.title, usd_u: o0.usd_u, every: o0.sub, next: rec.next, cur, st: "active" }, [`shop_orders/${orderId}/sub_id`]: sid });
+      paid.sub_id = sid;
+    } catch (e) { console.error("sub create failed", orderId, e); }
+  }
   await activity(uid, "shop", { coins: -coins, usdt_u: -usdtU, note: shop.name });
   await mailMoney(uid, "shop", [["Shop", shop.name], ["Order", o0.title || orderId], ["Paid", cur === "usdt" ? `${fromU(usdtU).toFixed(2)} USDT` : `${coins} coins`]]);
   await notify(uid, `🛍 Paid ${cur === "usdt" ? fromU(usdtU).toFixed(2) + " USDT" : coins + " coins"} to ${shop.name}${o0.title ? " — " + o0.title : ""}.`);
@@ -184,7 +196,7 @@ export async function sendWebhook(shopId: string, shop: Shop, orderId: string, o
   if (!shop.webhook) return;
   const secret = open(shop.secret);
   if (!secret) return;
-  const body = JSON.stringify({ event: o.status === "refunded" ? "order.refunded" : "order.paid", order_id: orderId, ref: o.ref, status: o.status, usd: fromU(o.usd_u), currency: o.cur, paid_usdt: o.cur === "usdt" ? fromU(o.usdt_u || 0) : undefined, paid_coins: o.cur === "tfuel" ? o.coins : undefined, user_id: uid });
+  const body = JSON.stringify({ event: o.status === "refunded" ? "order.refunded" : "order.paid", order_id: orderId, ref: o.ref, status: o.status, usd: fromU(o.usd_u), currency: o.cur, paid_usdt: o.cur === "usdt" ? fromU(o.usdt_u || 0) : undefined, paid_coins: o.cur === "tfuel" ? o.coins : undefined, user_id: uid, ...(o.sub_id ? { subscription_id: o.sub_id } : {}), ...(o.sub_of ? { subscription_id: o.sub_of, renewal: true } : {}) });
   const ts = String(Date.now());
   let ok = false;
   try {
@@ -252,7 +264,7 @@ export { toU };
 
 
 /** Creates (or returns the same) order for a shop reference. Used by the signed server API and by the public pay button. */
-export async function createShopOrder(id: string, shop: Shop, s: Settings, a: { ref: string; usd: number; title: string; uid?: string; ret?: string }) {
+export async function createShopOrder(id: string, shop: Shop, s: Settings, a: { ref: string; usd: number; title: string; uid?: string; ret?: string; sub?: number; sub_of?: string }) {
   const { ref, usd, uid } = a;
   const title = String(a.title || "").replace(/[\u0000-\u001f]/g, " ").trim().slice(0, 80);
   const ret = String(a.ret || "");
@@ -274,7 +286,7 @@ export async function createShopOrder(id: string, shop: Shop, s: Settings, a: { 
     const cur = (await db().ref(`shop_orders/${orderId}`).get()).val() as Order;
     return { order_id: orderId, status: cur.status, pay_url: link(orderId), expires_at: cur.exp };
   }
-  const o: Order = { shop: id, ref, usd_u: toU(usd), title, status: "open", created_at: now, exp: now + ORDER_TTL_MS, ...(uid ? { uid } : {}), ...(ret ? { return_url: ret } : {}) };
+  const o: Order = { shop: id, ref, usd_u: toU(usd), title, status: "open", created_at: now, exp: now + ORDER_TTL_MS, ...(uid ? { uid } : {}), ...(ret ? { return_url: ret } : {}), ...(a.sub && (await getCfg2()).plus.subs ? { sub: Math.max(1, Math.min(365, Math.floor(a.sub))) } : {}), ...(a.sub_of ? { sub_of: a.sub_of } : {}) };
   await db().ref(`shop_orders/${oid}`).set(o);
   return { order_id: oid, status: "open" as const, pay_url: link(oid), expires_at: o.exp, usd: fromU(o.usd_u) };
 }
@@ -314,4 +326,54 @@ export async function shopTest(id: string): Promise<{ ok: boolean; checks: { nam
     await probe("Webhook (signed ping)", shop.webhook, { method: "POST", headers: { "content-type": "application/json", "x-shop-id": id, "x-timestamp": ts, "x-signature": sign(secret || "", ts, body) }, body });
   } else add("Webhook", true, "Not set (optional). Without it, check paid orders in Admin → Shops → Orders.");
   return { ok: checks.every((c) => c.ok), checks };
+}
+
+
+/* ───────── Subscriptions (recurring shop payments, charged from the user's balance) ───────── */
+export async function subList(uid: string) {
+  const m = ((await db().ref(`user_subs/${uid}`).get()).val() || {}) as Record<string, any>;
+  return Object.entries(m).filter(([, x]) => x.st === "active").map(([id, x]) => ({ id, shop: x.shop_name, title: x.title, usd: fromU(x.usd_u), every: x.every, next: x.next, cur: x.cur }));
+}
+export async function subCancel(uid: string, id: string, by = "user") {
+  const r = (await db().ref(`shop_subs/${id}`).get()).val() as any;
+  if (!r || (by === "user" && r.uid !== uid)) throw new HttpError(404, "not_found");
+  await db().ref().update({ [`shop_subs/${id}/st`]: "cancelled", [`user_subs/${r.uid}/${id}/st`]: "cancelled" });
+  if (by === "user") await notify(r.uid, `Subscription to ${r.shop_name}${r.title ? " (" + r.title + ")" : ""} cancelled. You won't be charged again.`).catch(() => {});
+}
+/** cron: remind one day before, then charge due subscriptions; 3 failed days in a row cancels it */
+export async function runSubs(): Promise<number> {
+  const c = await getCfg2();
+  if (!c.plus.subs) return 0;
+  const s = await getSettings(true);
+  if (!s.shops_enabled) return 0;
+  const all = ((await db().ref("shop_subs").get()).val() || {}) as Record<string, any>;
+  const now = Date.now();
+  let n = 0;
+  for (const [id, x] of Object.entries(all)) {
+    if (x.st !== "active") continue;
+    if (x.next - now < 86400000 && x.next > now && !x.reminded) {
+      await db().ref(`shop_subs/${id}/reminded`).set(true);
+      await notify(x.uid, `🔁 ${x.shop_name}${x.title ? " — " + x.title : ""} renews tomorrow: $${fromU(x.usd_u).toFixed(2)}. Keep enough ${x.cur === "usdt" ? "USDT" : "TFUEL"} in your balance, or cancel it in Profile → Partner shops.`).catch(() => {});
+    }
+    if (x.next > now) continue;
+    const claim = await db().ref(`shop_subs/${id}/lock`).transaction((t: number | null) => (t && now - t < 600000 ? undefined : now));
+    if (!claim.committed) continue;
+    try {
+      const shop = (await db().ref(`shops/${x.shop}`).get()).val() as Shop | null;
+      if (!shop || !shop.enabled) throw new HttpError(403, "shop_unavailable");
+      const cnt = (x.n || 1) + 1;
+      const r = await createShopOrder(x.shop, shop, s, { ref: `${x.ref}-r${cnt}`, usd: fromU(x.usd_u), title: x.title, uid: x.uid, sub_of: id });
+      await payOrder(x.uid, "User", r.order_id, x.cur);
+      await db().ref(`shop_subs/${id}`).update({ n: cnt, next: x.next + x.every * 86400000, fails: 0, reminded: false, lock: null });
+      await db().ref(`user_subs/${x.uid}/${id}/next`).set(x.next + x.every * 86400000);
+      n++;
+    } catch (e: any) {
+      const fails = (x.fails || 0) + 1;
+      const dead = fails >= 3;
+      await db().ref(`shop_subs/${id}`).update({ fails, next: now + 86400000, lock: null, ...(dead ? { st: "cancelled" } : {}) }).catch(() => {});
+      if (dead) await db().ref(`user_subs/${x.uid}/${id}/st`).set("cancelled").catch(() => {});
+      await notify(x.uid, `⚠️ Could not charge ${x.shop_name}${x.title ? " — " + x.title : ""} ($${fromU(x.usd_u).toFixed(2)}): ${String(e?.message || "error").slice(0, 60)}.${dead ? " The subscription was cancelled." : " We will try again tomorrow."}`).catch(() => {});
+    }
+  }
+  return n;
 }

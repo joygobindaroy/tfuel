@@ -78,12 +78,20 @@ export async function series(days = 30) {
 }
 
 /** Yesterday (UTC) summary */
+async function xferDigest(day: string) {
+  try {
+    const x = ((await db().ref(`stats/xfer_day/${day}`).get()).val() || {}) as any;
+    const so = await recent("shop_orders", 200);
+    const bad = so.filter((o: any) => (o.status === "paid" || o.status === "refunded") && o.webhook_ok === false).length;
+    return { xn: x.n || 0, xvolT: x.vol_t || 0, xvolU: (x.vol_u || 0) / 1e6, xfeeU: (x.fee_u || 0) / 1e6, xfeeT: x.fee_t || 0, hooksBad: bad };
+  } catch { return { xn: 0, xvolT: 0, xvolU: 0, xfeeU: 0, xfeeT: 0, hooksBad: 0 }; }
+}
 export async function daySummary(day = dayKey(Date.now() - DAY)) {
   const s = await series(3);
   const r = s.find((x) => x.day === day) || { active: 0, joined: 0, depositU: 0, payoutU: 0, withdraws: 0 };
   const pend = [...(await recent("usdt_withdrawals", 300)), ...(await recent("withdrawals", 300))].filter((x) => x.status === "pending").length;
   const tickets = (await recent("tickets", 200)).filter((t) => t.status === "open").length;
-  return { day, joined: r.joined, active: r.active, depositU: Math.round(r.depositU * 100) / 100, payoutU: Math.round(r.payoutU * 100) / 100, withdraws: r.withdraws, pendingPayouts: pend, openTickets: tickets };
+  return { day, joined: r.joined, active: r.active, depositU: Math.round(r.depositU * 100) / 100, payoutU: Math.round(r.payoutU * 100) / 100, withdraws: r.withdraws, pendingPayouts: pend, openTickets: tickets, ...(await xferDigest(day)) };
 }
 export const summaryText = (x: Awaited<ReturnType<typeof daySummary>>) =>
-  `Daily summary (${x.day.slice(0, 4)}-${x.day.slice(4, 6)}-${x.day.slice(6)} UTC)\n👤 New users: ${x.joined}\n🔥 Active: ${x.active}\n⬇️ Deposits: ${x.depositU} USDT\n⬆️ Paid out: ${x.payoutU} USDT (${x.withdraws} requests)\n⏳ Pending payouts: ${x.pendingPayouts}\n🎫 Open tickets: ${x.openTickets}`;
+  `Daily summary (${x.day.slice(0, 4)}-${x.day.slice(4, 6)}-${x.day.slice(6)} UTC)\n👤 New users: ${x.joined}\n🔥 Active: ${x.active}\n⬇️ Deposits: ${x.depositU} USDT\n⬆️ Paid out: ${x.payoutU} USDT (${x.withdraws} requests)\n⏳ Pending payouts: ${x.pendingPayouts}\n🎫 Open tickets: ${x.openTickets}\n💸 User transfers: ${x.xn} (${Math.round(x.xvolT).toLocaleString("en-US")} coins · ${x.xvolU.toFixed(2)} USDT) · fees ${x.xfeeU.toFixed(2)} USDT + ${Math.round(x.xfeeT).toLocaleString("en-US")} coins${x.hooksBad ? `\n⚠️ Shop webhooks failing: ${x.hooksBad}` : ""}`;

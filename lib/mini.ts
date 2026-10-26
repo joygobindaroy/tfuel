@@ -7,6 +7,10 @@ import { creditCoins } from "./coins";
 import { displayName } from "./transfer";
 import { notify } from "./notify";
 import { sortableId } from "./crypto";
+import { questTick, questView } from "./plus";
+import { tgCall } from "./telegram";
+import { appBase } from "./mailtpl";
+import { winUrl } from "./cardsig";
 
 /* Free-to-play mini games: no stake, small coin rewards, daily limits (set in Admin → Growth & Games → Mini games). */
 const SYMS = ["🚀", "💎", "🔥", "⭐", "🍀", "🎯", "🧩", "🏆", "🎲", "🌙"];
@@ -34,6 +38,7 @@ export async function miniView(uid: string) {
     trivia: c.trivia.enabled ? { per_correct: c.trivia.per_correct, rounds: c.trivia.rounds, left: Math.max(0, c.trivia.per_day - (day.trivia || 0)) } : null,
     hunt: c.hunt.enabled ? { min: c.hunt.min, max: c.hunt.max, left: Math.max(0, c.hunt.per_day - (day.hunt || 0)) } : null,
     tours,
+    quest: await questView(uid).catch(() => null),
   };
 }
 
@@ -74,7 +79,8 @@ export async function memFlip(uid: string, id: string, idx: number) {
   const reward = tooFast ? 0 : moves <= c.memory.max_moves ? c.memory.reward : Math.max(Math.floor(c.memory.reward * 0.25), Math.floor((c.memory.reward * c.memory.max_moves) / moves));
   if (reward > 0) await creditCoins(uid, reward, "tasks", "game", "Memory match");
   await tourScore(uid, "memory", { moves, ms });
-  return { sym, phase: "done" as const, match, first, firstSym: s.layout[first], moves, ms, reward };
+  const quest = await questTick(uid).catch(() => null);
+  return { sym, phase: "done" as const, match, first, firstSym: s.layout[first], moves, ms, reward, quest };
 }
 
 /* ───────── Crypto trivia ───────── */
@@ -110,7 +116,8 @@ export async function triAnswer(uid: string, id: string, choice: number) {
   const reward = ms < s.qs.length * 1200 ? 0 : correct * c.trivia.per_correct;
   if (reward > 0) await creditCoins(uid, reward, "tasks", "game", "Crypto trivia");
   await tourScore(uid, "trivia", { correct, ms });
-  return { right, answer: rightIdx, correct, done: true, n: s.qs.length, reward };
+  const quest = await questTick(uid).catch(() => null);
+  return { right, answer: rightIdx, correct, done: true, n: s.qs.length, reward, quest };
 }
 
 /* ───────── Treasure hunt (free picks, small prize) ───────── */
@@ -123,7 +130,8 @@ export async function huntPlay(uid: string, tile: number) {
   const reward = empty ? 0 : c.hunt.min + rnd(Math.max(1, c.hunt.max - c.hunt.min + 1));
   const board = Array.from({ length: 9 }, (_, i) => (i === tile ? reward : rnd(100) < 25 ? 0 : c.hunt.min + rnd(Math.max(1, c.hunt.max - c.hunt.min + 1))));
   if (reward > 0) await creditCoins(uid, reward, "tasks", "game", "Treasure hunt");
-  return { reward, board };
+  const quest = await questTick(uid).catch(() => null);
+  return { reward, board, quest };
 }
 
 /* ───────── Free-entry tournaments (prize pool paid by the platform) ───────── */
@@ -178,8 +186,27 @@ export async function settleTours(): Promise<number> {
       if (!r.prize) continue;
       await creditCoins(r.uid, r.prize, "prize", "prize", `Tournament: ${t.title} (#${r.rank})`).catch(() => {});
       await notify(r.uid, `🏆 You finished #${r.rank} in "${t.title}" and won ${r.prize.toLocaleString("en-US")} coins!`).catch(() => {});
+      try {
+        const base = appBase();
+        if (base) await tgCall("sendPhoto", { chat_id: r.uid, photo: winUrl(base, t.title, r.rank, r.prize, r.name), caption: `🏆 #${r.rank} · ${t.title} — share your win!` });
+      } catch {}
     }
     n++;
+  }
+  return n;
+}
+/** cron: remind joined players one hour before a tournament ends */
+export async function remindTours(): Promise<number> {
+  const c = (await getCfg2()).plus;
+  if (!c.tour_remind) return 0;
+  const all = ((await db().ref("tournaments").get()).val() || {}) as Record<string, Tour & { reminded?: boolean }>;
+  let n = 0;
+  for (const [id, t] of Object.entries(all)) {
+    if (t.paid || t.cancelled || t.reminded || t.end < Date.now() || t.end - Date.now() > 3600000) continue;
+    const claim = await db().ref(`tournaments/${id}/reminded`).transaction((x: boolean | null) => (x ? undefined : true));
+    if (!claim.committed) continue;
+    const joined = Object.keys(((await db().ref(`tour_join/${id}`).get()).val() || {}));
+    for (const u of joined) { await notify(u, `⏰ "${t.title}" ends in less than an hour. Play now to improve your score!`).catch(() => {}); n++; }
   }
   return n;
 }

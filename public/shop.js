@@ -23,7 +23,8 @@
         amount: Number(el.getAttribute('data-amount')),
         title: el.getAttribute('data-title') || '',
         ref: el.getAttribute('data-ref') || '',
-        return_url: el.getAttribute('data-return') || ''
+        return_url: el.getAttribute('data-return') || '',
+        sub_days: Number(el.getAttribute('data-sub-days')) || 0
       })
     }).then(function (r) { return r.json(); }).then(function (d) {
       if (d && d.success && d.pay_url) { location.href = d.pay_url; return; }

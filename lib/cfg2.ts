@@ -31,6 +31,14 @@ export interface Xfer {
   links: { request: boolean; claim: boolean; days: number };
 }
 export interface Vip { enabled: boolean; price: number; days: number; daily_pct: number; fee_off_pct: number; badge: string }
+export interface Plus {
+  sched: { enabled: boolean; max: number }; // scheduled / repeating sends
+  alert: { tfuel: number; usdt: number }; // large-send bot alert from this amount (coins / USDT), 0 = off
+  quest: { enabled: boolean; plays: number; bonus: number; streak_days: number; streak_bonus: number }; // mini-game daily quest + streak
+  trial_days: number; // free VIP days (0 = no trial)
+  tour_remind: boolean;
+  subs: boolean; // recurring shop payments
+}
 export interface Quiz { q: string; a: string[]; c: number }
 export interface Mini {
   enabled: boolean;
@@ -42,6 +50,7 @@ export interface Cfg2 {
   xfer: Xfer;
   vip: Vip;
   mini: Mini;
+  plus: Plus;
   ab: { enabled: boolean; name: string; mult_b: number };
   autoban: { enabled: boolean; min_score: number; action: "freeze" | "flag"; max_per_run: number };
   moves: { enabled: boolean; options: number[] };
@@ -84,6 +93,7 @@ const QUIZ: Quiz[] = [
 
 export const CFG2_DEFAULTS: Cfg2 = {
   xfer: { usdt: { enabled: true, fee_pct: 0.5, min: 1, daily: 500 }, hold: { tfuel: 0, usdt: 0, minutes: 10 }, links: { request: true, claim: true, days: 7 } },
+  plus: { sched: { enabled: true, max: 5 }, alert: { tfuel: 0, usdt: 0 }, quest: { enabled: false, plays: 2, bonus: 50, streak_days: 7, streak_bonus: 500 }, trial_days: 0, tour_remind: true, subs: true },
   vip: { enabled: false, price: 3, days: 30, daily_pct: 25, fee_off_pct: 50, badge: "💎" },
   mini: {
     enabled: true,
@@ -175,6 +185,14 @@ export const SECTIONS: { [K in keyof Cfg2]: (v: any, cur: Cfg2[K]) => Cfg2[K] } 
     usdt: { enabled: bool(v?.usdt?.enabled), fee_pct: num(v?.usdt?.fee_pct, 0, 20, 0.5), min: num(v?.usdt?.min, 0.01, 1e6, 1), daily: num(v?.usdt?.daily, 0, 1e7, 500) },
     hold: { tfuel: int(v?.hold?.tfuel, 0, 1e13, 0), usdt: num(v?.hold?.usdt, 0, 1e7, 0), minutes: int(v?.hold?.minutes, 1, 1440, 10) },
     links: { request: bool(v?.links?.request), claim: bool(v?.links?.claim), days: int(v?.links?.days, 1, 60, 7) },
+  }),
+  plus: (v) => ({
+    sched: { enabled: bool(v?.sched?.enabled), max: int(v?.sched?.max, 1, 50, 5) },
+    alert: { tfuel: int(v?.alert?.tfuel, 0, 1e13, 0), usdt: num(v?.alert?.usdt, 0, 1e7, 0) },
+    quest: { enabled: bool(v?.quest?.enabled), plays: int(v?.quest?.plays, 1, 10, 2), bonus: int(v?.quest?.bonus, 0, 1e7, 50), streak_days: int(v?.quest?.streak_days, 2, 60, 7), streak_bonus: int(v?.quest?.streak_bonus, 0, 1e8, 500) },
+    trial_days: int(v?.trial_days, 0, 30, 0),
+    tour_remind: bool(v?.tour_remind),
+    subs: bool(v?.subs),
   }),
   vip: (v) => ({ enabled: bool(v?.enabled), price: Math.round(num(v?.price, 0.01, 10000, 3) * 100) / 100, days: int(v?.days, 1, 365, 30), daily_pct: num(v?.daily_pct, 0, 500, 25), fee_off_pct: num(v?.fee_off_pct, 0, 100, 50), badge: str(v?.badge, 4) || "💎" }),
   mini: (v) => ({

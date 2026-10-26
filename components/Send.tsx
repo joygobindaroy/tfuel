@@ -4,11 +4,11 @@ import { CopyBtn, AmtInput, Cta, SkelCard, confetti } from "@/components/Ui";
 import { PageHead } from "@/components/Cashier";
 import { useAccount, PinField } from "@/components/Settings";
 import Icon from "@/components/Icons";
-import { RequestTab, HistoryTab, Contacts, shareLink, SaveContact, type Asset } from "@/components/SendExtra";
+import { RequestTab, HistoryTab, ToolsTab, ReceiptActions, Contacts, shareLink, SaveContact, type Asset } from "@/components/SendExtra";
 
 type Say = (t: string, ok?: boolean) => void;
 interface AInfo { enabled: boolean; fee_pct: number; min: number; left: number | null; balance: number }
-interface Info { enabled: boolean; code: string; cpt: number; assets: { tfuel: AInfo; usdt: AInfo }; links: { request: boolean; claim: boolean; days: number }; hold: { minutes: number; tfuel: number; usdt: number } | null; vip: { active: boolean; fee_off_pct: number } }
+interface Info { enabled: boolean; code: string; cpt: number; assets: { tfuel: AInfo; usdt: AInfo }; links: { request: boolean; claim: boolean; days: number }; hold: { minutes: number; tfuel: number; usdt: number } | null; vip: { active: boolean; fee_off_pct: number }; safe_until?: number; sched?: boolean }
 interface Tx { id: string; txid: string; at: number; amount: number; fee: number; to: { name: string; code: string }; asset: Asset; held: boolean; release_at: number }
 interface LinkOut { url: string; exp: number; amount: number; fee: number; asset: Asset }
 
@@ -16,10 +16,16 @@ interface LinkOut { url: string; exp: number; amount: number; fee: number; asset
 export function SendPage({ say, onBack, cpt, reload, top, reqId, fixedAsset }: { say: Say; onBack: () => void; cpt: number; reload: () => void; top?: React.ReactNode; reqId?: string; fixedAsset?: Asset }) {
   const [info, setInfo] = useState<Info | null>(null);
   const { a: acct } = useAccount();
-  const [tab, setTab] = useState<"send" | "request" | "history">("send");
+  const [tab, setTab] = useState<"send" | "request" | "history" | "tools">("send");
   const [asset, setAsset] = useState<Asset>(fixedAsset || "tfuel");
   useEffect(() => { if (fixedAsset) { setAsset(fixedAsset); setAmt(""); } }, [fixedAsset]);
-  const [mode, setMode] = useState<"person" | "link">("person");
+  const [mode, setMode] = useState<"person" | "link" | "sched">("person");
+  const [pass, setPass] = useState("");
+  const [hours, setHours] = useState("168");
+  const [when, setWhen] = useState("");
+  const [repeat, setRepeat] = useState("");
+  const [rc, setRc] = useState<{ page: string; img: string } | null>(null);
+  const [sch, setSch] = useState<any>(null);
   const [pr, setPr] = useState<any>(null); // payment request being paid
   const [code, setCode] = useState("");
   const [who, setWho] = useState("");
@@ -70,14 +76,16 @@ export function SendPage({ say, onBack, cpt, reload, top, reqId, fixedAsset }: {
   const T = (v: number) => (usdt ? v.toFixed(2) : fmtTf(Math.round(v * cpt), cpt));
   const sym = usdt ? "USDT" : "TFUEL";
   const target = paying ? pr.name : mode === "link" ? "Anyone with the link" : who;
-  const valid = !!ai?.enabled && (paying || mode === "link" || !!who) && n >= min && n > 0 && total <= bal + 1e-9 && (!acct?.pin || pin.length >= 4);
-  const body = (extra: object = {}) => ({ asset, amount: n, note, pin, ...(paying ? { req: pr.id } : mode === "link" ? { mode: "link" } : { code: c }), ...extra });
+  const whenMs = when ? new Date(when).getTime() : 0;
+  const valid = !!ai?.enabled && (paying || mode === "link" || !!who) && (mode !== "sched" || whenMs > Date.now() + 5 * 60000) && n >= min && n > 0 && total <= bal + 1e-9 && (!acct?.pin || pin.length >= 4);
+  const body = (extra: object = {}) => ({ asset, amount: n, note, pin, ...(paying ? { req: pr.id } : mode === "link" ? { mode: "link", pass, hours: Number(hours) } : mode === "sched" ? { mode: "sched", code: c, when: whenMs, repeat } : { code: c }), ...extra });
 
   const close = () => { setStage(""); setOtp(""); setErr(""); sentRef.current = false; };
   const finish = (r: any) => {
-    if (r.link) setLk(r.link); else setTx(r.tx);
+    setRc(r.rc || null);
+    if (r.link) setLk(r.link); else if (r.sched) setSch(r.sched); else setTx(r.tx);
     setStage("done"); confetti(24);
-    setAmt(""); setNote(""); setPin(""); setOtp("");
+    setAmt(""); setNote(""); setPin(""); setOtp(""); setPass(""); setWhen("");
     setInfo((i) => i); load(); reload();
   };
   const doSend = async (emailCode: string) => {
@@ -101,7 +109,7 @@ export function SendPage({ say, onBack, cpt, reload, top, reqId, fixedAsset }: {
   };
   useEffect(() => { if (stage === "code" && /^\d{6}$/.test(otp) && !busy) doSend(otp); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [otp, stage]);
 
-  const rows: [string, string][] = [[mode === "link" ? "Send as" : "Recipient", target], ...(mode === "person" ? [["Recipient ID", paying ? pr.code : c] as [string, string]] : []), ["Amount", `${T(n)} ${sym}`], ["Fee", `${T(fee)} ${sym}`], ["Total", `${T(total)} ${sym}`], ...((paying ? pr.note : note.trim()) ? [["Note", paying ? pr.note : note.trim()] as [string, string]] : [])];
+  const rows: [string, string][] = [[mode === "link" ? "Send as" : "Recipient", target], ...(mode === "sched" ? [["When", `${when.replace("T", " ")}${repeat ? " · " + repeat : ""}`] as [string, string]] : []), ...(mode === "person" || mode === "sched" ? [["Recipient ID", paying ? pr.code : c] as [string, string]] : []), ["Amount", `${T(n)} ${sym}`], ["Fee", `${T(fee)} ${sym}`], ["Total", `${T(total)} ${sym}`], ...((paying ? pr.note : note.trim()) ? [["Note", paying ? pr.note : note.trim()] as [string, string]] : [])];
   const receipt = tx ? `Transfer ${tx.held ? "scheduled" : "completed"}\nTo: ${tx.to.name} (${tx.to.code})\nAmount: ${T(tx.amount / unit)} ${sym}\nFee: ${T(tx.fee / unit)} ${sym}\nTime: ${new Date(tx.at).toISOString().replace("T", " ").slice(0, 19)} UTC\nTransaction hash: ${tx.txid}` : "";
   const holdsHere = !!info?.hold && !!ai && ((usdt ? info.hold.usdt : info.hold.tfuel) > 0) && n * unit >= (usdt ? info.hold.usdt : info.hold.tfuel);
   const showTabs = !top && !reqId && info && (info.links.request || true);
@@ -117,10 +125,12 @@ export function SendPage({ say, onBack, cpt, reload, top, reqId, fixedAsset }: {
           <button className={`chip ${tab === "send" ? "on" : ""}`} onClick={() => setTab("send")}>Send</button>
           {info.links.request && <button className={`chip ${tab === "request" ? "on" : ""}`} onClick={() => setTab("request")}>Request</button>}
           <button className={`chip ${tab === "history" ? "on" : ""}`} onClick={() => setTab("history")}>History</button>
+          <button className={`chip ${tab === "tools" ? "on" : ""}`} onClick={() => setTab("tools")}>Tools</button>
         </div>
       )}
       {info && tab === "request" && showTabs && <RequestTab info={info} cpt={cpt} say={say} />}
       {info && tab === "history" && showTabs && <HistoryTab cpt={cpt} say={say} onCancelled={() => { load(); reload(); }} />}
+      {info && tab === "tools" && showTabs && <ToolsTab cpt={cpt} say={say} safeUntil={info.safe_until || 0} onSafe={load} />}
       {info && (tab === "send" || !showTabs) && (
         <>
           {!reqId && (
@@ -154,6 +164,7 @@ export function SendPage({ say, onBack, cpt, reload, top, reqId, fixedAsset }: {
                       <div className="chips">
                         <button className={`chip ${mode === "person" ? "on" : ""}`} onClick={() => setMode("person")}>A person (ID)</button>
                         <button className={`chip ${mode === "link" ? "on" : ""}`} onClick={() => setMode("link")}>Money link</button>
+                        {info.sched && <button className={`chip ${mode === "sched" ? "on" : ""}`} onClick={() => setMode("sched")}>Schedule</button>}
                       </div>
                     </>
                   )}
@@ -165,7 +176,7 @@ export function SendPage({ say, onBack, cpt, reload, top, reqId, fixedAsset }: {
                   <div style={{ flex: 1, minWidth: 0 }}><div className="title" style={{ fontSize: 15 }}>{pr.name} requests</div><div className="num" style={{ fontWeight: 800, fontSize: 20 }}>{T(n)} {sym}</div>{pr.note && <div className="xs muted">{pr.note}</div>}</div>
                 </div>
               )}
-              {!paying && mode === "person" && (
+              {!paying && (mode === "person" || mode === "sched") && (
                 <>
                   <label>Receiver&apos;s unique ID</label>
                   <input placeholder="10 letters / numbers" maxLength={10} autoCapitalize="off" autoCorrect="off" value={code} onChange={(e) => setCode(e.target.value.replace(/[^A-Za-z0-9]/g, ""))} />
@@ -181,7 +192,24 @@ export function SendPage({ say, onBack, cpt, reload, top, reqId, fixedAsset }: {
                   {lookErr && <div className="xs" style={{ color: "#dc2626", marginTop: 6 }}>{lookErr}</div>}
                 </>
               )}
-              {!paying && mode === "link" && <div className="xs muted" style={{ marginTop: 8 }}>You get a link. The first person who opens it claims the money. Unclaimed links expire after {info.links.days} days and you are refunded. You can also cancel any time.</div>}
+              {!paying && mode === "link" && (
+                <>
+                  <div className="xs muted" style={{ marginTop: 8 }}>You get a link. The first person who opens it claims the money. Unclaimed money returns to you when it expires. You can also cancel any time.</div>
+                  <label>Valid for</label>
+                  <div className="chips">{[["1", "1 hour"], ["24", "1 day"], ["168", "7 days"]].map(([h, t]) => <button key={h} className={`chip ${hours === h ? "on" : ""}`} onClick={() => setHours(h)}>{t}</button>)}</div>
+                  <label>Passcode (optional)</label>
+                  <input maxLength={12} autoCapitalize="off" autoCorrect="off" placeholder="3–12 letters / numbers — tell it to the receiver" value={pass} onChange={(e) => setPass(e.target.value.replace(/[^A-Za-z0-9]/g, ""))} />
+                </>
+              )}
+              {!paying && mode === "sched" && (
+                <>
+                  <label>Send on</label>
+                  <input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} />
+                  <label>Repeat</label>
+                  <div className="chips">{[["", "Once"], ["weekly", "Weekly"], ["monthly", "Monthly"]].map(([k, t]) => <button key={k} className={`chip ${repeat === k ? "on" : ""}`} onClick={() => setRepeat(k)}>{t}</button>)}</div>
+                  <div className="xs muted" style={{ marginTop: 6 }}>The money is taken from your balance on that day. If you don&apos;t have enough, the transfer is skipped and you get a message.</div>
+                </>
+              )}
               {!paying && (
                 <>
                   <label>Amount ({sym})</label>
@@ -189,6 +217,7 @@ export function SendPage({ say, onBack, cpt, reload, top, reqId, fixedAsset }: {
                     <AmtInput placeholder={`Min ${T(min)}`} value={amt} onChange={setAmt} max={usdt ? 2 : 3} />
                     <button className="btn sec sm" style={{ position: "absolute", right: 6, top: 6 }} onClick={() => { const m = Math.floor((bal / (1 + pct / 100)) * unit) / unit; setAmt(String(Math.max(0, usdt ? Math.floor(m * 100) / 100 : m))); }}>Max</button>
                   </div>
+                  <div className="chips" style={{ marginTop: 6 }}>{(usdt ? [1, 5, 10, 50] : [10, 50, 100, 500]).map((v) => <button key={v} className="chip" onClick={() => setAmt(String(v))}>{v}</button>)}</div>
                 </>
               )}
               <div className="xs muted" style={{ marginTop: 4 }}>Fee {pct}%{info.vip.active ? " (VIP discount)" : ""} · Available {T(bal)} {sym}{ai?.left !== null && ai?.left !== undefined ? ` · Left today ${T(ai.left / unit)} ${sym}` : ""}</div>
@@ -208,7 +237,7 @@ export function SendPage({ say, onBack, cpt, reload, top, reqId, fixedAsset }: {
               )}
               {n > 0 && total > bal + 1e-9 && <div className="banner err"><Icon name="alert" size={18} /><span>Not enough {sym} for the amount plus fee.</span></div>}
               {holdsHere && mode !== "link" && <div className="banner warn"><Icon name="clock" size={18} /><span>Large transfer: it is held for {info.hold!.minutes} min before arriving. You can cancel it in History until then.</span></div>}
-              <Cta><button className="btn block" disabled={busy || !valid} onClick={() => { setErr(""); setStage("confirm"); }}>{mode === "link" ? "Review & create link" : "Review & send"}</button></Cta>
+              <Cta><button className="btn block" disabled={busy || !valid} onClick={() => { setErr(""); setStage("confirm"); }}>{mode === "link" ? "Review & create link" : mode === "sched" ? "Review & schedule" : "Review & send"}</button></Cta>
               <div className="banner warn" style={{ marginTop: 0 }}><Icon name="alert" size={18} /><span>Transfers can&apos;t be reversed once received. Only send to people you trust.</span></div>
             </div>
           )}
@@ -220,7 +249,7 @@ export function SendPage({ say, onBack, cpt, reload, top, reqId, fixedAsset }: {
           <div className="sheet" onClick={(e) => e.stopPropagation()}>
             {stage === "confirm" && (
               <>
-                <div className="title" style={{ fontSize: 17, marginBottom: 8 }}>{mode === "link" ? "Confirm money link" : "Confirm transfer"}</div>
+                <div className="title" style={{ fontSize: 17, marginBottom: 8 }}>{mode === "link" ? "Confirm money link" : mode === "sched" ? "Confirm schedule" : "Confirm transfer"}</div>
                 <div className="card" style={{ background: "var(--soft)", boxShadow: "none" }}>
                   {rows.map(([k, v]) => <div className="sumrow" key={k}><span className="muted">{k}</span><b className="num" style={{ wordBreak: "break-all", textAlign: "right", marginLeft: 12 }}>{v}</b></div>)}
                 </div>
@@ -257,8 +286,20 @@ export function SendPage({ say, onBack, cpt, reload, top, reqId, fixedAsset }: {
                   <CopyBtn text={lk.url} label="Copy link" />
                   <button className="btn" onClick={() => shareLink(lk.url, `I sent you ${T(lk.amount / (lk.asset === "usdt" ? 1e6 : cpt))} ${lk.asset === "usdt" ? "USDT" : "TFUEL"} on TFUEL Bot. Open this link to claim it:`)}><Icon name="send" size={15} /> Share</button>
                 </div>
-                <div className="xs muted" style={{ marginTop: 8 }}>Expires {new Date(lk.exp).toLocaleDateString()}. Manage it any time in History.</div>
+                <div className="xs muted" style={{ marginTop: 8 }}>Expires {new Date(lk.exp).toLocaleString()}. Manage it any time in History.</div>
                 <button className="btn" style={{ width: "100%", marginTop: 8 }} onClick={() => { setStage(""); setLk(null); sentRef.current = false; }}>Done</button>
+              </>
+            )}
+            {stage === "done" && sch && (
+              <>
+                <div style={{ textAlign: "center", marginBottom: 10 }}>
+                  <div className="ico gold" style={{ margin: "0 auto 8px", width: 52, height: 52 }}><Icon name="clock" size={26} /></div>
+                  <div className="title" style={{ fontSize: 18 }}>Transfer scheduled</div>
+                  <div className="num" style={{ fontSize: 22, fontWeight: 800, marginTop: 4 }}>{T(sch.amount / unit)} {sym}</div>
+                  <div className="sub">to {sch.to} · {new Date(sch.next).toLocaleString()}{sch.repeat ? ` · ${sch.repeat}` : ""}</div>
+                </div>
+                <div className="xs muted">Cancel it any time in Send → Tools → Scheduled.</div>
+                <button className="btn" style={{ width: "100%", marginTop: 8 }} onClick={() => { setStage(""); setSch(null); setCode(""); setWho(""); sentRef.current = false; }}>Done</button>
               </>
             )}
             {stage === "done" && tx && (
@@ -281,6 +322,7 @@ export function SendPage({ say, onBack, cpt, reload, top, reqId, fixedAsset }: {
                   <CopyBtn text={tx.txid} label="Copy hash" />
                   <CopyBtn text={receipt} label="Copy receipt" />
                 </div>
+                <ReceiptActions txid={tx.txid} rc={rc} say={say} />
                 <SaveContact code={tx.to.code} name={tx.to.name} say={say} onSaved={() => setContactsKey((k) => k + 1)} />
                 <button className="btn" style={{ width: "100%", marginTop: 8 }} onClick={() => { setStage(""); setTx(null); setCode(""); setWho(""); sentRef.current = false; }}>Done</button>
               </>

@@ -12,6 +12,7 @@ import { reqCtx } from "@/lib/reqctx";
 import { getCfg2 } from "@/lib/cfg2";
 import { toU, fromU } from "@/lib/market";
 import { vipPerks } from "@/lib/vip";
+import { schedCreate, schedList, schedCancel, recentPeople, spendReport, disputeTransfer } from "@/lib/plus";
 import { createRequest, getRequest, reqHold, reqDone, cancelRequest, listRequests, createLink, peekLink, claimLink, cancelLink, listLinks, listXfers, listContacts, saveContact, deleteContact } from "@/lib/xlink";
 
 /** Send money (user → user) in TFUEL or USDT: info / lookup / prepare / send, payment requests, money links, history, contacts */
@@ -24,7 +25,7 @@ export default route(async (req, res) => {
   const cpt = s.coins_per_tfuel;
   const c2 = await getCfg2();
   const reqId = String(b.req || "");
-  const mode: "person" | "request" | "link" = reqId ? "request" : b.mode === "link" ? "link" : "person";
+  const mode: "person" | "request" | "link" | "sched" = reqId ? "request" : b.mode === "link" ? "link" : b.mode === "sched" ? "sched" : "person";
   let asset: Asset = b.asset === "usdt" ? "usdt" : "tfuel";
 
   const lookup = async (code: string) => {
@@ -70,6 +71,7 @@ export default route(async (req, res) => {
     const t = await resolve();
     if (!enabled(asset)) throw new HttpError(403, "send_disabled");
     if (mode === "link" && !c2.xfer.links.claim) throw new HttpError(403, "feature_off");
+    if (mode === "sched" && !c2.plus.sched.enabled) throw new HttpError(403, "feature_off");
     if (t.amount < (await minFor(asset, s))) throw new HttpError(400, "send_min");
     const { fee } = await feeFor(user.id, asset, t.amount, s);
     const total = t.amount + fee;
@@ -95,8 +97,13 @@ export default route(async (req, res) => {
     else await requireEmailCode(user.id, "send", b.email_code, det);
     const note = String(t.note || "").replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 60);
     const me = { id: user.id, name: String(u.name || user.first_name || "User") };
+    if (mode === "sched") {
+      const r = await schedCreate(me, { uid: t.toUid, name: t.name, code: t.code }, asset, t.amount, note, Number(b.when), String(b.repeat || ""));
+      await secLog(user.id, "withdraw_request", reqCtx(req), `schedule ${shown(t.amount)} ${asset}`).catch(() => {});
+      return void res.json({ success: true, sched: { id: r.id, next: r.next, amount: t.amount, asset, to: t.name, repeat: String(b.repeat || "") } });
+    }
     if (mode === "link") {
-      const L = await createLink(me, asset, t.amount, note, s);
+      const L = await createLink(me, asset, t.amount, note, s, { pass: String(b.pass || ""), hours: Number(b.hours) });
       await secLog(user.id, "withdraw_request", reqCtx(req), `link ${shown(t.amount)} ${asset}`).catch(() => {});
       return void res.json({ success: true, link: { url: L.url, exp: L.exp, amount: t.amount, fee: L.fee, asset } });
     }
@@ -104,35 +111,47 @@ export default route(async (req, res) => {
     if (mode === "request") {
       await reqHold(reqId, user.id);
       try { out = await sendAsset(me, t.toUid, asset, t.amount, s, note || t.note); }
-      catch (e) { await reqDone(reqId, false); throw e; }
-      await reqDone(reqId, true, out.txid);
+      catch (e) { await reqDone(reqId, false, "", user.id); throw e; }
+      await reqDone(reqId, true, out.txid, user.id);
     } else out = await sendAsset(me, t.toUid, asset, t.amount, s, note);
     await secLog(user.id, "withdraw_request", reqCtx(req), `send ${shown(t.amount)} ${asset}`).catch(() => {});
-    return void res.json({ success: true, fee: out.fee, balance: out.balance, tx: { id: out.id, txid: out.txid, at: out.at, amount: t.amount, fee: out.fee, to: out.to, asset, held: !!out.held, release_at: out.release_at || 0 } });
+    let rc: { page: string; img: string } | null = null;
+    if (!out.held) { try { const R = await import("@/lib/receipt"); rc = R.receiptLinks(await R.loadReceipt(out.txid, user.id), user.id, cpt); } catch {} }
+    return void res.json({ success: true, fee: out.fee, balance: out.balance, rc, tx: { id: out.id, txid: out.txid, at: out.at, amount: t.amount, fee: out.fee, to: out.to, asset, held: !!out.held, release_at: out.release_at || 0 } });
   }
 
   // ── history, contacts, requests, links ──
+  if (action === "recent") return void res.json({ success: true, items: await recentPeople(user.id) });
+  if (action === "report") return void res.json({ success: true, ...(await spendReport(user.id, Number(b.offset) || 0, cpt)) });
+  if (action === "dispute") { const id = await disputeTransfer(user.id, String(u.name || user.first_name || "User"), String(b.id || ""), String(b.reason || "")); return void res.json({ success: true, ticket: id }); }
+  if (action === "safe") {
+    const h = Number(b.hours) > 0 ? Math.min(168, Math.floor(Number(b.hours))) : 0;
+    await db().ref(`user_prefs/${user.id}/safe_until`).set(h ? Date.now() + h * 3600000 : null);
+    return void res.json({ success: true, safe_until: h ? Date.now() + h * 3600000 : 0 });
+  }
+  if (action === "sched_list") return void res.json({ success: true, items: await schedList(user.id) });
+  if (action === "sched_cancel") { await schedCancel(user.id, String(b.id || "")); return void res.json({ success: true, items: await schedList(user.id) }); }
   if (action === "history") return void res.json({ success: true, items: await listXfers(user.id, 120) });
   if (action === "cancel") { await cancelHold(user.id, String(b.id || "")); return void res.json({ success: true }); }
   if (action === "contacts") return void res.json({ success: true, items: await listContacts(user.id) });
   if (action === "contact_save") { await saveContact(user.id, String(b.code || "").trim(), String(b.label || "")); return void res.json({ success: true, items: await listContacts(user.id) }); }
   if (action === "contact_del") { await deleteContact(user.id, String(b.code || "").trim()); return void res.json({ success: true, items: await listContacts(user.id) }); }
   if (action === "req_create") {
-    const r = await createRequest(user.id, asset, parseAmount(b.amount, asset), String(b.note || ""), s);
+    const r = await createRequest(user.id, asset, parseAmount(b.amount, asset), String(b.note || ""), s, Number(b.split) || 1);
     return void res.json({ success: true, ...r });
   }
   if (action === "req_list") return void res.json({ success: true, items: await listRequests(user.id, s) });
   if (action === "req_cancel") { await cancelRequest(user.id, String(b.id || "")); return void res.json({ success: true, items: await listRequests(user.id, s) }); }
   if (action === "req_info") {
     const r = await getRequest(reqId || String(b.id || ""));
-    return void res.json({ success: true, req: { id: r.id, name: r.name, code: r.code, asset: r.asset, amount: r.amount, note: r.note, st: r.st, mine: r.to === user.id } });
+    return void res.json({ success: true, req: { id: r.id, name: r.name, code: r.code, asset: r.asset, amount: r.amount, note: r.note, st: r.st, mine: r.to === user.id, n: (r as any).n || 1, paid: (r as any).paid || 0, paid_by_me: !!(r as any).payers?.[user.id] } });
   }
   if (action === "link_list") return void res.json({ success: true, items: await listLinks(user.id, s) });
   if (action === "link_cancel") { await cancelLink(user.id, String(b.id || "")); return void res.json({ success: true, items: await listLinks(user.id, s) }); }
   if (action === "claim_info") return void res.json({ success: true, link: await peekLink(String(b.token || "")) });
   if (action === "claim") {
     await rateLimit(user.id, "claim", 10);
-    const r = await claimLink(user.id, String(b.token || ""), s);
+    const r = await claimLink(user.id, String(b.token || ""), s, String(b.pass || ""));
     return void res.json({ success: true, ...r });
   }
 
@@ -149,6 +168,18 @@ export default route(async (req, res) => {
     if (!t || (t.from !== user.id && t.to !== user.id)) throw new HttpError(404, "not_found");
     const mine = t.from === user.id;
     return void res.json({ success: true, receipt: { txid: tid, at: t.at, asset: t.asset || "tfuel", amount: t.amount, fee: mine ? t.fee : 0, dir: mine ? "out" : "in", other: mine ? await displayName(t.to) : (await displayName(t.from)).replace(/^(.).*(.)$/, "$1•••$2"), note: t.note || "" } });
+  }
+
+  if (action === "receipt_link" || action === "receipt_bot") {
+    const { loadReceipt, receiptLinks, botReceipt } = await import("@/lib/receipt");
+    const r = await loadReceipt(String(b.txid || ""), user.id);
+    if (action === "receipt_bot") {
+      await rateLimit(user.id, "rcpt_bot", 10);
+      const ok = await botReceipt(user.id, r, cpt, true);
+      if (!ok) throw new HttpError(409, "bot_unreachable");
+      return void res.json({ success: true });
+    }
+    return void res.json({ success: true, ...receiptLinks(r, user.id, cpt) });
   }
 
   // ── info ──
@@ -174,5 +205,7 @@ export default route(async (req, res) => {
     links: c2.xfer.links,
     hold: c2.xfer.hold.minutes && (c2.xfer.hold.tfuel > 0 || c2.xfer.hold.usdt > 0) ? { minutes: c2.xfer.hold.minutes, tfuel: c2.xfer.hold.tfuel, usdt: toU(c2.xfer.hold.usdt) } : null,
     vip: { active: vip.active, fee_off_pct: vip.fee_off_pct },
+    safe_until: Number((await db().ref(`user_prefs/${user.id}/safe_until`).get()).val()) || 0,
+    sched: c2.plus.sched.enabled,
   });
 });

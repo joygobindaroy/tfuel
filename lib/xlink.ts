@@ -16,9 +16,10 @@ import { Asset, amtStr, credit, debit, displayName, feeFor, maskName, minFor, re
 const link = (s: Settings, p: string) => (s.referral_link ? `${s.referral_link}?startapp=${p}` : "");
 
 /* ───────────── Payment requests: "please pay me X" ───────────── */
-export interface PayReq { to: string; asset: Asset; amount: number; note: string; at: number; exp: number; st: "open" | "paying" | "paid" | "cancelled"; by?: string; tx?: string }
+export interface PayReq { to: string; asset: Asset; amount: number; note: string; at: number; exp: number; st: "open" | "paying" | "paid" | "cancelled"; by?: string; tx?: string; n?: number; paid?: number; hold?: number; payers?: Record<string, string>; hp?: Record<string, number> }
 
-export async function createRequest(uid: string, asset: Asset, amount: number, note: string, s: Settings) {
+export async function createRequest(uid: string, asset: Asset, amount: number, note: string, s: Settings, split = 1) {
+  split = Math.max(1, Math.min(20, Math.floor(Number(split) || 1)));
   const c = await getCfg2();
   if (!c.xfer.links.request) throw new HttpError(403, "feature_off");
   if (asset === "usdt" ? !c.xfer.usdt.enabled : !s.send_enabled) throw new HttpError(403, "send_disabled");
@@ -27,8 +28,8 @@ export async function createRequest(uid: string, asset: Asset, amount: number, n
   if (Object.values(mine).filter((r: any) => r.st === "open" && r.exp > Date.now()).length >= 20) throw new HttpError(429, "too_many_requests");
   const id = randomToken().slice(0, 14);
   const now = Date.now();
-  const rec: PayReq = { to: uid, asset, amount, note: note.replace(/[\u0000-\u001f\u007f<>]/g, " ").trim().slice(0, 60), at: now, exp: now + c.xfer.links.days * 86400000, st: "open" };
-  await db().ref().update({ [`pay_requests/${id}`]: rec, [`user_reqs/${uid}/${id}`]: { asset, amount, note: rec.note, at: now, exp: rec.exp, st: "open" } });
+  const rec: PayReq = { to: uid, asset, amount, note: note.replace(/[\u0000-\u001f\u007f<>]/g, " ").trim().slice(0, 60), at: now, exp: now + c.xfer.links.days * 86400000, st: "open", ...(split > 1 ? { n: split, paid: 0 } : {}) };
+  await db().ref().update({ [`pay_requests/${id}`]: rec, [`user_reqs/${uid}/${id}`]: { asset, amount, note: rec.note, at: now, exp: rec.exp, st: "open", ...(split > 1 ? { n: split, paid: 0 } : {}) } });
   return { id, url: link(s, `req_${id}`), exp: rec.exp };
 }
 export async function getRequest(id: string) {
@@ -45,24 +46,47 @@ export async function reqHold(id: string, payer: string): Promise<PayReq> {
   if (r0.to === payer) throw new HttpError(400, "send_self");
   const t = await db().ref(`pay_requests/${id}`).transaction((c: PayReq | null) => {
     if (c === null) return c;
-    if (c.st !== "open" || c.exp <= Date.now()) return;
-    c.st = "paying"; c.by = payer;
+    const n = c.n || 1;
+    if ((c.st !== "open" && c.st !== "paying") || c.exp <= Date.now()) return;
+    if (c.payers && c.payers[payer]) return;
+    if (c.hp && c.hp[payer]) return;
+    if ((c.paid || 0) + (c.hold || 0) >= n) return;
+    c.hold = (c.hold || 0) + 1;
+    c.hp = { ...(c.hp || {}), [payer]: 1 };
+    c.by = payer;
+    c.st = (c.paid || 0) + c.hold >= n ? "paying" : "open";
     return c;
   });
   if (!t.committed) throw new HttpError(409, "request_closed");
   return r0;
 }
-export async function reqDone(id: string, ok: boolean, txid = "") {
-  const r = (await db().ref(`pay_requests/${id}`).get()).val() as PayReq | null;
-  if (!r) return;
-  const st = ok ? "paid" : "open";
-  await db().ref().update({ [`pay_requests/${id}/st`]: st, [`pay_requests/${id}/tx`]: txid, [`user_reqs/${r.to}/${id}/st`]: st });
-  if (ok) await notify(r.to, `✅ Your payment request of ${amtStr(r.asset, r.amount, 1000)} was paid.`).catch(() => {});
+export async function reqDone(id: string, ok: boolean, txid = "", payer = "") {
+  const ref = db().ref(`pay_requests/${id}`);
+  const r0 = (await ref.get()).val() as PayReq | null;
+  if (!r0) return;
+  let after: PayReq | null = null;
+  await ref.transaction((c: PayReq | null) => {
+    if (c === null) return c;
+    const n = c.n || 1;
+    c.hold = Math.max(0, (c.hold || 0) - 1);
+    if (c.hp && payer) { const h = { ...c.hp }; delete h[payer]; c.hp = h; }
+    if (ok) { c.paid = (c.paid || 0) + 1; c.payers = { ...(c.payers || {}), [payer || "x" + c.paid]: txid }; c.tx = txid; }
+    c.st = (c.paid || 0) >= n ? "paid" : "open";
+    after = c;
+    return c;
+  });
+  const a = after as PayReq | null;
+  if (!a) return;
+  await db().ref().update({ [`user_reqs/${r0.to}/${id}/st`]: a.st, [`user_reqs/${r0.to}/${id}/paid`]: a.paid || 0 }).catch(() => {});
+  if (ok) {
+    const n = a.n || 1;
+    await notify(r0.to, n > 1 ? `✅ A friend paid their share (${a.paid}/${n}) of your request: ${amtStr(r0.asset, r0.amount, 1000)} each.` : `✅ Your payment request of ${amtStr(r0.asset, r0.amount, 1000)} was paid.`).catch(() => {});
+  }
 }
 export async function cancelRequest(uid: string, id: string) {
   const r = (await db().ref(`pay_requests/${id}`).get()).val() as PayReq | null;
   if (!r || r.to !== uid) throw new HttpError(404, "request_not_found");
-  const t = await db().ref(`pay_requests/${id}/st`).transaction((c: string | null) => (c === "open" ? "cancelled" : undefined));
+  const t = await db().ref(`pay_requests/${id}/st`).transaction((c: string | null) => (c === "open" || c === "paying" ? "cancelled" : undefined));
   if (!t.committed) throw new HttpError(409, "request_closed");
   await db().ref(`user_reqs/${uid}/${id}/st`).set("cancelled");
 }
@@ -72,15 +96,18 @@ export async function listRequests(uid: string, s: Settings) {
 }
 
 /* ───────────── Claim links: "I send you X — whoever opens this link first claims it" ───────────── */
-interface ClaimRec { from: string; from_name: string; asset: Asset; amount: number; fee: number; total: number; note: string; at: number; exp: number; st: "open" | "claiming" | "claimed" | "cancelled" | "expired"; by?: string; tok: string }
+interface ClaimRec { from: string; from_name: string; asset: Asset; amount: number; fee: number; total: number; note: string; at: number; exp: number; st: "open" | "claiming" | "claimed" | "cancelled" | "expired"; by?: string; tok: string; pw?: string; bad?: number }
 const hashTok = (t: string) => sha256("claim:" + t).slice(0, 24);
 
-export async function createLink(from: { id: string; name: string }, asset: Asset, amount: number, note: string, s: Settings) {
+export async function createLink(from: { id: string; name: string }, asset: Asset, amount: number, note: string, s: Settings, o: { pass?: string; hours?: number } = {}) {
   const c = await getCfg2();
   if (!c.xfer.links.claim) throw new HttpError(403, "feature_off");
   if (asset === "usdt" ? !c.xfer.usdt.enabled : !s.send_enabled) throw new HttpError(403, "send_disabled");
   await assertCanMoveMoney(from.id, s);
   if (!Number.isInteger(amount) || amount < (await minFor(asset, s))) throw new HttpError(400, "send_min");
+  const pass = String(o.pass || "").trim();
+  if (pass && !/^[A-Za-z0-9]{3,12}$/.test(pass)) throw new HttpError(400, "bad_passcode");
+  const hrs = Math.max(1, Math.min(Math.floor(Number(o.hours) || 0) || c.xfer.links.days * 24, c.xfer.links.days * 24));
   const open_ = ((await db().ref(`user_links/${from.id}`).get()).val() || {}) as Record<string, any>;
   if (Object.values(open_).filter((r: any) => r.st === "open").length >= 10) throw new HttpError(429, "too_many_links");
   const { fee } = await feeFor(from.id, asset, amount, s);
@@ -91,9 +118,9 @@ export async function createLink(from: { id: string; name: string }, asset: Asse
   const tok = randomToken().replace(/[^A-Za-z0-9]/g, "").slice(0, 20);
   const id = hashTok(tok);
   const cleanNote = note.replace(/[\u0000-\u001f\u007f<>]/g, " ").trim().slice(0, 60);
-  const rec: ClaimRec = { from: from.id, from_name: from.name, asset, amount, fee, total, note: cleanNote, at: now, exp: now + c.xfer.links.days * 86400000, st: "open", tok: seal(tok) };
+  const rec: ClaimRec = { from: from.id, from_name: from.name, asset, amount, fee, total, note: cleanNote, at: now, exp: now + hrs * 3600000, st: "open", tok: seal(tok), ...(pass ? { pw: sha256("lp:" + id + ":" + pass) } : {}) };
   try {
-    await db().ref().update({ [`claim_links/${id}`]: rec, [`user_links/${from.id}/${id}`]: { asset, amount, fee, note: cleanNote, at: now, exp: rec.exp, st: "open", tok: rec.tok } });
+    await db().ref().update({ [`claim_links/${id}`]: rec, [`user_links/${from.id}/${id}`]: { asset, amount, fee, note: cleanNote, at: now, exp: rec.exp, st: "open", tok: rec.tok, ...(pass ? { pw: 1 } : {}) } });
   } catch (e) {
     await credit(from.id, asset, total, "refund").catch((e2) => console.error("LINK REFUND FAILED", from.id, total, e2));
     await unreserve();
@@ -107,14 +134,21 @@ export async function peekLink(tok: string) {
   const r = (await db().ref(`claim_links/${hashTok(tok)}`).get()).val() as ClaimRec | null;
   if (!r) throw new HttpError(404, "link_not_found");
   const st = r.st === "open" && r.exp <= Date.now() ? "expired" : r.st;
-  return { asset: r.asset, amount: r.amount, note: r.note, st, from: maskName(await displayName(r.from)), exp: r.exp };
+  return { asset: r.asset, amount: r.amount, note: r.note, st, from: maskName(await displayName(r.from)), exp: r.exp, pass: !!r.pw };
 }
-export async function claimLink(uid: string, tok: string, s: Settings) {
+export async function claimLink(uid: string, tok: string, s: Settings, pass = "") {
   if (!/^[A-Za-z0-9]{20}$/.test(tok)) throw new HttpError(404, "link_not_found");
   const id = hashTok(tok);
   const r0 = (await db().ref(`claim_links/${id}`).get()).val() as ClaimRec | null;
   if (!r0) throw new HttpError(404, "link_not_found");
   if (r0.from === uid) throw new HttpError(400, "claim_own");
+  if (r0.pw) {
+    if ((r0.bad || 0) >= 8) throw new HttpError(429, "claim_locked");
+    if (sha256("lp:" + id + ":" + String(pass || "").trim()) !== r0.pw) {
+      await db().ref(`claim_links/${id}/bad`).transaction((c: number | null) => (c || 0) + 1);
+      throw new HttpError(403, "bad_passcode");
+    }
+  }
   if (((await db().ref(`users/${uid}/banned`).get()).val())) throw new HttpError(403, "send_no_user");
   const t = await db().ref(`claim_links/${id}`).transaction((c: ClaimRec | null) => {
     if (c === null) return c;
@@ -144,8 +178,12 @@ export async function claimLink(uid: string, tok: string, s: Settings) {
   const cpt = s.coins_per_tfuel;
   await activity(uid, "receive", { ...(r0.asset === "usdt" ? { usdt_u: r0.amount } : { coins: r0.amount }), note: `From ${maskName(r0.from_name)} (link) · ${txid}` });
   await notify(r0.from, `🎁 ${maskName(toName)} claimed your money link (${amtStr(r0.asset, r0.amount, cpt)}).`).catch(() => {});
-  await mailMoney(uid, "received", [["Status", "Completed"], ["Amount", amtStr(r0.asset, r0.amount, cpt)], ["From", maskName(r0.from_name)], ["Transaction hash", txid]]);
-  await mailMoney(r0.from, "sent", [["Status", "Claimed by receiver"], ["Amount", amtStr(r0.asset, r0.amount, cpt)], ["Fee", amtStr(r0.asset, r0.fee, cpt)], ["Receiver", toName], ["Transaction hash", txid]]);
+  import("./plus").then((P) => P.xferStat(r0.asset, r0.amount, r0.fee)).catch(() => {});
+  const R = await import("./receipt");
+  const btn = async (u: string) => { try { return { label: "🧾 Open receipt (print / download)", url: R.receiptLinks(await R.loadReceipt(txid, u), u, cpt).page }; } catch { return undefined; } };
+  await mailMoney(uid, "received", [["Status", "Completed"], ["Amount", amtStr(r0.asset, r0.amount, cpt)], ["From", maskName(r0.from_name)], ["Transaction hash", txid]], { button: await btn(uid) });
+  await mailMoney(r0.from, "sent", [["Status", "Claimed by receiver"], ["Amount", amtStr(r0.asset, r0.amount, cpt)], ["Fee", amtStr(r0.asset, r0.fee, cpt)], ["Receiver", toName], ["Transaction hash", txid]], { button: await btn(r0.from) });
+  for (const u of [uid, r0.from]) { try { await R.botReceipt(u, await R.loadReceipt(txid, u), cpt); } catch {} }
   return { asset: r0.asset, amount: r0.amount, from: maskName(r0.from_name), txid, at: now };
 }
 async function refundLink(id: string, to: "cancelled" | "expired") {

@@ -6,6 +6,8 @@ import type { Settings } from "./settings";
 export async function assertCanMoveMoney(uid: string, s?: Settings) {
   const f = (await db().ref(`frozen/${uid}`).get()).val();
   if (f) throw new HttpError(403, "account_frozen");
+  const safe = Number((await db().ref(`user_prefs/${uid}/safe_until`).get()).val()) || 0;
+  if (safe > Date.now()) throw new HttpError(403, "safe_mode");
   const list = (s?.blocked_countries || []).map((x) => String(x).toUpperCase());
   if (list.length) {
     const cc = String((await db().ref(`user_prefs/${uid}/geo/cc`).get()).val() || "").toUpperCase();

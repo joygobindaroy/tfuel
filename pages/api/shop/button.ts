@@ -26,7 +26,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!s.shops_enabled || !shop.enabled) throw new HttpError(503, "Shop payments are off");
     const b = req.body || {};
     const ref = String(b.ref || "") || "btn-" + Date.now().toString(36) + randomToken().slice(0, 6);
-    const r = await createShopOrder(String(id), shop, s, { ref, usd: Number(b.amount), title: String(b.title || ""), ret: String(b.return_url || "") });
+    const r = await createShopOrder(String(id), shop, s, { ref, usd: Number(b.amount), title: String(b.title || ""), ret: String(b.return_url || ""), sub: Number(b.sub_days) || 0 });
     res.json({ success: true, pay_url: r.pay_url, order_id: r.order_id });
   } catch (e: any) {
     res.status(e instanceof HttpError ? e.status : 500).json({ success: false, error: e instanceof HttpError ? e.message : "Server error" });

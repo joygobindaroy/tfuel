@@ -3,6 +3,7 @@ import { route, rateLimit } from "@/lib/api";
 import { ensureUser, MAX_AUTH_AGE_MONEY } from "@/lib/user";
 import { miniView, memStart, memFlip, triStart, triAnswer, huntPlay, tourJoin, tourBoard } from "@/lib/mini";
 import { vipView, vipBuy } from "@/lib/vip";
+import { vipTrial } from "@/lib/plus";
 
 /** Free mini games (memory / trivia / treasure hunt), free-entry tournaments and the VIP pass */
 export default route(async (req, res) => {
@@ -20,6 +21,7 @@ export default route(async (req, res) => {
     case "hunt": return void res.json({ success: true, ...(await huntPlay(user.id, Number(b.tile))) });
     case "tourJoin": await tourJoin(user.id, String(b.id || "")); return void res.json({ success: true });
     case "tourBoard": return void res.json({ success: true, board: (await tourBoard(String(b.id || ""))).map(({ uid, ...r }) => ({ ...r, me: uid === user.id })) });
+    case "vipTrial": return void res.json({ success: true, ...(await vipTrial(user.id)), vip: await vipView(user.id) });
     case "vipBuy": return void res.json({ success: true, ...(await vipBuy(user.id)), vip: await vipView(user.id) });
   }
   throw new HttpError(400, "bad_request");

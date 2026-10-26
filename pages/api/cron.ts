@@ -15,8 +15,9 @@ import { payRefContest } from "@/lib/growth2";
 import { runGameJobs } from "@/lib/jobs-games";
 import { releaseDueHolds } from "@/lib/transfer";
 import { expireLinks } from "@/lib/xlink";
-import { settleTours } from "@/lib/mini";
-import { retryFailedHooks } from "@/lib/shop";
+import { settleTours, remindTours } from "@/lib/mini";
+import { runScheds } from "@/lib/plus";
+import { retryFailedHooks, runSubs } from "@/lib/shop";
 
 /**
  * পর্যায়ক্রমে চলে (Vercel Cron বা cron-job.org থেকে প্রতি মিনিটে/৫ মিনিটে GET)।
@@ -43,10 +44,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const holds = await releaseDueHolds(s).catch(() => null);
     const links = await expireLinks().catch(() => null);
     const tours = await settleTours().catch(() => null);
+    const reminders = await remindTours().catch(() => null);
+    const scheds = await runScheds(s).catch(() => null);
+    const subs = await runSubs().catch(() => null);
     const hooks = await retryFailedHooks().catch(() => null);
     const adminJobs = await runAdminJobs(s).catch(() => null);
     await db().ref("stats/cron_at").set(Date.now()).catch(() => {});
-    res.json({ success: true, ...t, leaderboard: paid, deposits: dep, stars, reminded, userJobs, health, contest, games, holds, links, tours, hooks, adminJobs });
+    res.json({ success: true, ...t, leaderboard: paid, deposits: dep, stars, reminded, userJobs, health, contest, games, holds, links, tours, reminders, scheds, subs, hooks, adminJobs });
   } catch (e: any) {
     console.error(e);
     res.status(500).json({ success: false, error: "Server error" });
