@@ -37,8 +37,8 @@ export function ReceiptActions({ txid, rc, say }: { txid: string; rc?: { page: s
 }
 
 /** Saved people (trusted contacts): tap to fill the ID */
-export function Contacts({ onPick, say }: { onPick: (code: string) => void; say: Say }) {
-  const [items, setItems] = useState<{ code: string; name: string; label: string }[]>([]);
+export function Contacts({ onPick, say }: { onPick: (code: string, last?: { a: Asset; v: number }) => void; say: Say }) {
+  const [items, setItems] = useState<{ code: string; name: string; label: string; last?: { a: Asset; v: number } }[]>([]);
   const [edit, setEdit] = useState(false);
   const [recent, setRecent] = useState<{ code: string; name: string }[]>([]);
   useEffect(() => { api<any>("send", { action: "contacts" }).then((r) => setItems(r.items)).catch(() => {}); api<any>("send", { action: "recent" }).then((r) => setRecent(r.items)).catch(() => {}); }, []);
@@ -57,7 +57,7 @@ export function Contacts({ onPick, say }: { onPick: (code: string) => void; say:
       <div className="chips">
         {items.map((c) => (
           <span key={c.code} style={{ display: "inline-flex", gap: 4 }}>
-            <button className="chip" onClick={() => onPick(c.code)}>{c.label || c.name}</button>
+            <button className="chip" onClick={() => onPick(c.code, (c as any).last)}>{c.label || c.name}</button>
             {edit && <button className="chip" aria-label="Remove" onClick={async () => { try { const r: any = await api("send", { action: "contact_del", code: c.code }); setItems(r.items); } catch (e) { say(errText(e)); } }}>✕</button>}
           </span>
         ))}
@@ -230,10 +230,12 @@ export function HistoryTab({ cpt, say, onCancelled }: { cpt: number; say: Say; o
             <div style={{ minWidth: 0 }}>
               <div className="title" style={{ fontSize: 14, color: x.d === "in" ? "#15803d" : undefined }}>{x.d === "in" ? "+" : "−"}{money(x.a, x.amt, cpt)} {x.st === "held" && <span className="tag warn">on hold</span>}{x.st === "cancelled" && <span className="tag err">cancelled</span>}{x.st === "claimed" && <span className="tag ok">claimed</span>}</div>
               <div className="sub">{x.d === "in" ? "From" : "To"} {x.peer} · {when(x.at)}{x.n ? ` · ${x.n}` : ""}</div>
+              {x.tag && <div className="xs">🏷 {x.tag}</div>}
               <div className="xs muted" style={{ wordBreak: "break-all" }}>{x.tx}</div>
               {opn === x.id && (
                 <>
                   <ReceiptActions txid={x.tx} say={say} />
+                  <button className="btn ghost sm" style={{ marginTop: 4 }} onClick={async () => { const t = prompt("Add a private tag (e.g. rent, pizza)", x.tag || ""); if (t === null) return; try { await api("send", { action: "xtag", id: x.id, tag: t }); say("Saved", true); load(); } catch (e) { say(errText(e)); } }}>🏷 {x.tag ? "Edit tag" : "Add tag"}</button>
                   <button className="btn ghost sm" style={{ marginTop: 4 }} disabled={!!x.dispute} onClick={() => dispute(x.id)}>{x.dispute ? "Reported ✓" : "⚠️ Report a problem"}</button>
                 </>
               )}
@@ -315,6 +317,11 @@ export function ToolsTab({ cpt, say, safeUntil, onSafe }: { cpt: number; say: Sa
         <div className="sub">Blocks every money-out (sends, withdrawals, links) while it is on. You can switch it off yourself any time.</div>
         {safeOn ? <><div className="banner warn" style={{ marginTop: 8 }}><Icon name="alert" size={18} /><span>On until {when(safeUntil)}</span></div><button className="btn sec" onClick={() => setSafe(0)}>Turn off</button></>
           : <div className="chips" style={{ marginTop: 8 }}>{[[24, "24 hours"], [72, "3 days"], [168, "7 days"]].map(([h, t]) => <button key={h} className="chip" onClick={() => setSafe(Number(h))}>{t}</button>)}</div>}
+      </div>
+      <div className="card">
+        <div className="title" style={{ fontSize: 14 }}>Monthly statement</div>
+        <div className="sub">All your transfers of a month as a printable page (save as PDF). It is also sent to you in the bot on the 1st.</div>
+        <div className="chips" style={{ marginTop: 8 }}>{[[0, "This month"], [1, "Last month"], [2, "2 months ago"]].map(([o, t]) => <button key={o} className="chip" onClick={async () => { try { const r: any = await api("send", { action: "statement_link", offset: o }); const w: any = window; w.Telegram?.WebApp?.openLink ? w.Telegram.WebApp.openLink(r.url) : w.open(r.url, "_blank"); } catch (e) { say(errText(e)); } }}>📄 {t}</button>)}</div>
       </div>
       <div className="card">
         <div className="row"><div className="title" style={{ fontSize: 14 }}>Monthly report</div><div className="chips">{[0, 1, 2].map((o) => <button key={o} className={`chip ${off === o ? "on" : ""}`} onClick={() => setOff(o)}>{o === 0 ? "This month" : o === 1 ? "Last month" : "2 months ago"}</button>)}</div></div>

@@ -47,6 +47,8 @@ export interface Order {
   sub?: number; // first payment of a subscription: renews every N days
   sub_of?: string; // renewal order of this subscription
   sub_id?: string;
+  coupon?: string;
+  disc_u?: number; // coupon discount (the user pays less; the shop still gets the full amount)
 }
 
 export const ORDER_TTL_MS = 30 * 60000;
@@ -119,8 +121,9 @@ export async function useLoginCode(code: string, shopId: string): Promise<string
   return uid;
 }
 
+export const payU = (o: Order) => Math.max(0, o.usd_u - (o.disc_u || 0));
 export function quoteFor(o: Order, price: number | null, cpt: number) {
-  const usd = fromU(o.usd_u);
+  const usd = fromU(payU(o));
   return { usd, usdt: usd, tfuel_coins: price ? Math.ceil((usd / price) * cpt) : null };
 }
 
@@ -143,7 +146,8 @@ export async function payOrder(uid: string, name: string, orderId: string, cur: 
     const p = await getPrice(s);
     if (!p || p.stale) throw new HttpError(503, "price_unavailable");
     coins = quoteFor(o0, p.price, s.coins_per_tfuel).tfuel_coins!;
-  } else usdtU = o0.usd_u;
+  } else usdtU = payU(o0);
+  if (o0.coupon) await couponCheck(o0.shop, o0.coupon, uid);
 
   // 1) order-কে "paying" করে দখল (দুই জায়গা থেকে একসাথে দিলে একজনই)
   const claim = await oref.transaction((o: Order | null) => (o && o.status === "open" && o.exp >= Date.now() ? { ...o, status: "paying", paid_by: uid } : undefined));
@@ -185,6 +189,10 @@ export async function payOrder(uid: string, name: string, orderId: string, cur: 
       paid.sub_id = sid;
     } catch (e) { console.error("sub create failed", orderId, e); }
   }
+  if (o0.coupon) {
+    await db().ref(`shop_coupons/${o0.shop}/${o0.coupon}/used`).transaction((c: number | null) => (c || 0) + 1).catch(() => {});
+    await db().ref(`coupon_use/${o0.shop}/${o0.coupon}/${uid}`).set(now).catch(() => {});
+  }
   await activity(uid, "shop", { coins: -coins, usdt_u: -usdtU, note: shop.name });
   await mailMoney(uid, "shop", [["Shop", shop.name], ["Order", o0.title || orderId], ["Paid", cur === "usdt" ? `${fromU(usdtU).toFixed(2)} USDT` : `${coins} coins`]]);
   await notify(uid, `🛍 Paid ${cur === "usdt" ? fromU(usdtU).toFixed(2) + " USDT" : coins + " coins"} to ${shop.name}${o0.title ? " — " + o0.title : ""}.`);
@@ -196,7 +204,7 @@ export async function sendWebhook(shopId: string, shop: Shop, orderId: string, o
   if (!shop.webhook) return;
   const secret = open(shop.secret);
   if (!secret) return;
-  const body = JSON.stringify({ event: o.status === "refunded" ? "order.refunded" : "order.paid", order_id: orderId, ref: o.ref, status: o.status, usd: fromU(o.usd_u), currency: o.cur, paid_usdt: o.cur === "usdt" ? fromU(o.usdt_u || 0) : undefined, paid_coins: o.cur === "tfuel" ? o.coins : undefined, user_id: uid, ...(o.sub_id ? { subscription_id: o.sub_id } : {}), ...(o.sub_of ? { subscription_id: o.sub_of, renewal: true } : {}) });
+  const body = JSON.stringify({ event: o.status === "refunded" ? "order.refunded" : "order.paid", order_id: orderId, ref: o.ref, status: o.status, usd: fromU(o.usd_u), currency: o.cur, paid_usdt: o.cur === "usdt" ? fromU(o.usdt_u || 0) : undefined, paid_coins: o.cur === "tfuel" ? o.coins : undefined, user_id: uid, ...(o.disc_u ? { discount_usd: fromU(o.disc_u), coupon: o.coupon } : {}), ...(o.sub_id ? { subscription_id: o.sub_id } : {}), ...(o.sub_of ? { subscription_id: o.sub_of, renewal: true } : {}) });
   const ts = String(Date.now());
   let ok = false;
   try {
@@ -332,13 +340,22 @@ export async function shopTest(id: string): Promise<{ ok: boolean; checks: { nam
 /* ───────── Subscriptions (recurring shop payments, charged from the user's balance) ───────── */
 export async function subList(uid: string) {
   const m = ((await db().ref(`user_subs/${uid}`).get()).val() || {}) as Record<string, any>;
-  return Object.entries(m).filter(([, x]) => x.st === "active").map(([id, x]) => ({ id, shop: x.shop_name, title: x.title, usd: fromU(x.usd_u), every: x.every, next: x.next, cur: x.cur }));
+  return Object.entries(m).filter(([, x]) => x.st === "active" || x.st === "paused").map(([id, x]) => ({ id, shop: x.shop_name, title: x.title, usd: fromU(x.usd_u), every: x.every, next: x.next, cur: x.cur, paused: x.st === "paused" }));
 }
 export async function subCancel(uid: string, id: string, by = "user") {
   const r = (await db().ref(`shop_subs/${id}`).get()).val() as any;
   if (!r || (by === "user" && r.uid !== uid)) throw new HttpError(404, "not_found");
   await db().ref().update({ [`shop_subs/${id}/st`]: "cancelled", [`user_subs/${r.uid}/${id}/st`]: "cancelled" });
   if (by === "user") await notify(r.uid, `Subscription to ${r.shop_name}${r.title ? " (" + r.title + ")" : ""} cancelled. You won't be charged again.`).catch(() => {});
+}
+export async function subPause(uid: string, id: string, pause: boolean) {
+  const r = (await db().ref(`shop_subs/${id}`).get()).val() as any;
+  if (!r || r.uid !== uid) throw new HttpError(404, "not_found");
+  if (pause && r.st === "active") await db().ref().update({ [`shop_subs/${id}/st`]: "paused", [`shop_subs/${id}/paused_at`]: Date.now(), [`user_subs/${uid}/${id}/st`]: "paused" });
+  else if (!pause && r.st === "paused") {
+    const next = Math.max(r.next, Date.now() + 86400000);
+    await db().ref().update({ [`shop_subs/${id}/st`]: "active", [`shop_subs/${id}/next`]: next, [`shop_subs/${id}/reminded`]: false, [`shop_subs/${id}/paused_at`]: null, [`user_subs/${uid}/${id}/st`]: "active", [`user_subs/${uid}/${id}/next`]: next });
+  }
 }
 /** cron: remind one day before, then charge due subscriptions; 3 failed days in a row cancels it */
 export async function runSubs(): Promise<number> {
@@ -350,6 +367,12 @@ export async function runSubs(): Promise<number> {
   const now = Date.now();
   let n = 0;
   for (const [id, x] of Object.entries(all)) {
+    if (x.st === "paused" && now - (x.paused_at || now) > 30 * 86400000) {
+      // paused for 30 days: resume (first charge in a day) so it never stays paused forever by accident
+      await subPause(x.uid, id, false).catch(() => {});
+      await notify(x.uid, `🔁 Your paused subscription to ${x.shop_name} was resumed after 30 days. Next charge tomorrow — cancel it in Profile → Partner shops if you don't want it.`).catch(() => {});
+      continue;
+    }
     if (x.st !== "active") continue;
     if (x.next - now < 86400000 && x.next > now && !x.reminded) {
       await db().ref(`shop_subs/${id}/reminded`).set(true);
@@ -376,4 +399,33 @@ export async function runSubs(): Promise<number> {
     }
   }
   return n;
+}
+
+
+/* ───────── Coupons (admin makes them per shop; the user pays less, the shop still receives the full amount) ───────── */
+export interface Coupon { pct: number; max: number; used: number; exp: number; active: boolean; note?: string; created: number }
+export async function couponCheck(shopId: string, code: string, uid: string): Promise<Coupon> {
+  const c = (await db().ref(`shop_coupons/${shopId}/${code}`).get()).val() as Coupon | null;
+  if (!c || !c.active) throw new HttpError(409, "coupon_invalid");
+  if (c.exp && c.exp < Date.now()) throw new HttpError(409, "coupon_expired");
+  if (c.max > 0 && (c.used || 0) >= c.max) throw new HttpError(409, "coupon_used_up");
+  if ((await db().ref(`coupon_use/${shopId}/${code}/${uid}`).get()).exists()) throw new HttpError(409, "coupon_already_used");
+  return c;
+}
+export async function couponApply(uid: string, orderId: string, raw: string) {
+  const code = String(raw || "").trim().toUpperCase();
+  if (!/^[A-Z0-9_-]{3,24}$/.test(code)) throw new HttpError(409, "coupon_invalid");
+  const o = (await db().ref(`shop_orders/${orderId}`).get()).val() as Order | null;
+  if (!o || (o.uid && o.uid !== uid)) throw new HttpError(404, "order_not_found");
+  if (o.status !== "open" || o.exp < Date.now()) throw new HttpError(410, "order_expired");
+  if (o.sub || o.sub_of) throw new HttpError(409, "coupon_not_for_subs");
+  const c = await couponCheck(o.shop, code, uid);
+  const disc = Math.floor((o.usd_u * c.pct) / 100);
+  await db().ref(`shop_orders/${orderId}`).update({ coupon: code, disc_u: disc });
+  return { pct: c.pct, discount: fromU(disc), pay: fromU(o.usd_u - disc) };
+}
+export async function couponRemove(uid: string, orderId: string) {
+  const o = (await db().ref(`shop_orders/${orderId}`).get()).val() as Order | null;
+  if (!o || (o.uid && o.uid !== uid) || o.status !== "open") throw new HttpError(404, "order_not_found");
+  await db().ref(`shop_orders/${orderId}`).update({ coupon: null, disc_u: null });
 }

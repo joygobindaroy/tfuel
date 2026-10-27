@@ -222,7 +222,7 @@ export async function listXfers(uid: string, limit = 100) {
   const m = ((await db().ref(`user_xfers/${uid}`).get()).val() || {}) as Record<string, any>;
   return Object.entries(m).sort((a, b) => (b[1].at - a[1].at) || b[0].localeCompare(a[0])).slice(0, limit).map(([id, r]) => ({ id, ...r }));
 }
-export interface Contact { name: string; label: string; at: number }
+export interface Contact { name: string; label: string; at: number; last?: { a: Asset; v: number } }
 export async function listContacts(uid: string) {
   const m = ((await db().ref(`contacts/${uid}`).get()).val() || {}) as Record<string, Contact>;
   return Object.entries(m).sort((a, b) => b[1].at - a[1].at).map(([code, c]) => ({ code, ...c }));
@@ -235,7 +235,7 @@ export async function saveContact(uid: string, code: string, label: string) {
   if (!all[code] && Object.keys(all).length >= 50) throw new HttpError(429, "too_many_contacts");
   const name = await displayName(to);
   const lb = label.replace(/[\u0000-\u001f\u007f<>]/g, " ").trim().slice(0, 24);
-  await db().ref(`contacts/${uid}/${code}`).set({ name, label: lb, at: Date.now() });
+  await db().ref(`contacts/${uid}/${code}`).set({ name, label: lb, at: Date.now(), ...(all[code]?.last ? { last: all[code].last } : {}) });
 }
 export async function deleteContact(uid: string, code: string) {
   if (!/^[A-Za-z0-9]{10}$/.test(code)) throw new HttpError(400, "send_bad_code");

@@ -38,7 +38,7 @@ export default function Receipt({ ok, r, img, err }: P) {
           <a className="bt s" href={img} download={`receipt-${r.txid.slice(0, 10)}.png`}>⬇ Download image</a>
           <button className="bt s" onClick={() => { try { navigator.clipboard.writeText(location.href); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch {} }}>{copied ? "Copied ✓" : "🔗 Copy link"}</button>
         </div>
-        <div className="np" style={{ color: "#9ca3af", fontSize: 12, marginTop: 14 }}>Keep this link private — it shows the details of this transfer.</div>
+        <div className="np" style={{ color: "#9ca3af", fontSize: 12, marginTop: 14 }}>Keep this link private — it shows the details of this transfer. Anyone with the transaction hash can confirm it is genuine at /verify.</div>
       </div>
     </div>
   );

@@ -1,5 +1,7 @@
 /** Short highlights shown in Admin → Controls → Version (full history is in CHANGELOG.md) */
 export const CHANGELOG_HIGHLIGHTS: { v: string; text: string }[] = [
+  { v: "19.7", text: "Auto-post types for the group/channel (price, top earners, invite card, tournament, own messages) + new Gen-Z invite card design." },
+  { v: "19.6", text: "Verify page, transfer tags, monthly statement, reminders, contact amounts, first-send warning, subscription pause, shop coupons, admin transfer timeline, Channels & groups picker." },
   { v: "19.5", text: "Receipts (email, bot, print/image), scheduled sends, link passcode, safe mode, report, disputes, quest + trial, shop subscriptions + test order, gift code batch, invite poster, daily digest." },
   { v: "19.4", text: "USDT send, request & money links, held sends, contacts, mini games + tournaments, VIP pass, shop dashboard/retry, WordPress plugin, health checks." },
   { v: "19.3.1", text: "Fix: Send TFUEL no longer fails with \"couldn't find that user\" at the code step." },

@@ -4,7 +4,7 @@ import { db } from "@/lib/firebase";
 import { ensureUser, MAX_AUTH_AGE_MONEY } from "@/lib/user";
 import { checkPin } from "@/lib/prefs";
 import { getPrice, fromU } from "@/lib/market";
-import { subList, subCancel, makeLoginCode, payOrder, quoteFor, Shop, Order } from "@/lib/shop";
+import { couponApply, couponRemove, subList, subCancel, subPause, makeLoginCode, payOrder, quoteFor, Shop, Order } from "@/lib/shop";
 
 /** Mini App-এর শপ অংশ: তালিকা / সংযোগ / লগইন-লিংক / পেমেন্ট */
 export default route(async (req, res) => {
@@ -30,6 +30,8 @@ export default route(async (req, res) => {
   if (action === "subs") return void res.json({ success: true, items: await subList(user.id) });
   if (action === "sub_cancel") { await subCancel(user.id, String(req.body?.id || "")); return void res.json({ success: true, items: await subList(user.id) }); }
 
+  if (action === "sub_pause" || action === "sub_resume") { await subPause(user.id, String(req.body?.id || ""), action === "sub_pause"); return void res.json({ success: true, items: await subList(user.id) }); }
+
   if (action === "launch" || action === "disconnect") {
     if (!/^[\w-]{1,40}$/.test(sid)) throw new HttpError(400, "bad_request");
     const shop = (await db().ref(`shops/${sid}`).get()).val() as Shop | null;
@@ -48,7 +50,7 @@ export default route(async (req, res) => {
     return void res.json({ success: true, url: `${base}${base.includes("?") ? "&" : "?"}code=${code}` });
   }
 
-  if (action === "order" || action === "pay") {
+  if (action === "order" || action === "pay" || action === "coupon" || action === "coupon_off") {
     const oid = String(req.body?.id || "");
     if (!/^[\w-]{1,64}$/.test(oid)) throw new HttpError(404, "order_not_found");
     const o = (await db().ref(`shop_orders/${oid}`).get()).val() as Order | null;
@@ -56,6 +58,8 @@ export default route(async (req, res) => {
     const shop = (await db().ref(`shops/${o.shop}`).get()).val() as Shop | null;
     if (!shop || !shop.enabled || !s.shops_enabled) throw new HttpError(404, "shop_unavailable");
 
+    if (action === "coupon") { await rateLimit(user.id, "coupon", 10); return void res.json({ success: true, ...(await couponApply(user.id, oid, String(req.body?.code || ""))) }); }
+    if (action === "coupon_off") { await couponRemove(user.id, oid); return void res.json({ success: true }); }
     if (action === "pay") {
       await rateLimit(user.id, "shop_pay", 8);
       const cur = req.body?.cur === "usdt" ? "usdt" : "tfuel";
@@ -71,7 +75,7 @@ export default route(async (req, res) => {
     const status = o.status === "open" && o.exp < Date.now() ? "expired" : o.status === "paying" ? "open" : o.status;
     return void res.json({
       success: true,
-      order: { id: oid, shop: shop.name, title: o.title, usd: q.usd, status, exp: o.exp, return_url: o.return_url || shop.domain, sub: o.sub || 0 },
+      order: { id: oid, shop: shop.name, title: o.title, usd: q.usd, status, exp: o.exp, return_url: o.return_url || shop.domain, sub: o.sub || 0, list_usd: fromU(o.usd_u), coupon: o.coupon || "", discount: fromU(o.disc_u || 0) },
       pay: { tfuel: shop.allow_tfuel && q.tfuel_coins !== null ? { coins: q.tfuel_coins, balance: u.balance } : null, usdt: shop.allow_usdt ? { amount: q.usdt, balance: fromU(u.usdt_u || 0) } : null },
       pin,
       pref: pref === "usdt" ? "usdt" : "tfuel",

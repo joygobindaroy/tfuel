@@ -64,8 +64,12 @@ export default route(async (req, res) => {
   const shown = (amt: number) => (asset === "usdt" ? fromU(amt) : amt / cpt);
 
   if (action === "lookup") {
-    const r = await lookup(String(b.code || "").trim());
-    return void res.json({ success: true, name: r.name });
+    const code0 = String(b.code || "").trim();
+    const r = await lookup(code0);
+    const rows = Object.values(((await db().ref(`user_xfers/${user.id}`).get()).val() || {}) as Record<string, any>);
+    const first = !rows.some((x: any) => x.d === "out" && x.pc === code0 && x.st !== "cancelled");
+    const ct = (await db().ref(`contacts/${user.id}/${code0}`).get()).val() as any;
+    return void res.json({ success: true, name: r.name, first, last: ct?.last || null });
   }
   if (action === "prepare") {
     const t = await resolve();
@@ -115,6 +119,7 @@ export default route(async (req, res) => {
       await reqDone(reqId, true, out.txid, user.id);
     } else out = await sendAsset(me, t.toUid, asset, t.amount, s, note);
     await secLog(user.id, "withdraw_request", reqCtx(req), `send ${shown(t.amount)} ${asset}`).catch(() => {});
+    if (mode === "person" && t.code) { try { if ((await db().ref(`contacts/${user.id}/${t.code}`).get()).exists()) await db().ref(`contacts/${user.id}/${t.code}/last`).set({ a: asset, v: shown(t.amount) }); } catch {} }
     let rc: { page: string; img: string } | null = null;
     if (!out.held) { try { const R = await import("@/lib/receipt"); rc = R.receiptLinks(await R.loadReceipt(out.txid, user.id), user.id, cpt); } catch {} }
     return void res.json({ success: true, fee: out.fee, balance: out.balance, rc, tx: { id: out.id, txid: out.txid, at: out.at, amount: t.amount, fee: out.fee, to: out.to, asset, held: !!out.held, release_at: out.release_at || 0 } });
@@ -131,6 +136,18 @@ export default route(async (req, res) => {
   }
   if (action === "sched_list") return void res.json({ success: true, items: await schedList(user.id) });
   if (action === "sched_cancel") { await schedCancel(user.id, String(b.id || "")); return void res.json({ success: true, items: await schedList(user.id) }); }
+  if (action === "xtag") {
+    const id = String(b.id || "");
+    if (!/^[\w-]{3,40}$/.test(id) || !(await db().ref(`user_xfers/${user.id}/${id}`).get()).exists()) throw new HttpError(404, "not_found");
+    const tag = String(b.tag || "").replace(/[\u0000-\u001f\u007f<>]/g, " ").trim().slice(0, 40);
+    await db().ref(`user_xfers/${user.id}/${id}/tag`).set(tag || null);
+    return void res.json({ success: true, tag });
+  }
+  if (action === "statement_link") {
+    const d = new Date(); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() - Math.max(0, Math.min(11, Number(b.offset) || 0)));
+    const R = await import("@/lib/receipt");
+    return void res.json({ success: true, url: R.stmtUrl(user.id, `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`) });
+  }
   if (action === "history") return void res.json({ success: true, items: await listXfers(user.id, 120) });
   if (action === "cancel") { await cancelHold(user.id, String(b.id || "")); return void res.json({ success: true }); }
   if (action === "contacts") return void res.json({ success: true, items: await listContacts(user.id) });

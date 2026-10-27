@@ -161,3 +161,51 @@ export async function questView(uid: string) {
   const alive = st.day === dayKey() || st.day === dayKey(Date.now() - 86400000);
   return { plays: c.plays, played: Math.min(played, c.plays), bonus: c.bonus, streak: alive ? st.n || 0 : 0, streak_days: c.streak_days, streak_bonus: c.streak_bonus };
 }
+
+/* ───────── Gentle reminders (cron) ───────── */
+export async function runNudges(): Promise<number> {
+  const c = await getCfg2();
+  if (!c.plus.nudges) return 0;
+  const now = Date.now();
+  let n = 0;
+  try {
+    const reqs = ((await db().ref("pay_requests").get()).val() || {}) as Record<string, any>;
+    for (const [id, r] of Object.entries(reqs)) {
+      if (r.st !== "open" || r.exp < now || now - r.at < 86400000 || r.reminded) continue;
+      const claim = await db().ref(`pay_requests/${id}/reminded`).transaction((x: boolean | null) => (x ? undefined : true));
+      if (!claim.committed) continue;
+      await notify(r.to, `⏰ Your payment request of ${amtStr(r.asset, r.amount, (await import("./settings").then((m) => m.getSettings())).coins_per_tfuel)} is still unpaid. Share the link again from Send → Request.`).catch(() => {});
+      n++;
+    }
+    const links = ((await db().ref("claim_links").get()).val() || {}) as Record<string, any>;
+    for (const [id, r] of Object.entries(links)) {
+      if (r.st !== "open" || r.exp < now || now - r.at < 86400000 || r.reminded) continue;
+      const claim = await db().ref(`claim_links/${id}/reminded`).transaction((x: boolean | null) => (x ? undefined : true));
+      if (!claim.committed) continue;
+      await notify(r.from, `⏰ Your money link of ${amtStr(r.asset, r.amount, (await import("./settings").then((m) => m.getSettings())).coins_per_tfuel)} has not been opened yet. It returns to you automatically when it expires, or cancel it any time in Send → History.`).catch(() => {});
+      n++;
+    }
+  } catch (e) { console.error("nudges", e); }
+  return n;
+}
+/** cron: on the 1st–3rd of a month send everyone who moved money last month a link to their statement (once) */
+export async function sendStatements(): Promise<number> {
+  const c = await getCfg2();
+  if (!c.plus.nudges) return 0;
+  const d = new Date();
+  if (d.getUTCDate() > 3) return 0;
+  const p = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - 1, 1));
+  const month = `${p.getUTCFullYear()}-${String(p.getUTCMonth() + 1).padStart(2, "0")}`;
+  const g = await db().ref("stats/stmt_sent").transaction((x: string | null) => (x === month ? undefined : month));
+  if (!g.committed) return 0;
+  const a = Date.UTC(p.getUTCFullYear(), p.getUTCMonth(), 1), b = Date.UTC(p.getUTCFullYear(), p.getUTCMonth() + 1, 1);
+  const all = ((await db().ref("user_xfers").get()).val() || {}) as Record<string, Record<string, any>>;
+  const { stmtUrl } = await import("./receipt");
+  let n = 0;
+  for (const [uid, rows] of Object.entries(all)) {
+    if (!Object.values(rows).some((r: any) => r.at >= a && r.at < b && r.st !== "cancelled")) continue;
+    await notify(uid, `📄 Your ${month} transfer statement is ready.`, false, [[{ text: "📄 Open / print statement", url: stmtUrl(uid, month) }]]).catch(() => {});
+    n++;
+  }
+  return n;
+}

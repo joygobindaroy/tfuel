@@ -27,7 +27,7 @@ export async function ensureBotSynced(host?: string): Promise<void> {
       await tgCall("setMyCommands", { commands: cmds, scope: JSON.stringify({ type: "all_private_chats" }) }).catch(() => {});
       await tgCall("setChatMenuButton", { menu_button: JSON.stringify({ type: "commands" }) }).catch(() => {});
       if (host && !/localhost/.test(host)) {
-        await tgCall("setWebhook", { url: `https://${host}/api/tg-webhook`, secret_token: webhookSecret(), allowed_updates: JSON.stringify(["message", "pre_checkout_query", "callback_query", "inline_query"]), drop_pending_updates: "false" }).catch(() => {});
+        await tgCall("setWebhook", { url: `https://${host}/api/tg-webhook`, secret_token: webhookSecret(), allowed_updates: JSON.stringify(["message", "pre_checkout_query", "callback_query", "inline_query", "my_chat_member"]), drop_pending_updates: "false" }).catch(() => {});
       }
       await db().ref("bot_sync").set({ key, version: VERSION, at: Date.now() });
     }

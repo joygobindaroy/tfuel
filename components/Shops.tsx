@@ -10,7 +10,7 @@ const when = (t: number) => new Date(t).toLocaleString("en-GB", { day: "numeric"
 
 /* ---------------- Pay a shop order (opened from the shop via ?startapp=pay_<id>) ---------------- */
 interface Order {
-  order: { id: string; shop: string; title: string; usd: number; status: string; exp: number; return_url: string; sub?: number };
+  order: { id: string; shop: string; title: string; usd: number; status: string; exp: number; return_url: string; sub?: number; list_usd?: number; coupon?: string; discount?: number };
   pay: { tfuel: { coins: number; balance: number } | null; usdt: { amount: number; balance: number } | null };
   pin: boolean;
   pref: "tfuel" | "usdt";
@@ -22,9 +22,11 @@ export function PaySheet({ id, cpt, say, onClose, reload }: { id: string; cpt: n
   const [pin, setPin] = useState("");
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<{ url: string; amount: number; cur: string } | null>(null);
-  useEffect(() => {
-    api<Order>("shop-user", { action: "order", id }).then((d) => { setO(d); setCur(d.pref); }).catch((e) => setErr(errText(e)));
-  }, [id]);
+  const [cp, setCp] = useState("");
+  const loadO = () => api<Order>("shop-user", { action: "order", id }).then((d) => { setO(d); setCur(d.pref); }).catch((e) => setErr(errText(e)));
+  useEffect(() => { loadO(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const applyCp = async () => { try { await api("shop-user", { action: "coupon", id, code: cp }); setCp(""); say("Coupon applied", true); loadO(); } catch (e: any) { say(errText(e)); } };
+  const offCp = async () => { try { await api("shop-user", { action: "coupon_off", id }); loadO(); } catch (e: any) { say(errText(e)); } };
   const pay = async () => {
     setBusy(true);
     try {
@@ -68,12 +70,17 @@ export function PaySheet({ id, cpt, say, onClose, reload }: { id: string; cpt: n
         {o && !done && (
           <>
             <div className="sub">{o.order.shop} is requesting</div>
-            <div className="title num" style={{ fontSize: 26 }}>{fmtUsd(o.order.usd)}</div>
+            <div className="title num" style={{ fontSize: 26 }}>{fmtUsd(o.order.usd)}{!!o.order.discount && <span className="muted" style={{ fontSize: 15, textDecoration: "line-through", marginLeft: 8 }}>{fmtUsd(o.order.list_usd || 0)}</span>}</div>
             <div className="sub" style={{ marginBottom: 12 }}>{o.order.title}</div>
             {o.order.status !== "open" ? (
               <div className="banner warn"><Icon name="alert" size={18} /><span>{o.order.status === "paid" ? "This order has already been paid." : o.order.status === "expired" ? "This request has expired. Go back to the shop and try again." : `This order is ${o.order.status}.`}</span></div>
             ) : (
               <>
+                {!o.order.sub && (o.order.coupon ? (
+                  <div className="gap" style={{ marginBottom: 10, alignItems: "center" }}><span className="pill ok">🏷 {o.order.coupon} · −{fmtUsd(o.order.discount || 0)}</span><button className="btn ghost sm" onClick={offCp}>Remove</button></div>
+                ) : (
+                  <div className="gap" style={{ marginBottom: 10 }}><input style={{ flex: 1 }} placeholder="Coupon code" autoCapitalize="characters" maxLength={24} value={cp} onChange={(e) => setCp(e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, ""))} /><button className="btn sec" disabled={cp.length < 3} onClick={applyCp}>Apply</button></div>
+                ))}
                 <div className="title" style={{ fontSize: 14, marginBottom: 8 }}>Choose how to pay</div>
                 {opt("tfuel")}
                 {opt("usdt")}
@@ -147,8 +154,9 @@ export function ShopsPage({ say, onBack, cpt }: { say: Say; onBack: () => void; 
               <div className="card">
                 {subs.map((x) => (
                   <div className="hist" key={x.id}>
-                    <div style={{ minWidth: 0 }}><div className="title num">{fmtUsd(x.usd)} / {x.every} days</div><div className="sub">{x.shop}{x.title ? " · " + x.title : ""} · next {when(x.next)}</div></div>
-                    <button className="btn danger sm" onClick={async () => { if (!confirm("Cancel this subscription?")) return; try { const r: any = await api("shop-user", { action: "sub_cancel", id: x.id }); setSubs(r.items); say("Cancelled", true); } catch (e: any) { say(errText(e)); } }}>Cancel</button>
+                    <div style={{ minWidth: 0 }}><div className="title num">{fmtUsd(x.usd)} / {x.every} days</div><div className="sub">{x.shop}{x.title ? " · " + x.title : ""} · next {when(x.next)}{x.paused ? " · ⏸ paused" : ""}</div></div>
+                    <div className="gap"><button className="btn sec sm" onClick={async () => { try { const r: any = await api("shop-user", { action: x.paused ? "sub_resume" : "sub_pause", id: x.id }); setSubs(r.items); say(x.paused ? "Resumed — next charge in about a day" : "Paused for up to 30 days", true); } catch (e: any) { say(errText(e)); } }}>{x.paused ? "Resume" : "Pause"}</button>
+                    <button className="btn danger sm" onClick={async () => { if (!confirm("Cancel this subscription?")) return; try { const r: any = await api("shop-user", { action: "sub_cancel", id: x.id }); setSubs(r.items); say("Cancelled", true); } catch (e: any) { say(errText(e)); } }}>Cancel</button></div>
                   </div>
                 ))}
               </div>

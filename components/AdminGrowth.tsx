@@ -467,6 +467,7 @@ export default function GrowthPage({ call }: { call: Call }) {
             <div className="title" style={{ marginTop: 14, fontSize: 14 }}>VIP free trial</div>
             <div className="grid2"><L t="Trial days (0 = no trial)"><input inputMode="numeric" value={v.trial_days} onChange={(e) => set({ trial_days: e.target.value })} /></L></div>
             <Row t="Tournament reminder" h="Bot message to joined players 1 hour before the end."><Sw on={!!v.tour_remind} set={(x) => set({ tour_remind: x })} /></Row>
+            <Row t="Gentle reminders" h="Unpaid payment requests and unclaimed money links after 24 h; monthly transfer statement on the 1st."><Sw on={v.nudges !== false} set={(x) => set({ nudges: x })} /></Row>
             <Row t="Shop subscriptions" h="Shops can ask for a recurring payment; users approve it once and can cancel any time."><Sw on={!!v.subs} set={(x) => set({ subs: x })} /></Row>
           </>
         );

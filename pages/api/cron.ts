@@ -16,7 +16,8 @@ import { runGameJobs } from "@/lib/jobs-games";
 import { releaseDueHolds } from "@/lib/transfer";
 import { expireLinks } from "@/lib/xlink";
 import { settleTours, remindTours } from "@/lib/mini";
-import { runScheds } from "@/lib/plus";
+import { runAutoPosts } from "@/lib/autopost";
+import { runScheds, runNudges, sendStatements } from "@/lib/plus";
 import { retryFailedHooks, runSubs } from "@/lib/shop";
 
 /**
@@ -46,11 +47,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const tours = await settleTours().catch(() => null);
     const reminders = await remindTours().catch(() => null);
     const scheds = await runScheds(s).catch(() => null);
+    const autoposts = await runAutoPosts(s).catch(() => null);
+    const nudges = await runNudges().catch(() => null);
+    const stmts = await sendStatements().catch(() => null);
     const subs = await runSubs().catch(() => null);
     const hooks = await retryFailedHooks().catch(() => null);
     const adminJobs = await runAdminJobs(s).catch(() => null);
     await db().ref("stats/cron_at").set(Date.now()).catch(() => {});
-    res.json({ success: true, ...t, leaderboard: paid, deposits: dep, stars, reminded, userJobs, health, contest, games, holds, links, tours, reminders, scheds, subs, hooks, adminJobs });
+    res.json({ success: true, ...t, leaderboard: paid, deposits: dep, stars, reminded, userJobs, health, contest, games, holds, links, tours, autoposts, reminders, scheds, nudges, stmts, subs, hooks, adminJobs });
   } catch (e: any) {
     console.error(e);
     res.status(500).json({ success: false, error: "Server error" });

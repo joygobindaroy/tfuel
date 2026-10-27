@@ -250,6 +250,7 @@ export default route(async (req, res) => {
         },
         flags: fl.val() || {},
         withdrawals: wl,
+        xfers: Object.entries(((await db().ref(`user_xfers/${uid}`).get()).val() || {}) as Record<string, any>).sort((a, c) => (c[1].at - a[1].at) || c[0].localeCompare(a[0])).slice(0, 40).map(([id, r]) => ({ id, d: r.d, a: r.a, amt: r.amt, fee: r.fee || 0, peer: r.peer, pc: r.pc, tx: r.tx, at: r.at, st: r.st, dispute: r.dispute || "" })),
         security: {
           email: pf.email?.addr || "",
           email_verified: !!pf.email?.verified,
@@ -544,6 +545,32 @@ export default route(async (req, res) => {
       await adminLog(who, "shop_test_order", { id, order: r.order_id });
       return void res.json({ success: true, pay_url: r.pay_url, order_id: r.order_id });
     }
+    case "couponList": {
+      const all = ((await db().ref("shop_coupons").get()).val() || {}) as Record<string, Record<string, any>>;
+      const out: any[] = [];
+      for (const [shop, m] of Object.entries(all)) for (const [code, c] of Object.entries(m || {})) out.push({ shop, code, ...c });
+      return void res.json({ success: true, items: out.sort((a, c) => (c.created || 0) - (a.created || 0)).slice(0, 100) });
+    }
+    case "couponSave": {
+      const shop = String(b.shop || ""), code = String(b.code || "").trim().toUpperCase();
+      if (!idRe.test(shop) || !(await db().ref(`shops/${shop}`).get()).exists()) throw new HttpError(404, "Shop not found");
+      if (!/^[A-Z0-9_-]{3,24}$/.test(code)) throw new HttpError(400, "Code must be 3-24 letters, numbers, - or _");
+      const pct = Number(b.pct), max = Math.floor(Number(b.max) || 0), days = Number(b.days) || 0;
+      if (!Number.isFinite(pct) || pct < 1 || pct > 100) throw new HttpError(400, "Discount must be 1–100%");
+      if (max < 0 || max > 1e7) throw new HttpError(400, "Invalid max uses");
+      if (days < 0 || days > 3650) throw new HttpError(400, "Invalid expiry");
+      const prev = (await db().ref(`shop_coupons/${shop}/${code}`).get()).val() || {};
+      await db().ref(`shop_coupons/${shop}/${code}`).set({ pct, max, used: prev.used || 0, exp: days > 0 ? Date.now() + days * 86400000 : 0, active: b.active === undefined ? true : !!b.active, note: clean(b.note, 60), created: prev.created || Date.now() });
+      await adminLog(who, "shop_coupon_saved", { shop, code, pct });
+      return void res.json({ success: true });
+    }
+    case "couponDelete": {
+      const shop = String(b.shop || ""), code = String(b.code || "").trim().toUpperCase();
+      if (!idRe.test(shop) || !/^[A-Z0-9_-]{3,24}$/.test(code)) throw new HttpError(400, "Invalid request");
+      await db().ref(`shop_coupons/${shop}/${code}`).remove();
+      await adminLog(who, "shop_coupon_deleted", { shop, code });
+      return void res.json({ success: true });
+    }
     case "shopSubs": {
       const all = ((await db().ref("shop_subs").get()).val() || {}) as Record<string, any>;
       return void res.json({ success: true, items: Object.entries(all).filter(([, x]) => x.st === "active").map(([id, x]) => ({ id, shop: x.shop_name, uid: x.uid, title: x.title, usd: fromU(x.usd_u), every: x.every, next: x.next, n: x.n, fails: x.fails || 0 })).slice(0, 200) });
@@ -700,7 +727,7 @@ export default route(async (req, res) => {
     case "starsConnect": {
       const host = String(req.headers["x-forwarded-host"] || req.headers.host || "");
       if (!host || /localhost/.test(host)) throw new HttpError(400, "Open the admin panel from your live site to connect");
-      const r = await tgCall("setWebhook", { url: `https://${host}/api/tg-webhook`, secret_token: webhookSecret(), allowed_updates: JSON.stringify(["message", "pre_checkout_query", "callback_query", "inline_query"]), drop_pending_updates: "false" });
+      const r = await tgCall("setWebhook", { url: `https://${host}/api/tg-webhook`, secret_token: webhookSecret(), allowed_updates: JSON.stringify(["message", "pre_checkout_query", "callback_query", "inline_query", "my_chat_member"]), drop_pending_updates: "false" });
       if (!r.ok) throw new HttpError(400, r.description || "Telegram refused the webhook");
       await tgCall("setMyCommands", { commands: JSON.stringify(BOT_COMMANDS) });
       await adminLog(who, "stars_webhook_connected", { host });

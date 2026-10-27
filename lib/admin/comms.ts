@@ -3,11 +3,13 @@ import { db } from "../firebase";
 import { sortableId } from "../crypto";
 import { adminLog } from "../log";
 import { HttpError } from "../auth";
-import { getSettings } from "../settings";
+import { getSettings, parseSettings, invalidateSettings } from "../settings";
 import { startBroadcast, audienceIds, postToChannel, Audience } from "../broadcast";
 import { alertAdmins, alertTargets } from "../adminalert";
 import { tgCall } from "../telegram";
 import { daySummary, summaryText } from "../insights";
+import { getCfg2, setCfg2 } from "../cfg2";
+import { sendPost } from "../autopost";
 
 const clean = (v: any, n: number) => String(v ?? "").replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, " ").trim().slice(0, n);
 const httpsOrEmpty = (v: any) => { const s = String(v || "").trim(); if (!s) return ""; if (!/^https:\/\/\S+$/i.test(s)) throw new HttpError(400, "Button link must be an https URL"); return s.slice(0, 300); };
@@ -92,6 +94,49 @@ const mod: AdminMod = async (action, b, ctx) => {
       const items: any[] = [];
       snap.forEach((c) => { const x = c.val() || {}; items.push({ id: c.key, uid: x.uid, name: x.name, subject: x.subject, status: x.status, tag: x.tag || "", updated_at: x.updated_at, n: Object.keys(x.msgs || {}).length }); });
       return { items: items.sort((a, c) => c.updated_at - a.updated_at) };
+    }
+    case "chatsList": {
+      const s = await getSettings(true);
+      const m = ((await db().ref("bot_chats").get()).val() || {}) as Record<string, any>;
+      return { chats: Object.entries(m).map(([id, v]) => ({ id, ...v })).sort((a, c) => (c.at || 0) - (a.at || 0)), alert_chat: s.alert_chat, autopost_channel: s.autopost_channel, autopost_enabled: s.autopost_enabled, autopost_winners: s.autopost_winners };
+    }
+    case "chatsSave": {
+      needSuper(ctx.role);
+      const cur = await getSettings(true);
+      const patch: Record<string, any> = {};
+      for (const k of ["alert_chat", "autopost_channel", "autopost_enabled", "autopost_winners"]) if (b[k] !== undefined) patch[k] = typeof b[k] === "string" ? b[k].trim() : b[k];
+      const next = parseSettings(patch, cur);
+      await db().ref("settings").set(next);
+      invalidateSettings();
+      await adminLog(ctx.who, "chats_save", { keys: Object.keys(patch) });
+      return { alert_chat: next.alert_chat, autopost_channel: next.autopost_channel, autopost_enabled: next.autopost_enabled, autopost_winners: next.autopost_winners };
+    }
+    case "chatsForget": {
+      needSuper(ctx.role);
+      const id = String(b.id || "");
+      if (!/^-?\d{4,20}$/.test(id)) throw new HttpError(400, "bad_request");
+      await db().ref(`bot_chats/${id}`).remove();
+      return {};
+    }
+    case "autopostGet": {
+      const errs = ((await db().ref("autopost_err").get()).val() || {}) as Record<string, any>;
+      return { rules: (await getCfg2(true)).posts.rules, errs };
+    }
+    case "autopostSave": {
+      needSuper(ctx.role);
+      const v = await setCfg2("posts", { rules: b.rules });
+      await adminLog(ctx.who, "autopost_save", { n: v.rules.length });
+      return { rules: v.rules };
+    }
+    case "autopostNow": {
+      needSuper(ctx.role);
+      const r = (Array.isArray(b.rules) ? b.rules : [])[0];
+      const clean1 = (await import("../cfg2")).SECTIONS.posts({ rules: [r] }, { rules: [] }).rules[0];
+      if (!clean1) throw new HttpError(400, "bad_request");
+      const err = await sendPost(clean1, await getSettings(true));
+      if (err) throw new HttpError(400, err);
+      await adminLog(ctx.who, "autopost_now", { kind: clean1.kind });
+      return {};
     }
     case "alertTest": {
       needSuper(ctx.role);

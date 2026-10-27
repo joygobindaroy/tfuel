@@ -38,6 +38,7 @@ export interface Plus {
   trial_days: number; // free VIP days (0 = no trial)
   tour_remind: boolean;
   subs: boolean; // recurring shop payments
+  nudges: boolean; // reminders: unpaid requests, unclaimed links, monthly statement
 }
 export interface Quiz { q: string; a: string[]; c: number }
 export interface Mini {
@@ -46,7 +47,9 @@ export interface Mini {
   trivia: { enabled: boolean; per_correct: number; per_day: number; rounds: number; questions: Quiz[] };
   hunt: { enabled: boolean; min: number; max: number; per_day: number };
 }
+export interface PostRule { id: string; kind: "price" | "top" | "invite" | "tour" | "custom"; on: boolean; hour: number; every: number; text: string; image: boolean; btn: string }
 export interface Cfg2 {
+  posts: { rules: PostRule[] };
   xfer: Xfer;
   vip: Vip;
   mini: Mini;
@@ -92,8 +95,9 @@ const QUIZ: Quiz[] = [
 ];
 
 export const CFG2_DEFAULTS: Cfg2 = {
+  posts: { rules: [] },
   xfer: { usdt: { enabled: true, fee_pct: 0.5, min: 1, daily: 500 }, hold: { tfuel: 0, usdt: 0, minutes: 10 }, links: { request: true, claim: true, days: 7 } },
-  plus: { sched: { enabled: true, max: 5 }, alert: { tfuel: 0, usdt: 0 }, quest: { enabled: false, plays: 2, bonus: 50, streak_days: 7, streak_bonus: 500 }, trial_days: 0, tour_remind: true, subs: true },
+  plus: { sched: { enabled: true, max: 5 }, alert: { tfuel: 0, usdt: 0 }, quest: { enabled: false, plays: 2, bonus: 50, streak_days: 7, streak_bonus: 500 }, trial_days: 0, tour_remind: true, subs: true, nudges: true },
   vip: { enabled: false, price: 3, days: 30, daily_pct: 25, fee_off_pct: 50, badge: "💎" },
   mini: {
     enabled: true,
@@ -181,6 +185,18 @@ const parseQuiz = (v: any): Quiz[] => {
 };
 
 export const SECTIONS: { [K in keyof Cfg2]: (v: any, cur: Cfg2[K]) => Cfg2[K] } = {
+  posts: (v) => ({
+    rules: (Array.isArray(v?.rules) ? v.rules : []).slice(0, 12).map((r: any, i: number) => ({
+      id: idOk(r?.id, "r" + Date.now().toString(36) + i),
+      kind: ["price", "top", "invite", "tour", "custom"].includes(r?.kind) ? r.kind : "custom",
+      on: bool(r?.on),
+      hour: int(r?.hour, 0, 23, 12),
+      every: int(r?.every, 1, 30, 1),
+      text: String(r?.text ?? "").replace(/[\u0000-\u0008\u000b-\u001f\u007f<>]/g, " ").trim().slice(0, 1500),
+      image: bool(r?.image),
+      btn: str(r?.btn, 24),
+    })),
+  }),
   xfer: (v) => ({
     usdt: { enabled: bool(v?.usdt?.enabled), fee_pct: num(v?.usdt?.fee_pct, 0, 20, 0.5), min: num(v?.usdt?.min, 0.01, 1e6, 1), daily: num(v?.usdt?.daily, 0, 1e7, 500) },
     hold: { tfuel: int(v?.hold?.tfuel, 0, 1e13, 0), usdt: num(v?.hold?.usdt, 0, 1e7, 0), minutes: int(v?.hold?.minutes, 1, 1440, 10) },
@@ -193,6 +209,7 @@ export const SECTIONS: { [K in keyof Cfg2]: (v: any, cur: Cfg2[K]) => Cfg2[K] } 
     trial_days: int(v?.trial_days, 0, 30, 0),
     tour_remind: bool(v?.tour_remind),
     subs: bool(v?.subs),
+    nudges: v?.nudges === undefined ? true : bool(v?.nudges),
   }),
   vip: (v) => ({ enabled: bool(v?.enabled), price: Math.round(num(v?.price, 0.01, 10000, 3) * 100) / 100, days: int(v?.days, 1, 365, 30), daily_pct: num(v?.daily_pct, 0, 500, 25), fee_off_pct: num(v?.fee_off_pct, 0, 100, 50), badge: str(v?.badge, 4) || "💎" }),
   mini: (v) => ({

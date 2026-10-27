@@ -430,6 +430,20 @@ function UserModal({ uid, call, onClose }: { uid: string; call: Call; onClose: (
           <span className={`tag ${w.status === "paid" ? "ok" : w.status === "rejected" ? "err" : "warn"}`}>{w.status}</span>
         </div>
       ))}
+      {(d.xfers || []).length > 0 && (
+        <>
+          <div className="mhead" style={{ marginTop: 14 }}>User-to-user transfers (latest {d.xfers.length})</div>
+          {d.xfers.map((x: any) => (
+            <div className="row" key={x.id} style={{ marginTop: 6 }}>
+              <div style={{ minWidth: 0 }}>
+                <div className="b">{x.d === "in" ? "⬇ from" : "⬆ to"} {x.peer} <span className="xs muted">({x.pc})</span></div>
+                <div className="xs muted" style={{ wordBreak: "break-all" }}>{new Date(x.at).toISOString().slice(0, 16).replace("T", " ")} · {x.st} · {x.tx}{x.dispute ? " · ⚠ dispute " + x.dispute : ""}</div>
+              </div>
+              <b className="num">{x.d === "in" ? "+" : "−"}{x.a === "usdt" ? (x.amt / 1e6).toFixed(2) + " USDT" : tf(x.amt) + " TFUEL"}</b>
+            </div>
+          ))}
+        </>
+      )}
     </Modal>
   );
 }

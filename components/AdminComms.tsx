@@ -7,7 +7,81 @@ const when = (t?: number) => (t ? new Date(t).toLocaleString("en-GB", { day: "nu
 const audLabel = (a: any) => (!a ? "All" : a.kind === "active" ? `Active ${a.days}d` : a.kind === "tag" ? `Tag: ${a.tag}` : a.kind === "country" ? `Country: ${a.country}` : "All users");
 const toMs = (v: string) => (v ? new Date(v).getTime() : 0);
 
+const KIND_LABEL: Record<string, string> = { price: "📈 Price update", top: "🔥 Top earners of the week", invite: "🚀 Invite card (join banner)", tour: "🏆 Live tournament", custom: "✍️ My own message (rotates)" };
+const bdHour = (h: number) => (h + 6) % 24;
+const utcHour = (h: number) => (h - 6 + 24) % 24;
+/** Auto-post types: pick what the bot posts to your group / channel, when, and how often */
+function AutoPostCard({ call }: { call: Call }) {
+  const [rules, setRules] = useState<any[] | null>(null);
+  const [errs, setErrs] = useState<Record<string, any>>({});
+  const load = useCallback(async () => { const r: any = await call({ action: "autopostGet" }); if (r) { setRules(r.rules); setErrs(r.errs || {}); } }, [call]);
+  useEffect(() => { load(); }, [load]);
+  if (!rules) return null;
+  const up = (i: number, p: any) => setRules(rules.map((r, j) => (j === i ? { ...r, ...p } : r)));
+  const add = (kind: string) => setRules([...rules, { id: "r" + Date.now().toString(36), kind, on: true, hour: utcHour(20), every: kind === "top" ? 7 : 1, text: "", image: true, btn: "" }]);
+  return (
+    <div className="card">
+      <div className="title">Auto-post types</div>
+      <div className="sub">The bot posts these to your group / channel by itself. Turn on “Auto-post” in Channels &amp; groups above. Times are Bangladesh time.</div>
+      {rules.length === 0 && <div className="xs muted" style={{ marginTop: 8 }}>No auto-posts yet. Add one below.</div>}
+      {rules.map((r, i) => (
+        <div key={r.id} style={{ border: "1px solid var(--line, #e5e7eb)", borderRadius: 12, padding: 12, marginTop: 10 }}>
+          <div className="row"><div className="b">{KIND_LABEL[r.kind] || r.kind}</div><input type="checkbox" checked={!!r.on} onChange={(e) => up(i, { on: e.target.checked })} /></div>
+          <div className="grid2" style={{ marginTop: 6 }}>
+            <div><label>Post at (Bangladesh hour 0–23)</label><input inputMode="numeric" value={bdHour(Number(r.hour) || 0)} onChange={(e) => up(i, { hour: utcHour(Math.min(23, Math.max(0, Number(e.target.value) || 0))) })} /></div>
+            <div><label>Every N days</label><input inputMode="numeric" value={r.every} onChange={(e) => up(i, { every: e.target.value })} /></div>
+          </div>
+          <div className="grid2" style={{ marginTop: 6 }}>
+            <div><label>Button text (optional)</label><input maxLength={24} value={r.btn} onChange={(e) => up(i, { btn: e.target.value })} placeholder="🚀 Open app" /></div>
+            {r.kind === "invite" && <div><label>Show the card picture</label><input type="checkbox" checked={r.image !== false} onChange={(e) => up(i, { image: e.target.checked })} /></div>}
+          </div>
+          {(r.kind === "custom" || r.kind === "invite") && <div style={{ marginTop: 6 }}><label>{r.kind === "custom" ? "Message — separate several messages with a line containing ===" : "Caption (optional)"}</label><textarea rows={r.kind === "custom" ? 5 : 2} maxLength={1500} value={r.text} onChange={(e) => up(i, { text: e.target.value })} /></div>}
+          {errs[r.id] && <div className="xs" style={{ color: "#dc2626", marginTop: 6 }}>Last problem: {errs[r.id].err} · {when(errs[r.id].at)}</div>}
+          <div className="gap" style={{ marginTop: 8 }}>
+            <button className="btn sec sm" onClick={async () => { await call({ action: "autopostNow", rules: [r] }, "Posted"); load(); }}>Post now (test)</button>
+            <button className="btn danger sm" onClick={() => setRules(rules.filter((_, j) => j !== i))}>Remove</button>
+          </div>
+        </div>
+      ))}
+      <div className="chips" style={{ marginTop: 12 }}>{Object.entries(KIND_LABEL).map(([k, t]) => <button key={k} className="pill" onClick={() => add(k)}>+ {t}</button>)}</div>
+      <button className="btn" style={{ marginTop: 12 }} onClick={async () => { const r: any = await call({ action: "autopostSave", rules }, "Auto-posts saved"); if (r) setRules(r.rules); }}>Save auto-posts</button>
+    </div>
+  );
+}
+
 /** Admin → Communication */
+function ChatsCard({ call, onSaved }: { call: Call; onSaved: () => void }) {
+  const [d, setD] = useState<any>(null);
+  const [f, setF] = useState<any>({ alert_chat: "", autopost_channel: "" });
+  const load = useCallback(async () => { const r: any = await call({ action: "chatsList" }); if (r) { setD(r); setF({ alert_chat: r.alert_chat || "", autopost_channel: r.autopost_channel || "" }); } }, [call]);
+  useEffect(() => { load(); }, [load]);
+  if (!d) return null;
+  const save = async (p: any, m = "Saved") => { const r: any = await call({ action: "chatsSave", ...p }, m); if (r) { load(); onSaved(); } };
+  return (
+    <div className="card">
+      <div className="title">Channels & groups</div>
+      <div className="sub">Where the bot posts and where admin alerts go. <b>1)</b> Create a Telegram channel or group. <b>2)</b> Add your bot to it — for a channel make the bot an <b>administrator</b> with permission to post. <b>3)</b> It appears below (press “Connect Telegram” in Settings once after updating). Tap what it should be used for.</div>
+      {d.chats.length === 0 && <div className="xs muted" style={{ marginTop: 8 }}>No channel or group found yet. Add the bot to one, or type the ID/@name by hand below.</div>}
+      {d.chats.map((c: any) => (
+        <div className="row" key={c.id} style={{ marginTop: 8 }}>
+          <div style={{ minWidth: 0 }}><div className="b">{c.title || c.username || c.id}</div><div className="xs muted">{c.type}{c.username ? " · " + c.username : ""} · ID {c.id} · bot is {c.status}</div></div>
+          <div className="gap">
+            <button className="btn sec sm" onClick={() => save({ alert_chat: c.id }, "Admin alerts will go here")}>Use for alerts</button>
+            {c.type === "channel" || String(c.id).startsWith("-100") ? <button className="btn sec sm" onClick={() => save({ autopost_channel: c.username || c.id }, "Channel set")}>Use as channel</button> : null}
+          </div>
+        </div>
+      ))}
+      <div className="grid2" style={{ marginTop: 12 }}>
+        <div><label>Admin alerts chat ID (your ID or a group ID)</label><input value={f.alert_chat} onChange={(e) => setF({ ...f, alert_chat: e.target.value })} placeholder="e.g. 123456789 or -1001234567890" /></div>
+        <div><label>Channel for posts (@name or -100… ID)</label><input value={f.autopost_channel} onChange={(e) => setF({ ...f, autopost_channel: e.target.value })} placeholder="@mychannel" /></div>
+      </div>
+      <div className="row" style={{ marginTop: 10 }}><div><div className="title" style={{ fontSize: 14 }}>Auto-post to the channel</div><div className="sub">Scheduled / automatic posts (needs a channel above).</div></div><input type="checkbox" checked={!!d.autopost_enabled} onChange={(e) => save({ autopost_enabled: e.target.checked })} style={{ width: 22, height: 22 }} /></div>
+      <div className="row" style={{ marginTop: 6 }}><div><div className="title" style={{ fontSize: 14 }}>Post weekly winners</div><div className="sub">Every week the top players are announced in the channel.</div></div><input type="checkbox" checked={!!d.autopost_winners} onChange={(e) => save({ autopost_winners: e.target.checked })} style={{ width: 22, height: 22 }} /></div>
+      <button className="btn" style={{ marginTop: 12 }} onClick={() => save({ alert_chat: f.alert_chat, autopost_channel: f.autopost_channel })}>Save</button>
+    </div>
+  );
+}
+
 export default function CommsPage({ call }: { call: Call }) {
   const [d, setD] = useState<any>(null);
   // broadcast
@@ -192,9 +266,12 @@ export default function CommsPage({ call }: { call: Call }) {
         )}
       </div>
 
+      <ChatsCard call={call} onSaved={loadMain} />
+      <AutoPostCard call={call} />
+
       <div className="card">
         <div className="title">Post to channel</div>
-        <div className="sub">{st.autopost_channel ? `Channel: ${st.autopost_channel}` : "No channel set. Set it in Settings first."}</div>
+        <div className="sub">{st.autopost_channel ? `Channel: ${st.autopost_channel}` : "No channel set. Add it in “Channels & groups” above."}</div>
         <textarea rows={3} maxLength={3800} style={{ marginTop: 8 }} value={post} onChange={(e) => setPost(e.target.value)} placeholder="Post text…" />
         <div style={{ marginTop: 8 }}><button className="btn" disabled={post.trim().length < 3 || !st.autopost_channel} onClick={sendPost}>Post now</button></div>
       </div>

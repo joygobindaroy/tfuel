@@ -27,6 +27,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       await tgCall("answerPreCheckoutQuery", ok ? { pre_checkout_query_id: q.id, ok: "true" } : { pre_checkout_query_id: q.id, ok: "false", error_message: "This payment is no longer valid. Please start again." });
     } else if (u.message?.successful_payment) {
       await creditStars(u.message.from?.id, u.message.successful_payment);
+    } else if (u.my_chat_member) {
+      // the bot was added to / removed from a channel or group: remember it so the admin can pick it in Admin → Comms
+      const m = u.my_chat_member, ch = m.chat || {};
+      if (ch.type && ch.type !== "private" && ch.id) {
+        const st = String(m.new_chat_member?.status || "");
+        const key = String(ch.id);
+        if (st === "left" || st === "kicked") await db().ref(`bot_chats/${key}`).remove().catch(() => {});
+        else await db().ref(`bot_chats/${key}`).set({ title: String(ch.title || "").slice(0, 80), type: ch.type, username: ch.username ? "@" + ch.username : "", status: st, at: Date.now() }).catch(() => {});
+      }
     } else {
       await handleBot(u).catch((e) => console.error("bot ui", e)); // বার্তার ভুলে Telegram retry-র দরকার নেই
     }

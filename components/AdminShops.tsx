@@ -28,9 +28,12 @@ export function ShopsPage({ call }: { call: Call }) {
   const [filter, setFilter] = useState("all");
   const [tests, setTests] = useState<Record<string, any>>({});
   const [subs, setSubs] = useState<any[]>([]);
+  const [cps, setCps] = useState<any[]>([]);
+  const [cf, setCf] = useState<any>({ shop: "", code: "", pct: "10", max: "100", days: "30", note: "" });
   const [testLink, setTestLink] = useState<Record<string, string>>({});
   const load = useCallback(async () => {
-    const [a, b, c] = await Promise.all([call({ action: "shopList" }), call({ action: "shopOrders" }), call({ action: "shopSubs" })]);
+    const [a, b, c, k] = await Promise.all([call({ action: "shopList" }), call({ action: "shopOrders" }), call({ action: "shopSubs" }), call({ action: "couponList" })]);
+    if (k) setCps((k as any).items);
     if (a) setD(a);
     if (c) setSubs((c as any).items);
     if (b) setO(b);
@@ -167,6 +170,25 @@ export function ShopsPage({ call }: { call: Call }) {
           ))}
         </div>
       )}
+
+      <div className="card">
+        <div className="title">Shop coupons</div>
+        <div className="sub">A coupon gives the buyer a % discount at checkout (once per user). The shop still receives the full amount — the discount is paid by you.</div>
+        <div className="grid3" style={{ alignItems: "end", marginTop: 8 }}>
+          <div><label>Shop</label><select value={cf.shop} onChange={(e) => setCf({ ...cf, shop: e.target.value })}><option value="">Choose…</option>{d.shops.map((x: any) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></div>
+          <div><label>Code</label><input value={cf.code} onChange={(e) => setCf({ ...cf, code: e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, "") })} placeholder="SAVE10" /></div>
+          <div><label>Discount %</label><input inputMode="decimal" value={cf.pct} onChange={(e) => setCf({ ...cf, pct: e.target.value })} /></div>
+          <div><label>Max uses (0 = unlimited)</label><input inputMode="numeric" value={cf.max} onChange={(e) => setCf({ ...cf, max: e.target.value })} /></div>
+          <div><label>Valid days (0 = forever)</label><input inputMode="numeric" value={cf.days} onChange={(e) => setCf({ ...cf, days: e.target.value })} /></div>
+          <div><button className="btn" disabled={!cf.shop || cf.code.length < 3} onClick={async () => { if (await call({ action: "couponSave", ...cf }, "Coupon saved")) load(); }}>Save coupon</button></div>
+        </div>
+        {cps.map((x) => (
+          <div className="row" key={x.shop + x.code} style={{ marginTop: 8 }}>
+            <div><div className="b">{x.code} · −{x.pct}% <span className="xs muted">({d.shops.find((s: any) => s.id === x.shop)?.name || x.shop})</span></div><div className="xs muted">used {x.used || 0}{x.max ? "/" + x.max : ""}{x.exp ? " · expires " + when(x.exp) : ""}</div></div>
+            <button className="btn danger sm" onClick={async () => { if (confirm("Delete this coupon?")) { if (await call({ action: "couponDelete", shop: x.shop, code: x.code }, "Deleted")) load(); } }}>Delete</button>
+          </div>
+        ))}
+      </div>
 
       <div className="card">
         <div className="title">How a shop connects (give this to the shop developer)</div>

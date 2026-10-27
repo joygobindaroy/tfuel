@@ -29,6 +29,7 @@ export function SendPage({ say, onBack, cpt, reload, top, reqId, fixedAsset }: {
   const [pr, setPr] = useState<any>(null); // payment request being paid
   const [code, setCode] = useState("");
   const [who, setWho] = useState("");
+  const [first, setFirst] = useState(false);
   const [looking, setLooking] = useState(false);
   const [lookErr, setLookErr] = useState("");
   const [amt, setAmt] = useState("");
@@ -58,11 +59,11 @@ export function SendPage({ say, onBack, cpt, reload, top, reqId, fixedAsset }: {
   const ai = info?.assets[asset];
   const c = code.trim();
   useEffect(() => {
-    setWho(""); setLookErr("");
+    setWho(""); setFirst(false); setLookErr("");
     if (mode !== "person" || pr || !/^[A-Za-z0-9]{10}$/.test(c)) return;
     let live = true;
     setLooking(true);
-    api<any>("send", { action: "lookup", code: c }).then((r) => live && setWho(r.name)).catch((e) => live && setLookErr(errText(e))).finally(() => live && setLooking(false));
+    api<any>("send", { action: "lookup", code: c }).then((r) => { if (live) { setWho(r.name); setFirst(!!r.first); } }).catch((e) => live && setLookErr(errText(e))).finally(() => live && setLooking(false));
     return () => { live = false; };
   }, [c, mode, pr]);
 
@@ -180,7 +181,7 @@ export function SendPage({ say, onBack, cpt, reload, top, reqId, fixedAsset }: {
                 <>
                   <label>Receiver&apos;s unique ID</label>
                   <input placeholder="10 letters / numbers" maxLength={10} autoCapitalize="off" autoCorrect="off" value={code} onChange={(e) => setCode(e.target.value.replace(/[^A-Za-z0-9]/g, ""))} />
-                  <Contacts key={contactsKey} onPick={(cc) => setCode(cc)} say={say} />
+                  <Contacts key={contactsKey} onPick={(cc, last) => { setCode(cc); if (last && !amt) { setAsset(last.a); setAmt(String(last.v)); } }} say={say} />
                   {looking && <div className="xs muted" style={{ marginTop: 6 }}>Checking…</div>}
                   {who && (
                     <div className="gap" style={{ marginTop: 8, background: "var(--soft)", borderRadius: 12, padding: "8px 12px", alignItems: "center" }}>
@@ -189,6 +190,7 @@ export function SendPage({ say, onBack, cpt, reload, top, reqId, fixedAsset }: {
                       <Icon name="check" size={18} />
                     </div>
                   )}
+                  {who && first && <div className="banner warn" style={{ marginTop: 8 }}><Icon name="alert" size={18} /><span>First time sending to this person. Double-check the name and ID — transfers can&apos;t be reversed.</span></div>}
                   {lookErr && <div className="xs" style={{ color: "#dc2626", marginTop: 6 }}>{lookErr}</div>}
                 </>
               )}

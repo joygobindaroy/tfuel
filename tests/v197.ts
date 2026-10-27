@@ -1,0 +1,26 @@
+import { makeDb } from "./fakedb";
+(globalThis as any).__fakeDb = makeDb();
+process.env.SERVER_SECRET = "x".repeat(32);
+process.env.BOT_TOKEN = "123:abc";
+import assert from "node:assert/strict";
+const calls: any[] = [];
+(globalThis as any).fetch = async (u: string, init: any) => { calls.push({ u, body: decodeURIComponent(u.replace(/\+/g, " ")) }); return { ok: true, status: 200, json: async () => ({ ok: true, result: {} }) }; };
+(async () => {
+  const { db } = await import("../lib/firebase");
+  const { setCfg2 } = await import("../lib/cfg2");
+  const { getSettings, invalidateSettings } = await import("../lib/settings");
+  const A = await import("../lib/autopost");
+  await db().ref("settings").set({ autopost_enabled: true, autopost_channel: "@mychan", referral_link: "https://t.me/b/app" });
+  invalidateSettings();
+  const s = await getSettings(true);
+  const v = await setCfg2("posts", { rules: [{ id: "c1", kind: "custom", on: true, hour: 0, every: 1, text: "Hello one\n===\nHello two", btn: "Go" }, { id: "i1", kind: "invite", on: true, hour: 0, every: 2, text: "", image: true, btn: "" }, { id: "t1", kind: "top", on: true, hour: 0, every: 7, text: "" }] });
+  assert.equal(v.rules.length, 3);
+  assert.equal(await A.runAutoPosts(s), 2, "custom + invite sent; top has no data");
+  assert.equal(await A.runAutoPosts(s), 0, "not again the same day");
+  const sent = calls.map((c) => c.body).join("|");
+  assert.ok(sent.includes("Hello one"));
+  assert.ok(sent.includes("mychan"));
+  assert.equal(await A.sendPost(v.rules[0], s), "");
+  assert.ok(calls.some((c) => c.body.includes("Hello two")), "rotates to the next message");
+  console.log("v19.7 OK");
+})().catch((e) => { console.error("FAIL", e); process.exit(1); });

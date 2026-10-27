@@ -62,3 +62,6 @@ export async function botReceipt(uid: string, r: RView, cpt: number, force = fal
     return !!m.ok;
   } catch { return false; }
 }
+
+export const stmtSig = (uid: string, month: string) => hmac(`st|${uid}|${month}`);
+export const stmtUrl = (uid: string, month: string, base = appBase()) => `${base}/statement?u=${encodeURIComponent(uid)}&m=${month}&s=${stmtSig(uid, month)}`;
