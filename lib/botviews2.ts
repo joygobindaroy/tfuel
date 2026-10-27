@@ -179,3 +179,10 @@ export async function adminSettle(uid: string, step: string, id: string, s: Sett
   void s; void fromU;
   return { text: pay ? "✅ Marked as paid. The user was notified." : "↩️ Rejected and refunded. The user was notified.", kb: [[{ text: "📋 Pending", callback_data: "apl" }]] };
 }
+
+/** admin /today: live summary of today (UTC day) */
+export async function adminTodayView(s: Settings): Promise<View> {
+  const { daySummary, summaryText } = await import("./insights");
+  const x = await daySummary(dayKey());
+  return { text: "📅 " + summaryText(x), kb: [[{ text: "🔄 Refresh", callback_data: "ast" }, { text: "📋 Pending", callback_data: "apl" }], [openBtn(s, "📱 Open app")]] };
+}

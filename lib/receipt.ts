@@ -11,10 +11,11 @@ import { amtStr, displayName, maskName, Asset } from "./transfer";
 const key = () => crypto.createHash("sha256").update("card:" + (process.env.BOT_TOKEN || "dev")).digest("hex");
 const hmac = (s: string) => crypto.createHmac("sha256", key()).update(s).digest("hex").slice(0, 20);
 
-export interface RView { txid: string; at: number; asset: Asset; amount: number; fee: number; dir: "out" | "in"; other: string; otherCode: string; note: string; held: boolean }
+export interface RView { txid: string; at: number; asset: Asset; amount: number; fee: number; dir: "out" | "in" | "wd"; other: string; otherCode: string; note: string; held: boolean; amtText?: string; st?: string }
 
 /** the receipt as one party sees it; the other party's name is masked for the receiver */
 export async function loadReceipt(txid: string, uid: string): Promise<RView> {
+  if (/^WD[UT]-[-_A-Za-z0-9]{6,40}$/.test(String(txid || ""))) return loadWithdrawReceipt(String(txid), uid);
   const tid = String(txid || "").toUpperCase();
   if (!/^TF[0-9A-F]{40}$/.test(tid)) throw new HttpError(400, "bad_request");
   const id = (await db().ref(`transfer_tx/${tid}`).get()).val();
@@ -34,10 +35,23 @@ export async function loadReceipt(txid: string, uid: string): Promise<RView> {
   return { txid: tid, at: t.at, asset: t.asset || "tfuel", amount: t.amount, fee: out ? t.fee : 0, dir: out ? "out" : "in", other: out ? nm : maskName(nm), otherCode: await getRefCode(peer).catch(() => ""), note: String(t.note || ""), held };
 }
 
+/** Withdrawal receipt: txid = "WDU-<id>" (USDT) or "WDT-<id>" (TFUEL). Only the owner can load it. */
+export async function loadWithdrawReceipt(txid: string, uid: string): Promise<RView> {
+  const usdt = txid.startsWith("WDU-");
+  const id = txid.slice(4);
+  const w = ((await db().ref(`${usdt ? "usdt_withdrawals" : "withdrawals"}/${id}`).get()).val() || null) as any;
+  if (!w || String(w.uid) !== uid) throw new HttpError(404, "not_found");
+  const cpt = (await getSettings()).coins_per_tfuel || 1000;
+  const addr = String(w.address || w.account || "");
+  const masked = addr.length > 14 ? `${addr.slice(0, 6)}...${addr.slice(-6)}` : addr;
+  const amtText = usdt ? `${w.amount} USDT` : `${Math.round((Number(w.amount) / cpt) * 1000) / 1000} TFUEL`;
+  return { txid, at: Number(w.handled_at || w.created_at) || Date.now(), asset: usdt ? "usdt" : "tfuel", amount: Number(w.amount) || 0, fee: 0, dir: "wd", other: `${w.network_name || w.method || "Wallet"}${masked ? " " + masked : ""}`.slice(0, 44), otherCode: "", note: usdt && w.receive ? `You receive ${w.receive} USDT` : "", held: false, amtText, st: String(w.status || "pending") };
+}
+
 export const pageSig = (txid: string, uid: string) => hmac(`r|${txid}|${uid}`);
 export function receiptLinks(r: RView, uid: string, cpt: number, base = appBase()) {
   const page = `${base}/receipt?t=${r.txid}&u=${encodeURIComponent(uid)}&s=${pageSig(r.txid, uid)}`;
-  const d = Buffer.from(JSON.stringify({ t: r.txid, at: r.at, v: r.dir, a: amtStr(r.asset, r.amount, cpt), f: r.fee ? amtStr(r.asset, r.fee, cpt) : "", o: r.other, c: r.otherCode, n: r.note, h: r.held ? 1 : 0 })).toString("base64url");
+  const d = Buffer.from(JSON.stringify({ t: r.txid, at: r.at, v: r.dir === "wd" ? "wd" : r.dir, a: r.amtText || amtStr(r.asset, r.amount, cpt), s: r.st || "", f: r.fee ? amtStr(r.asset, r.fee, cpt) : "", o: r.other, c: r.otherCode, n: r.note, h: r.held ? 1 : 0 })).toString("base64url");
   const img = `${base}/api/receipt-img?d=${d}&s=${hmac("i|" + d)}`;
   return { page, img };
 }
@@ -54,7 +68,7 @@ export async function botReceipt(uid: string, r: RView, cpt: number, force = fal
     }
     const { page, img } = receiptLinks(r, uid, cpt);
     if (!/^https:\/\//.test(page)) return false;
-    const caption = `🧾 Receipt · ${r.dir === "out" ? "Sent" : "Received"} ${amtStr(r.asset, r.amount, cpt)}\n${r.dir === "out" ? "To" : "From"}: ${r.other}\nHash: ${r.txid}`;
+    const caption = r.dir === "wd" ? `🧾 Withdrawal receipt · ${r.amtText}\nTo: ${r.other}\nStatus: ${r.st}\nRef: ${r.txid}` : `🧾 Receipt · ${r.dir === "out" ? "Sent" : "Received"} ${amtStr(r.asset, r.amount, cpt)}\n${r.dir === "out" ? "To" : "From"}: ${r.other}\nHash: ${r.txid}`;
     const kb = JSON.stringify({ inline_keyboard: [[{ text: "🧾 Open / print receipt", url: page }]] });
     const p = await tgCall("sendPhoto", { chat_id: uid, photo: img, caption, reply_markup: kb });
     if (p.ok) return true;

@@ -5,6 +5,7 @@ import { adminLog } from "./log";
 import { getSettings } from "./settings";
 import { activity } from "./wallet";
 import { notify } from "./notify";
+import { loadWithdrawReceipt, botReceipt, receiptLinks } from "./receipt";
 import { mailWithdraw } from "./emailcode";
 import { toU } from "./market";
 
@@ -36,7 +37,8 @@ export async function settleTfWithdrawal(id: string, next: "paid" | "rejected", 
   await db().ref().update(upd);
   await adminLog(who, next === "paid" ? "withdraw_paid" : "withdraw_rejected", { id, uid: rec.uid, amount: rec.amount, note });
   await notify(rec.uid, next === "paid" ? "✅ Your withdrawal has been paid." : "↩️ Your withdrawal was rejected and the coins were refunded.", false, next === "paid" ? [[{ text: "🧾 Receipt", callback_data: `r:t:${id}` }]] : undefined);
-  await mailWithdraw(rec.uid, next, { amount: `${Math.round((Number(rec.amount) / ((await getSettings()).coins_per_tfuel || 1000)) * 1000) / 1000} TFUEL`, network: rec.method, address: rec.account, note });
+  const rurl = next === "paid" ? await wdReceipt(rec.uid, "WDT-" + id) : "";
+  await mailWithdraw(rec.uid, next, { amount: `${Math.round((Number(rec.amount) / ((await getSettings()).coins_per_tfuel || 1000)) * 1000) / 1000} TFUEL`, network: rec.method, address: rec.account, note, receiptUrl: rurl });
   return rec;
 }
 
@@ -69,7 +71,18 @@ export async function settleUsdtWithdrawal(id: string, pay: boolean, noteRaw: an
   await db().ref().update(upd);
   await activity(rec.uid, pay ? "usdt_paid" : "usdt_rejected", { usdt_u: toU(Number(rec.amount)), note });
   await notify(rec.uid, pay ? `✅ Your USDT withdrawal of ${rec.amount} USDT has been paid.` : `↩️ Your USDT withdrawal was rejected and ${rec.amount} USDT was refunded.${note ? " Reason: " + note : ""}`, false, pay ? [[{ text: "🧾 Receipt", callback_data: `r:u:${id}` }]] : undefined);
-  await mailWithdraw(rec.uid, pay ? "paid" : "rejected", { amount: `${rec.amount} USDT`, receive: pay && rec.receive ? `${rec.receive} USDT` : "", network: rec.network_name, address: rec.address, note });
+  const rurl = pay ? await wdReceipt(rec.uid, "WDU-" + id) : "";
+  await mailWithdraw(rec.uid, pay ? "paid" : "rejected", { receiptUrl: rurl, amount: `${rec.amount} USDT`, receive: pay && rec.receive ? `${rec.receive} USDT` : "", network: rec.network_name, address: rec.address, note });
   await adminLog(who, pay ? "usdt_paid" : "usdt_rejected", { id, uid: rec.uid, amount: rec.amount, note });
   return rec;
+}
+
+/** paid withdrawal: send the receipt picture to the user's bot chat and return the page link for the email button */
+async function wdReceipt(uid: string, txid: string): Promise<string> {
+  try {
+    const r = await loadWithdrawReceipt(txid, uid);
+    const cpt = (await getSettings()).coins_per_tfuel || 1000;
+    await botReceipt(uid, r, cpt);
+    return receiptLinks(r, uid, cpt).page;
+  } catch { return ""; }
 }

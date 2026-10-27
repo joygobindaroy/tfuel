@@ -113,7 +113,7 @@ export async function mailUser(uid: string, subject: string, spec: MailSpec) {
 }
 
 /** withdraw-এর অবস্থা বদলের মেইল: requested / paid / rejected */
-export async function mailWithdraw(uid: string, kind: "requested" | "paid" | "rejected", d: { amount: string; network?: string; address?: string; receive?: string; note?: string; ctx?: ReqCtx }) {
+export async function mailWithdraw(uid: string, kind: "requested" | "paid" | "rejected", d: { amount: string; network?: string; address?: string; receive?: string; note?: string; receiptUrl?: string; ctx?: ReqCtx }) {
   const T = {
     requested: { subject: "[TFUEL] Withdrawal request received", title: "Withdrawal request received", intro: "We received your withdrawal request. It will be reviewed and sent manually.", tone: "info" as const },
     paid: { subject: "[TFUEL] Withdrawal paid", title: "Your withdrawal has been paid", intro: "Your withdrawal was approved and sent.", tone: "success" as const },
@@ -125,5 +125,6 @@ export async function mailWithdraw(uid: string, kind: "requested" | "paid" | "re
     tone: T.tone,
     rows: [["Amount", d.amount], ["You receive", d.receive || ""], ["Network / method", d.network || ""], ["Address", d.address || ""], ["Note", d.note || ""], ...ctxRows(d.ctx)],
     warning: kind === "requested" ? "If you didn't make this request, contact support immediately." : undefined,
+    ...(d.receiptUrl ? { button: { label: "🧾 Open receipt (print / download)", url: d.receiptUrl } } : {}),
   });
 }

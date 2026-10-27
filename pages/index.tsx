@@ -1022,6 +1022,8 @@ const FILTERS: [string, string, string[] | null][] = [
   ["dep", "Deposits", ["deposit", "deposit_rejected"]],
   ["wd", "Withdrawals", ["usdt_withdraw", "usdt_paid", "usdt_rejected"]],
   ["xfer", "Transfers", ["send", "receive"]],
+  ["shop", "Shop", ["shop", "shop_refund"]],
+  ["games", "Games & VIP", ["game", "vip", "prize", "spin"]],
 ];
 
 /** Downloads the rows on screen as a spreadsheet-friendly CSV (Excel opens it directly) */

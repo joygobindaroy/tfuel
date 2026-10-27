@@ -429,3 +429,16 @@ export async function couponRemove(uid: string, orderId: string) {
   if (!o || (o.uid && o.uid !== uid) || o.status !== "open") throw new HttpError(404, "order_not_found");
   await db().ref(`shop_orders/${orderId}`).update({ coupon: null, disc_u: null });
 }
+
+/** "Buy now" link: a signed hosted link the shop owner can put anywhere (email, chat, QR). Opening it creates a fresh order and sends the buyer to pay. */
+const buyKey = () => crypto.createHash("sha256").update("card:" + (process.env.BOT_TOKEN || "dev")).digest("hex");
+export const buySig = (id: string, usd: number, title: string) => crypto.createHmac("sha256", buyKey()).update(`buy|${id}|${usd}|${title}`).digest("hex").slice(0, 20);
+export const buyUrl = (base: string, id: string, usd: number, title: string) => `${base}/buy?k=${encodeURIComponent(id)}&a=${usd}&t=${encodeURIComponent(title)}&s=${buySig(id, usd, title)}`;
+export async function buyOrder(id: string, usd: number, title: string, sig: string): Promise<string> {
+  if (!/^[\w-]{3,40}$/.test(id) || buySig(id, usd, title) !== sig) throw new HttpError(403, "This link is not valid.");
+  const shop = (await db().ref(`shops/${id}`).get()).val() as Shop | null;
+  const s = await getSettings();
+  if (!shop || !shop.enabled || !s.shops_enabled) throw new HttpError(503, "This shop is not taking payments right now.");
+  const r = await createShopOrder(id, shop, s, { ref: "buy-" + Date.now().toString(36) + randomToken().slice(0, 6), usd, title });
+  return r.pay_url;
+}

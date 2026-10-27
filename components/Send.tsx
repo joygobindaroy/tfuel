@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { api, errText, fmtTf } from "@/lib/client";
+import { api, errText, fmtTf, tg } from "@/lib/client";
 import { CopyBtn, AmtInput, Cta, SkelCard, confetti } from "@/components/Ui";
 import { PageHead } from "@/components/Cashier";
 import { useAccount, PinField } from "@/components/Settings";
@@ -180,7 +180,10 @@ export function SendPage({ say, onBack, cpt, reload, top, reqId, fixedAsset }: {
               {!paying && (mode === "person" || mode === "sched") && (
                 <>
                   <label>Receiver&apos;s unique ID</label>
-                  <input placeholder="10 letters / numbers" maxLength={10} autoCapitalize="off" autoCorrect="off" value={code} onChange={(e) => setCode(e.target.value.replace(/[^A-Za-z0-9]/g, ""))} />
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <input style={{ flex: 1 }} placeholder="10 letters / numbers" maxLength={10} autoCapitalize="off" autoCorrect="off" value={code} onChange={(e) => setCode(e.target.value.replace(/[^A-Za-z0-9]/g, ""))} />
+                    {typeof (tg() as any)?.showScanQrPopup === "function" && <button className="btn sec sm" type="button" onClick={() => scanQr((c) => setCode(c), say)}>📷 Scan QR</button>}
+                  </div>
                   <Contacts key={contactsKey} onPick={(cc, last) => { setCode(cc); if (last && !amt) { setAsset(last.a); setAmt(String(last.v)); } }} say={say} />
                   {looking && <div className="xs muted" style={{ marginTop: 6 }}>Checking…</div>}
                   {who && (
@@ -334,4 +337,23 @@ export function SendPage({ say, onBack, cpt, reload, top, reqId, fixedAsset }: {
       )}
     </>
   );
+}
+
+/** Scan someone's invite QR / link with Telegram's scanner and pull out their 10-character ID */
+export function parseUserId(text: string): string {
+  const t = String(text || "").trim();
+  const m = /[?&]startapp=([A-Za-z0-9]{10})\b/.exec(t) || /^([A-Za-z0-9]{10})$/.exec(t);
+  return m ? m[1] : "";
+}
+function scanQr(onCode: (c: string) => void, say: (m: string, ok?: boolean) => void) {
+  const w: any = tg();
+  try {
+    w.showScanQrPopup({ text: "Scan the receiver's QR code" }, (data: string) => {
+      const c = parseUserId(data);
+      if (c) { onCode(c); try { w.closeScanQrPopup(); } catch {} return true; }
+      say("That QR is not a TFUEL ID");
+      try { w.closeScanQrPopup(); } catch {}
+      return true;
+    });
+  } catch { say("Scanner not available here"); }
 }

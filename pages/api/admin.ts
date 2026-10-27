@@ -545,6 +545,19 @@ export default route(async (req, res) => {
       await adminLog(who, "shop_test_order", { id, order: r.order_id });
       return void res.json({ success: true, pay_url: r.pay_url, order_id: r.order_id });
     }
+    case "shopBuyLink": {
+      const id = String(b.id || "");
+      if (!idRe.test(id)) throw new HttpError(400, "Invalid id");
+      const usd = Math.round(Number(b.amount) * 100) / 100;
+      const title = String(b.title || "").replace(/[\u0000-\u001f]/g, " ").trim().slice(0, 80);
+      const shop = (await db().ref(`shops/${id}`).get()).val();
+      if (!shop) throw new HttpError(404, "Shop not found");
+      if (!(usd >= 0.01 && usd <= shop.max_usd)) throw new HttpError(400, "Amount must be between 0.01 and " + shop.max_usd);
+      if (title.length < 2) throw new HttpError(400, "Enter what the buyer is paying for");
+      const { buyUrl } = await import("@/lib/shop");
+      const { appBase } = await import("@/lib/mailtpl");
+      return void res.json({ success: true, url: buyUrl(appBase(), id, usd, title) });
+    }
     case "couponList": {
       const all = ((await db().ref("shop_coupons").get()).val() || {}) as Record<string, Record<string, any>>;
       const out: any[] = [];

@@ -14,7 +14,10 @@ const utcHour = (h: number) => (h - 6 + 24) % 24;
 function AutoPostCard({ call }: { call: Call }) {
   const [rules, setRules] = useState<any[] | null>(null);
   const [errs, setErrs] = useState<Record<string, any>>({});
-  const load = useCallback(async () => { const r: any = await call({ action: "autopostGet" }); if (r) { setRules(r.rules); setErrs(r.errs || {}); } }, [call]);
+  const [wel, setWel] = useState<any>({ enabled: false, text: "" });
+  const [winpost, setWinpost] = useState(true);
+  const [log, setLog] = useState<any[]>([]);
+  const load = useCallback(async () => { const r: any = await call({ action: "autopostGet" }); if (r) { setRules(r.rules); setErrs(r.errs || {}); setWel(r.welcome || { enabled: false, text: "" }); setWinpost(r.winpost !== false); setLog(r.log || []); } }, [call]);
   useEffect(() => { load(); }, [load]);
   if (!rules) return null;
   const up = (i: number, p: any) => setRules(rules.map((r, j) => (j === i ? { ...r, ...p } : r)));
@@ -43,8 +46,14 @@ function AutoPostCard({ call }: { call: Call }) {
           </div>
         </div>
       ))}
+      <div style={{ border: "1px solid var(--line, #e5e7eb)", borderRadius: 12, padding: 12, marginTop: 10 }}>
+        <div className="row"><div><div className="b">Welcome new group members</div><div className="xs muted">Bot greets each new member of your group (add the bot to the group first).</div></div><input type="checkbox" checked={!!wel.enabled} onChange={(e) => setWel({ ...wel, enabled: e.target.checked })} /></div>
+        <textarea rows={2} maxLength={300} style={{ marginTop: 6 }} value={wel.text} onChange={(e) => setWel({ ...wel, text: e.target.value })} placeholder="Glad you are here! Tap the button to start earning TFUEL." />
+        <div className="row" style={{ marginTop: 8 }}><div><div className="b">Post winner cards</div><div className="xs muted">When a tournament ends, the #1 win card is posted to the channel.</div></div><input type="checkbox" checked={winpost} onChange={(e) => setWinpost(e.target.checked)} /></div>
+      </div>
       <div className="chips" style={{ marginTop: 12 }}>{Object.entries(KIND_LABEL).map(([k, t]) => <button key={k} className="pill" onClick={() => add(k)}>+ {t}</button>)}</div>
-      <button className="btn" style={{ marginTop: 12 }} onClick={async () => { const r: any = await call({ action: "autopostSave", rules }, "Auto-posts saved"); if (r) setRules(r.rules); }}>Save auto-posts</button>
+      <button className="btn" style={{ marginTop: 12 }} onClick={async () => { const r: any = await call({ action: "autopostSave", rules, welcome: wel, winpost }, "Auto-posts saved"); if (r) { setRules(r.rules); setWel(r.welcome); setWinpost(r.winpost !== false); } }}>Save auto-posts</button>
+      {log.length > 0 && <div style={{ marginTop: 14 }}><div className="b">Recent posts</div>{log.slice(0, 15).map((x: any) => <div key={x.id} className="xs" style={{ marginTop: 4, color: x.ok ? undefined : "#dc2626" }}>{when(x.at)} · {KIND_LABEL[x.kind] || x.kind}{x.pic ? " · 🖼" : ""} · {x.ok ? "sent" : x.err}</div>)}</div>}
     </div>
   );
 }

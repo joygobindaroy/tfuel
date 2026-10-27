@@ -36,6 +36,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         if (st === "left" || st === "kicked") await db().ref(`bot_chats/${key}`).remove().catch(() => {});
         else await db().ref(`bot_chats/${key}`).set({ title: String(ch.title || "").slice(0, 80), type: ch.type, username: ch.username ? "@" + ch.username : "", status: st, at: Date.now() }).catch(() => {});
       }
+    } else if (u.message?.new_chat_members) {
+      const { welcomeMembers } = await import("@/lib/autopost");
+      await welcomeMembers(u.message).catch((e) => console.error("welcome", e));
     } else {
       await handleBot(u).catch((e) => console.error("bot ui", e)); // বার্তার ভুলে Telegram retry-র দরকার নেই
     }

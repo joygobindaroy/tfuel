@@ -2,6 +2,7 @@ import crypto from "crypto";
 import { db } from "./firebase";
 import { HttpError } from "./auth";
 import { getCfg2 } from "./cfg2";
+import { getSettings } from "./settings";
 import { dayKey } from "./log";
 import { creditCoins } from "./coins";
 import { displayName } from "./transfer";
@@ -191,6 +192,14 @@ export async function settleTours(): Promise<number> {
         if (base) await tgCall("sendPhoto", { chat_id: r.uid, photo: winUrl(base, t.title, r.rank, r.prize, r.name), caption: `🏆 #${r.rank} · ${t.title} — share your win!` });
       } catch {}
     }
+    try {
+      const top1 = board.find((r) => r.rank === 1 && r.prize);
+      const base = appBase();
+      if (top1 && base && (await getCfg2()).posts.winpost) {
+        const st = await getSettings();
+        if (st.autopost_channel) await tgCall("sendPhoto", { chat_id: st.autopost_channel, photo: winUrl(base, t.title, 1, top1.prize, top1.name), caption: `🏆 ${top1.name} won "${t.title}" — ${top1.prize.toLocaleString("en-US")} coins!` });
+      }
+    } catch {}
     n++;
   }
   return n;

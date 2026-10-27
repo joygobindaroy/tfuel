@@ -1,3 +1,4 @@
+import { db } from "./firebase";
 import { faqReply } from "./faqbot";
 import { tgCall } from "./telegram";
 import { getSettings, Settings } from "./settings";
@@ -5,7 +6,7 @@ import { getRefCode } from "./refcode";
 import { claimJoin } from "./taskclaim";
 import { rateLimit } from "./api";
 import { HttpError } from "./auth";
-import { adminIds, isAdmin, myStatsView, missionsBotView, spinBotView, withdrawalsView, supportBotView, ticketBotView, depositBotView, depositNetView, cardInfo, adminStatsView, adminPendingView, adminSettle } from "./botviews2";
+import { adminIds, isAdmin, myStatsView, missionsBotView, spinBotView, withdrawalsView, supportBotView, ticketBotView, depositBotView, depositNetView, cardInfo, adminStatsView, adminTodayView, adminPendingView, adminSettle } from "./botviews2";
 import { getState, setState, clearState } from "./botstate";
 import { createTicket, replyTicket } from "./tickets";
 import { answerConfirm } from "./wdconfirm";
@@ -32,6 +33,7 @@ export const BOT_COMMANDS = [
   { command: "tasks", description: "Tasks you can do" },
   { command: "top", description: "Leaderboard" },
   { command: "price", description: "TFUEL price" },
+  { command: "today", description: "Today: price & top earners" },
   { command: "clan", description: "My clan & raid boss" },
   { command: "invite", description: "Invite friends" },
   { command: "settings", description: "Notifications" },
@@ -81,16 +83,21 @@ export async function handleBot(u: any): Promise<boolean> {
 
   if (u.message?.text) {
     const chatType = u.message.chat?.type;
-    const m = /^\/(start|profile|tasks|invite|help|menu|balance|wallet|daily|top|price|clan|settings|spin|missions|mystats|withdrawals|deposit|support|card|stats|pending|cancel)(?:@\w+)?(?:\s+(\S+))?/i.exec(u.message.text);
+    const m = /^\/(start|profile|tasks|invite|help|menu|balance|wallet|daily|top|price|clan|settings|spin|missions|mystats|withdrawals|deposit|support|card|stats|pending|today|cancel)(?:@\w+)?(?:\s+(\S+))?/i.exec(u.message.text);
     const chat = u.message.chat.id;
 
     // ---- groups: only /top and /price (public info) ----
     if (chatType === "group" || chatType === "supergroup") {
       if (!s.bot_groups || !m) return false;
       const cmd = m[1].toLowerCase();
-      if (cmd !== "top" && cmd !== "price") return false;
+      if (cmd !== "top" && cmd !== "price" && cmd !== "today") return false;
       try { await rateLimit(String(chat), "botgrp", 8); } catch { return true; }
-      const text = cmd === "top" ? await boardText(null, s, "d") : await priceText(s);
+      if (cmd === "today") {
+        let ok = false; // one /today answer per 30 s per group
+        await db().ref(`bot_today/${String(chat).replace(/[.$#\[\]\/]/g, "_")}`).transaction((c: number | null) => { if (c && Date.now() - c < 30000) return c; ok = true; return Date.now(); });
+        if (!ok) return true;
+      }
+      const text = cmd === "top" ? await boardText(null, s, "d") : cmd === "today" ? (await priceText(s)) + "\n\n" + (await boardText(null, s, "d")) : await priceText(s);
       await tgCall("sendMessage", { chat_id: chat, text, parse_mode: "HTML", disable_web_page_preview: "true", reply_markup: JSON.stringify({ inline_keyboard: [[openBtn(s, "⛏ Open TFUEL")]] }) });
       return true;
     }
@@ -143,6 +150,7 @@ export async function handleBot(u: any): Promise<boolean> {
     else if (cmd === "deposit") await send(chat, depositBotView(s));
     else if (cmd === "support") await send(chat, await supportBotView(uid, s));
     else if (cmd === "card") await sendCard(chat, uid, s, u.message.from?.first_name);
+    else if (cmd === "today") { if (isAdmin(uid)) await send(chat, await adminTodayView(s)); else return false; }
     else if (cmd === "stats") { if (isAdmin(uid)) await send(chat, await adminStatsView(s)); else return false; }
     else if (cmd === "pending") { if (isAdmin(uid)) await send(chat, await adminPendingView(s)); else return false; }
     else if (cmd === "cancel") { /* handled above */ }

@@ -120,18 +120,21 @@ const mod: AdminMod = async (action, b, ctx) => {
     }
     case "autopostGet": {
       const errs = ((await db().ref("autopost_err").get()).val() || {}) as Record<string, any>;
-      return { rules: (await getCfg2(true)).posts.rules, errs };
+      const c = (await getCfg2(true)).posts;
+      const log = ((await db().ref("autopost_log").orderByKey().limitToLast(15).get().catch(async () => await db().ref("autopost_log").get())).val() || {}) as Record<string, any>;
+      const cronAt = Number((await db().ref("stats/cron_at").get()).val()) || 0;
+      return { rules: c.rules, welcome: c.welcome, winpost: c.winpost, errs, log: Object.entries(log).sort((a, b) => (a[0] < b[0] ? 1 : -1)).slice(0, 15).map(([id, x]) => ({ id, ...x })), cron_at: cronAt };
     }
     case "autopostSave": {
       needSuper(ctx.role);
-      const v = await setCfg2("posts", { rules: b.rules });
+      const v = await setCfg2("posts", { rules: b.rules, welcome: b.welcome, winpost: b.winpost });
       await adminLog(ctx.who, "autopost_save", { n: v.rules.length });
-      return { rules: v.rules };
+      return { rules: v.rules, welcome: v.welcome, winpost: v.winpost };
     }
     case "autopostNow": {
       needSuper(ctx.role);
       const r = (Array.isArray(b.rules) ? b.rules : [])[0];
-      const clean1 = (await import("../cfg2")).SECTIONS.posts({ rules: [r] }, { rules: [] }).rules[0];
+      const clean1 = (await import("../cfg2")).SECTIONS.posts({ rules: [r] }, { rules: [], welcome: { enabled: false, text: "" }, winpost: true }).rules[0];
       if (!clean1) throw new HttpError(400, "bad_request");
       const err = await sendPost(clean1, await getSettings(true));
       if (err) throw new HttpError(400, err);

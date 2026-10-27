@@ -49,7 +49,7 @@ export interface Mini {
 }
 export interface PostRule { id: string; kind: "price" | "top" | "invite" | "tour" | "custom"; on: boolean; hour: number; every: number; text: string; image: boolean; btn: string }
 export interface Cfg2 {
-  posts: { rules: PostRule[] };
+  posts: { rules: PostRule[]; welcome: { enabled: boolean; text: string }; winpost: boolean };
   xfer: Xfer;
   vip: Vip;
   mini: Mini;
@@ -95,7 +95,7 @@ const QUIZ: Quiz[] = [
 ];
 
 export const CFG2_DEFAULTS: Cfg2 = {
-  posts: { rules: [] },
+  posts: { rules: [], welcome: { enabled: false, text: "Glad you are here! Tap the button to start earning TFUEL." }, winpost: true },
   xfer: { usdt: { enabled: true, fee_pct: 0.5, min: 1, daily: 500 }, hold: { tfuel: 0, usdt: 0, minutes: 10 }, links: { request: true, claim: true, days: 7 } },
   plus: { sched: { enabled: true, max: 5 }, alert: { tfuel: 0, usdt: 0 }, quest: { enabled: false, plays: 2, bonus: 50, streak_days: 7, streak_bonus: 500 }, trial_days: 0, tour_remind: true, subs: true, nudges: true },
   vip: { enabled: false, price: 3, days: 30, daily_pct: 25, fee_off_pct: 50, badge: "💎" },
@@ -185,7 +185,9 @@ const parseQuiz = (v: any): Quiz[] => {
 };
 
 export const SECTIONS: { [K in keyof Cfg2]: (v: any, cur: Cfg2[K]) => Cfg2[K] } = {
-  posts: (v) => ({
+  posts: (v, cur) => ({
+    winpost: v?.winpost === undefined ? (cur?.winpost ?? true) : bool(v.winpost),
+    welcome: { enabled: bool(v?.welcome?.enabled), text: str(v?.welcome?.text, 300) || "Glad you are here! Tap the button to start earning TFUEL." },
     rules: (Array.isArray(v?.rules) ? v.rules : []).slice(0, 12).map((r: any, i: number) => ({
       id: idOk(r?.id, "r" + Date.now().toString(36) + i),
       kind: ["price", "top", "invite", "tour", "custom"].includes(r?.kind) ? r.kind : "custom",

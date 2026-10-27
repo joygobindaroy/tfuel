@@ -4,6 +4,7 @@ import { CopyBtn, Empty, ConfirmSheet, SkelList, AmtInput, PayStepper } from "@/
 import { api, cachedApi, errText, fmtUsd, tg } from "@/lib/client";
 import Icon from "@/components/Icons";
 import Logo from "@/components/Logo";
+import { ReceiptActions } from "@/components/SendExtra";
 import { useAccount, PinField, AddrPicker } from "@/components/Settings";
 
 type Say = (t: string, ok?: boolean) => void;
@@ -548,8 +549,8 @@ export function PayoutHistory({ say, onBack, legacy, cpt, fmtTf }: { say: Say; o
   const { m, load } = useCash(say);
   const [f, setF] = useState<"all" | "usdt" | "tfuel">("all");
   const rows = useMemo(() => {
-    const u = (m?.payouts || []).map((p) => ({ key: "u" + p.id, kind: "usdt" as const, t: p.created_at, title: `${usd(p.amount)} USDT`, sub: `${p.network_name}${p.address ? " · " + short(p.address) : ""}`, extra: p.status === "paid" || p.status === "pending" ? `You receive ${usd(p.receive)} USDT` : "", status: p.status, note: p.note, addr: p.address || "" }));
-    const l = legacy.map((w) => ({ key: "l" + w.id, kind: "tfuel" as const, t: w.created_at, title: `${fmtTf(w.amount, cpt)} TFUEL`, sub: w.method, extra: "", status: w.status, note: "", addr: "" }));
+    const u = (m?.payouts || []).map((p) => ({ key: "u" + p.id, kind: "usdt" as const, t: p.created_at, title: `${usd(p.amount)} USDT`, sub: `${p.network_name}${p.address ? " · " + short(p.address) : ""}`, extra: p.status === "paid" || p.status === "pending" ? `You receive ${usd(p.receive)} USDT` : "", status: p.status, note: p.note, addr: p.address || "", rid: "WDU-" + p.id }));
+    const l = legacy.map((w) => ({ key: "l" + w.id, kind: "tfuel" as const, t: w.created_at, title: `${fmtTf(w.amount, cpt)} TFUEL`, sub: w.method, extra: "", status: w.status, note: "", addr: "", rid: "WDT-" + w.id }));
     return [...u, ...l].filter((r) => f === "all" || r.kind === f).sort((a, b) => b.t - a.t);
   }, [m, legacy, f, cpt, fmtTf]);
   return (
@@ -569,6 +570,7 @@ export function PayoutHistory({ say, onBack, legacy, cpt, fmtTf }: { say: Say; o
             {r.addr && <div className="xs muted">{short(r.addr)} <CopyBtn text={r.addr} className="btn ghost sm" size={12} /></div>}
             {r.status === "rejected" && r.note && <div className="xs muted">Reason: {r.note}</div>}
             {r.kind === "usdt" && <PayStepper status={r.status} />}
+            {r.status === "paid" && <ReceiptActions txid={r.rid} say={say} />}
           </div>
           <span className={`pill ${stCls(r.status)}`}>{stLabel(r.status)}</span>
         </div>
