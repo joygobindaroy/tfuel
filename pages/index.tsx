@@ -14,6 +14,7 @@ import { DepositPage, WithdrawPage, DepositHistory, PayoutHistory, PageHead } fr
 import { Bell, Onboarding, CurrencyPick, TermsGate } from "@/components/Inbox";
 import { PaySheet, ShopsPage, SupportPage, InviteCard } from "@/components/Shops";
 import { SendPage } from "@/components/Send";
+import { WhatsNew, EventStrip } from "@/components/V20";
 import { ClaimSheet } from "@/components/SendExtra";
 import { MissionsCard, TodoCard, FeedCard, AwayPopup, CosmeticsPage } from "@/components/Today";
 import { AdBanner, AdsPage } from "@/components/Ads";
@@ -38,6 +39,9 @@ interface Me {
   unread?: number;
   showIntro?: boolean;
   terms?: { version: number; text: string; url: string } | null;
+  gq?: { title: string; target: number; bonus: number; n: number; done: boolean } | null;
+  ev?: { mult: number } | null;
+  whatsnew?: { version: string; text: string } | null;
   cur?: "tfuel" | "usdt" | null;
   ret?: any;
   dm?: any;
@@ -387,6 +391,7 @@ export default function Home() {
         </div>
       )}
       {payId && <PaySheet id={payId} cpt={cpt} say={say} reload={load} onClose={() => setPayId(null)} />}
+      {!me.terms && !me.showIntro && me.whatsnew && <WhatsNew w={me.whatsnew} onDone={() => setMe((m) => (m ? { ...m, whatsnew: null } : m))} />}
       {me.terms && <TermsGate terms={me.terms} onDone={() => setMe((m) => (m ? { ...m, terms: null } : m))} />}
       {!me.terms && !me.showIntro && me.cur === null && !payId && <CurrencyPick onDone={(c) => setMe((m) => (m ? { ...m, cur: c } : m))} />}
       {!me.terms && me.showIntro && <Onboarding onDone={() => setMe((m) => (m ? { ...m, showIntro: false } : m))} />}
@@ -521,6 +526,7 @@ function Tasks({ me, cpt, say, reload }: { me: Me; cpt: number; say: Say; reload
 
   return (
     <>
+      <EventStrip ev={me.ev} gq={me.gq} />
       <DailyCard cpt={cpt} say={say} reload={reload} />
       <SpinCard cpt={cpt} say={say} reload={reload} />
       <AdBonus cpt={cpt} say={say} reload={reload} />

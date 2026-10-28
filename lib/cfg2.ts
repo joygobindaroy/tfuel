@@ -48,7 +48,10 @@ export interface Mini {
   hunt: { enabled: boolean; min: number; max: number; per_day: number };
 }
 export interface PostRule { id: string; kind: "price" | "top" | "invite" | "tour" | "custom"; on: boolean; hour: number; every: number; text: string; image: boolean; btn: string }
+export interface EventRule { id: string; title: string; mult: number; start: number; end: number; on: boolean; ann?: boolean }
+export interface V20 { events: EventRule[]; gq: { enabled: boolean; title: string; target: number; bonus: number }; pin_over_usd: number; ticket_close_days: number; whatsnew: boolean }
 export interface Cfg2 {
+  v20: V20;
   posts: { rules: PostRule[]; welcome: { enabled: boolean; text: string }; winpost: boolean };
   xfer: Xfer;
   vip: Vip;
@@ -95,6 +98,7 @@ const QUIZ: Quiz[] = [
 ];
 
 export const CFG2_DEFAULTS: Cfg2 = {
+  v20: { events: [], gq: { enabled: false, title: "Community goal", target: 100, bonus: 100 }, pin_over_usd: 0, ticket_close_days: 7, whatsnew: true },
   posts: { rules: [], welcome: { enabled: false, text: "Glad you are here! Tap the button to start earning TFUEL." }, winpost: true },
   xfer: { usdt: { enabled: true, fee_pct: 0.5, min: 1, daily: 500 }, hold: { tfuel: 0, usdt: 0, minutes: 10 }, links: { request: true, claim: true, days: 7 } },
   plus: { sched: { enabled: true, max: 5 }, alert: { tfuel: 0, usdt: 0 }, quest: { enabled: false, plays: 2, bonus: 50, streak_days: 7, streak_bonus: 500 }, trial_days: 0, tour_remind: true, subs: true, nudges: true },
@@ -185,6 +189,13 @@ const parseQuiz = (v: any): Quiz[] => {
 };
 
 export const SECTIONS: { [K in keyof Cfg2]: (v: any, cur: Cfg2[K]) => Cfg2[K] } = {
+  v20: (v) => ({
+    events: (Array.isArray(v?.events) ? v.events : []).slice(0, 10).map((e: any, i: number) => ({ id: idOk(e?.id, "e" + Date.now().toString(36) + i), title: str(e?.title, 60) || "Bonus event", mult: num(e?.mult, 1, 5, 2), start: int(e?.start, 0, 4e12, 0), end: int(e?.end, 0, 4e12, 0), on: bool(e?.on), ann: bool(e?.ann) })),
+    gq: { enabled: bool(v?.gq?.enabled), title: str(v?.gq?.title, 60) || "Community goal", target: int(v?.gq?.target, 2, 5000, 100), bonus: int(v?.gq?.bonus, 1, 1e7, 100) },
+    pin_over_usd: num(v?.pin_over_usd, 0, 1e7, 0),
+    ticket_close_days: int(v?.ticket_close_days, 0, 90, 7),
+    whatsnew: v?.whatsnew === undefined ? true : bool(v.whatsnew),
+  }),
   posts: (v, cur) => ({
     winpost: v?.winpost === undefined ? (cur?.winpost ?? true) : bool(v.winpost),
     welcome: { enabled: bool(v?.welcome?.enabled), text: str(v?.welcome?.text, 300) || "Glad you are here! Tap the button to start earning TFUEL." },

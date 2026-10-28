@@ -161,6 +161,7 @@ export async function sendAsset(from: { id: string; name: string }, toUid: strin
     await activity(from.id, "send", { ...(asset === "usdt" ? { usdt_u: -total } : { coins: -total }), note: `Held to ${toName} (${toCode}) · ${txid}` });
     await notify(toUid, `⏳ ${maskName(from.name)} is sending you ${amtStr(asset, amount, s.coins_per_tfuel)}. It arrives in ${c2.xfer.hold.minutes} min.`);
     await notify(from.id, `⏳ Your transfer of ${amtStr(asset, amount, s.coins_per_tfuel)} to ${toName} is on hold for ${c2.xfer.hold.minutes} min. You can cancel it in Send → History.`, false, [[{ text: "↩️ Cancel transfer", callback_data: `xc:${id}` }]]);
+    try { const R = await import("./receipt"); await R.botReceipt(from.id, await R.loadReceipt(txid, from.id), s.coins_per_tfuel); } catch {}
     return { fee, balance, id, txid, at: now, to: { name: toName, code: toCode }, asset, held: true, release_at: rel };
   }
 

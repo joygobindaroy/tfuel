@@ -30,6 +30,7 @@ export function ShopsPage({ call }: { call: Call }) {
   const [subs, setSubs] = useState<any[]>([]);
   const [cps, setCps] = useState<any[]>([]);
   const [cf, setCf] = useState<any>({ shop: "", code: "", pct: "10", max: "100", days: "30", note: "" });
+  const [sales, setSales] = useState<Record<string, any>>({});
   const [testLink, setTestLink] = useState<Record<string, string>>({});
   const load = useCallback(async () => {
     const [a, b, c, k] = await Promise.all([call({ action: "shopList" }), call({ action: "shopOrders" }), call({ action: "shopSubs" }), call({ action: "couponList" })]);
@@ -100,19 +101,25 @@ export function ShopsPage({ call }: { call: Call }) {
             <div className="gap">
               <button className="btn sec sm" onClick={async () => { const r: any = await call({ action: "shopTestOrder", id: s.id }, "Test order created"); if (r) setTestLink((t) => ({ ...t, [s.id]: r.pay_url })); }}>Test order $0.01</button>
               <button className="btn sec sm" onClick={async () => { const t = prompt("What is the buyer paying for?", "Order"); if (!t) return; const a = prompt("Amount in USD", "5"); if (!a) return; const r: any = await call({ action: "shopBuyLink", id: s.id, title: t, amount: a }); if (r) setTestLink((x) => ({ ...x, [s.id]: r.url })); }}>Buy-now link</button>
+              <button className="btn sec sm" onClick={async () => { const r: any = await call({ action: "shopSales", id: s.id }); if (r) setSales((x: any) => ({ ...x, [s.id]: r })); }}>Sales</button>
               <button className="btn sec sm" onClick={async () => { const r: any = await call({ action: "shopTest", id: s.id }); if (r) setTests((t) => ({ ...t, [s.id]: r })); }}>Test connection</button>
               <button className="btn sec sm" onClick={() => setF({ ...s, fee_pct: String(s.fee_pct), max_usd: String(s.max_usd) })}>Edit</button>
               <button className="btn sec sm" onClick={async () => { if (confirm("Create a new secret? The old one stops working immediately.")) { const r: any = await call({ action: "shopRotate", id: s.id }, "New secret created"); if (r) setSecret({ id: s.id, secret: r.secret }); } }}>New secret</button>
               <button className="btn danger sm" onClick={async () => { if (confirm("Delete this shop? Existing orders stay in the log.")) { if (await call({ action: "shopDelete", id: s.id }, "Deleted")) load(); } }}><Icon name="trash" size={14} /></button>
             </div>
           </div>
+          {sales[s.id] && (() => { const sd = sales[s.id]; const mx = Math.max(1, ...sd.days.map((x: any) => x.usd)); return (
+            <div style={{ marginTop: 10 }}>
+              <div className="xs muted">Last 14 days · {sd.paid} paid orders · refund rate {sd.refund_rate}%{sd.top.length ? " · top buyers: " + sd.top.map((t: any) => `${t.uid} $${t.usd}`).join(", ") : ""}</div>
+              <div style={{ display: "flex", alignItems: "flex-end", gap: 3, height: 60, marginTop: 6 }}>{sd.days.map((x: any) => <div key={x.day} title={`${x.day}: $${x.usd} (${x.n})`} style={{ flex: 1, background: "#f5a623", borderRadius: 3, height: `${Math.max(3, (x.usd / mx) * 100)}%` }} />)}</div>
+            </div>); })()}
           {testLink[s.id] && (
             <div className="addrbox" style={{ marginTop: 10 }}><span style={{ fontSize: 12, wordBreak: "break-all" }}>Link (share it — every open makes a fresh order; or for a test open it, pay and watch Orders + webhook): {testLink[s.id]}</span><button className="btn sec sm" onClick={() => copy(testLink[s.id])}><Icon name="copy" size={14} /></button></div>
           )}
           {tests[s.id] && (
             <div style={{ marginTop: 10 }}>
-              <div className="b sm">{tests[s.id].ok ? "✅ All checks passed" : "⚠️ Something needs attention"}</div>
-              {tests[s.id].checks.map((c: any, i: number) => <div key={i} className="xs" style={{ marginTop: 3 }}>{c.ok ? "✅" : "❌"} <b>{c.name}</b> — {c.note}</div>)}
+              <div className="b sm">{tests[s.id].ok ? "All checks passed" : "Something needs attention"}</div>
+              {tests[s.id].checks.map((c: any, i: number) => <div key={i} className="xs" style={{ marginTop: 3 }}><Icon name={c.ok ? "check" : "x"} size={13} /> <b>{c.name}</b> — {c.note}</div>)}
             </div>
           )}
           <details style={{ marginTop: 10 }}>
@@ -131,7 +138,7 @@ export function ShopsPage({ call }: { call: Call }) {
           <div className="title" style={{ marginBottom: 6 }}>Settlement (last 300 orders)</div>
           {o.totals.map((t: any) => (
             <div className="row" key={t.id} style={{ marginBottom: 6 }}>
-              <div><div className="b">{t.name}</div><div className="xs muted">{t.n} paid orders · refunded ${t.refunded.toFixed(2)}</div><div className="xs muted">Sales: today ${t.d1.toFixed(2)} · 7 days ${t.d7.toFixed(2)} · 30 days ${t.d30.toFixed(2)} · open orders {t.open}</div>{t.hook_failed > 0 && <div className="xs" style={{ color: "#dc2626" }}>⚠ {t.hook_failed} webhook(s) failed — retry below (auto-retry runs every cron)</div>}</div>
+              <div><div className="b">{t.name}</div><div className="xs muted">{t.n} paid orders · refunded ${t.refunded.toFixed(2)}</div><div className="xs muted">Sales: today ${t.d1.toFixed(2)} · 7 days ${t.d7.toFixed(2)} · 30 days ${t.d30.toFixed(2)} · open orders {t.open}</div>{t.hook_failed > 0 && <div className="xs" style={{ color: "#dc2626" }}><Icon name="alert" size={13} /> {t.hook_failed} webhook(s) failed — retry below (auto-retry runs every cron)</div>}</div>
               <div style={{ textAlign: "right" }}><div className="b num">Owed to shop: ${t.owed.toFixed(2)}</div><div className="xs muted">Sales ${t.paid.toFixed(2)} · our fee ${t.fee.toFixed(2)}</div></div>
             </div>
           ))}

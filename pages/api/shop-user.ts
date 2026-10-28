@@ -1,3 +1,4 @@
+import { invoiceUrl } from "@/lib/v20";
 import { authenticate, HttpError } from "@/lib/auth";
 import { route, rateLimit } from "@/lib/api";
 import { db } from "@/lib/firebase";
@@ -23,7 +24,7 @@ export default route(async (req, res) => {
       success: true,
       enabled: true,
       shops: Object.entries(all).filter(([, x]) => x.enabled).map(([id, x]) => ({ id, name: x.name, domain: x.domain, tfuel: x.allow_tfuel, usdt: x.allow_usdt, connected: !!links[id] })),
-      orders: Object.entries(mine).sort(([a], [b]) => (a < b ? 1 : -1)).slice(0, 30).map(([id, o]) => ({ id, ...o, usd: fromU(o.usd_u), usdt: fromU(o.usdt_u || 0) })),
+      orders: Object.entries(mine).sort(([a], [b]) => (a < b ? 1 : -1)).slice(0, 30).map(([id, o]) => ({ id, ...o, usd: fromU(o.usd_u), usdt: fromU(o.usdt_u || 0), inv: o.status === "paid" ? invoiceUrl(id, user.id) : "" })),
     });
   }
 

@@ -156,7 +156,7 @@ export function ClanPage({ say, onBack, cpt, reload, tip }: P & { tip?: { on: bo
 
       {(m.ann || m.owner) && (
         <div className="card">
-          <div className="title" style={{ marginBottom: 4 }}>📣 Announcement</div>
+          <div className="title" style={{ marginBottom: 4 }}><Icon name="megaphone" size={14} /> Announcement</div>
           {m.ann ? <div className="sub" style={{ whiteSpace: "pre-wrap" }}>{m.ann}</div> : <div className="sub">Nothing posted yet.</div>}
           {m.owner && (
             <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
@@ -170,10 +170,10 @@ export function ClanPage({ say, onBack, cpt, reload, tip }: P & { tip?: { on: bo
         <div className="title" style={{ marginBottom: 4 }}>Members this week</div>
         {m.roster.map((r) => (
           <div className="hist" key={r.id}>
-            <span>{r.name}{r.owner ? " 👑" : ""}{r.me ? " (you)" : ""}</span>
+            <span>{r.name}{r.owner ? <> <Icon name="crown" size={13} /></> : null}{r.me ? " (you)" : ""}</span>
             <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <b className="num">{num(r.v)}</b>
-              {tip?.on && !r.me && <button className="btn sec sm" disabled={!!busy} onClick={() => setAsk({ kind: "tip", id: r.id, name: r.name })}>💛 Tip</button>}
+              {tip?.on && !r.me && <button className="btn sec sm" disabled={!!busy} onClick={() => setAsk({ kind: "tip", id: r.id, name: r.name })}><Icon name="heart" size={14} /> Tip</button>}
               {m.owner && !r.me && <button className="btn sec sm" disabled={!!busy} onClick={() => setAsk({ kind: "kick", id: r.id, name: r.name })}>Remove</button>}
             </span>
           </div>
@@ -324,14 +324,14 @@ export function PuzzlePage({ say, onBack, cpt, reload }: P) {
 
         {d.solved ? (
           <>
-            <div style={{ fontSize: 44, margin: "14px 0 4px" }}>🎉</div>
+            <div style={{ fontSize: 44, margin: "14px 0 4px" }}><Icon name="sparkle" size={14} /></div>
             <div className="title">Solved!</div>
             {won > 0 && <div className="sub">You earned {money(won)}.</div>}
             <div className="sub" style={{ marginTop: 6 }}>Come back tomorrow for a new word.</div>
           </>
         ) : over ? (
           <>
-            <div style={{ fontSize: 40, margin: "14px 0 4px" }}>⏳</div>
+            <div style={{ fontSize: 40, margin: "14px 0 4px" }}><Icon name="hourglass" size={14} /></div>
             <div className="title">No tries left today</div>
             {d.answer && <div className="sub">The word was <b>{d.answer}</b>.</div>}
             <div className="sub" style={{ marginTop: 6 }}>Come back tomorrow for a new word.</div>
@@ -410,7 +410,7 @@ export function CollectPage({ say, onBack, cpt, reload }: P) {
   const over = !!s.end && now >= s.end;
   const mine = d.items.filter((i) => i.owned > 0);
   const Img = ({ it, size }: { it: CollV["items"][0]; size: number }) =>
-    it.image ? <img src={it.image} alt="" width={size} height={size} style={{ borderRadius: 12, objectFit: "cover" }} /> : <span style={{ fontSize: size * 0.8, lineHeight: 1 }}>{it.emoji || "🎴"}</span>;
+    it.image ? <img src={it.image} alt="" width={size} height={size} style={{ borderRadius: 12, objectFit: "cover" }} /> : <span style={{ fontSize: size * 0.8, lineHeight: 1 }}>{it.emoji || "◆"}</span>;
 
   return (
     <>
@@ -442,7 +442,7 @@ export function CollectPage({ say, onBack, cpt, reload }: P) {
                 <div>
                   <div className="title">{it.name}</div>
                   <div className="sub">{it.pts} season pts · {it.left === null ? "Unlimited supply" : `${num(it.left)} of ${num(it.supply)} left`}</div>
-                  <div className="sub">{it.owned >= 1 ? <b>✓ You own this</b> : "One per user"}</div>
+                  <div className="sub">{it.owned >= 1 ? <b><Icon name="check" size={14} /> You own this</b> : "One per user"}</div>
                 </div>
               </div>
               <button className="btn sm" disabled={dis} onClick={() => setAsk(it)}>{over ? "Ended" : sold ? "Sold out" : capped ? "Max" : money(it.price)}</button>

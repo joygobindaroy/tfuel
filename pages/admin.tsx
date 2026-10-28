@@ -436,7 +436,7 @@ function UserModal({ uid, call, onClose }: { uid: string; call: Call; onClose: (
           {d.xfers.map((x: any) => (
             <div className="row" key={x.id} style={{ marginTop: 6 }}>
               <div style={{ minWidth: 0 }}>
-                <div className="b">{x.d === "in" ? "⬇ from" : "⬆ to"} {x.peer} <span className="xs muted">({x.pc})</span></div>
+                <div className="b">{x.d === "in" ? "from" : "to"} {x.peer} <span className="xs muted">({x.pc})</span></div>
                 <div className="xs muted" style={{ wordBreak: "break-all" }}>{new Date(x.at).toISOString().slice(0, 16).replace("T", " ")} · {x.st} · {x.tx}{x.dispute ? " · ⚠ dispute " + x.dispute : ""}</div>
               </div>
               <b className="num">{x.d === "in" ? "+" : "−"}{x.a === "usdt" ? (x.amt / 1e6).toFixed(2) + " USDT" : tf(x.amt) + " TFUEL"}</b>
@@ -789,8 +789,8 @@ function SettingsPage({ call }: { call: Call }) {
             <div key={m.k} style={{ display: "flex", gap: 6, marginBottom: 6, alignItems: "center" }}>
               <Toggle on={m.on} onChange={(v) => set("bot_menu", s.bot_menu.map((x: any, j: number) => (j === i ? { ...x, on: v } : x)))} />
               <input maxLength={24} value={m.text} onChange={(e) => set("bot_menu", s.bot_menu.map((x: any, j: number) => (j === i ? { ...x, text: e.target.value } : x)))} />
-              <button className="btn sec sm" type="button" onClick={() => move(-1)}>↑</button>
-              <button className="btn sec sm" type="button" onClick={() => move(1)}>↓</button>
+              <button className="btn sec sm" type="button" onClick={() => move(-1)}><Icon name="arrowup" size={14} /></button>
+              <button className="btn sec sm" type="button" onClick={() => move(1)}><Icon name="arrowdown" size={14} /></button>
             </div>
           );
         })}
@@ -801,10 +801,10 @@ function SettingsPage({ call }: { call: Call }) {
         <label>Link buttons (Channel, Chat, Twitter…)</label>
         {(s.bot_buttons || []).map((b: any, i: number) => (
           <div key={i} className="grid2" style={{ marginBottom: 6 }}>
-            <input placeholder="📢 Official Channel" maxLength={40} value={b.text} onChange={(e) => set("bot_buttons", s.bot_buttons.map((x: any, j: number) => (j === i ? { ...x, text: e.target.value } : x)))} />
+            <input placeholder="Official Channel" maxLength={40} value={b.text} onChange={(e) => set("bot_buttons", s.bot_buttons.map((x: any, j: number) => (j === i ? { ...x, text: e.target.value } : x)))} />
             <div style={{ display: "flex", gap: 6 }}>
               <input placeholder="https://t.me/…" value={b.url} onChange={(e) => set("bot_buttons", s.bot_buttons.map((x: any, j: number) => (j === i ? { ...x, url: e.target.value } : x)))} />
-              <button className="btn sec sm" type="button" onClick={() => set("bot_buttons", s.bot_buttons.filter((_: any, j: number) => j !== i))}>✕</button>
+              <button className="btn sec sm" type="button" onClick={() => set("bot_buttons", s.bot_buttons.filter((_: any, j: number) => j !== i))}><Icon name="x" size={14} /></button>
             </div>
           </div>
         ))}
@@ -821,7 +821,7 @@ function SettingsPage({ call }: { call: Call }) {
             </select>
             <div style={{ display: "flex", gap: 6 }}>
               <input placeholder="https://t.me/…" value={b.url} onChange={(e) => set("mail_socials", s.mail_socials.map((x: any, j: number) => (j === i ? { ...x, url: e.target.value } : x)))} />
-              <button className="btn sec sm" type="button" onClick={() => set("mail_socials", s.mail_socials.filter((_: any, j: number) => j !== i))}>✕</button>
+              <button className="btn sec sm" type="button" onClick={() => set("mail_socials", s.mail_socials.filter((_: any, j: number) => j !== i))}><Icon name="x" size={14} /></button>
             </div>
           </div>
         ))}
@@ -851,7 +851,7 @@ function SettingsPage({ call }: { call: Call }) {
         <label>Confirm in the bot for USDT withdrawals from (USDT, 0 = off)</label>
         <input inputMode="decimal" value={s.confirm_bot_usdt} onChange={(e) => set("confirm_bot_usdt", e.target.value)} />
         <label>Sponsored button in bot menus (text, link)</label>
-        <div className="grid2"><input maxLength={40} placeholder="⭐ Sponsor" value={s.bot_sponsor_text} onChange={(e) => set("bot_sponsor_text", e.target.value)} /><input placeholder="https://…" value={s.bot_sponsor_url} onChange={(e) => set("bot_sponsor_url", e.target.value)} /></div>
+        <div className="grid2"><input maxLength={40} placeholder="Sponsor" value={s.bot_sponsor_text} onChange={(e) => set("bot_sponsor_text", e.target.value)} /><input placeholder="https://…" value={s.bot_sponsor_url} onChange={(e) => set("bot_sponsor_url", e.target.value)} /></div>
       </div>
 
       <div className="card">
@@ -878,7 +878,7 @@ function SettingsPage({ call }: { call: Call }) {
             <input placeholder="Question" maxLength={120} value={f.q} onChange={(e) => set("faq", s.faq.map((x: any, j: number) => (j === i ? { ...x, q: e.target.value } : x)))} />
             <div className="gap" style={{ alignItems: "flex-start" }}>
               <textarea rows={2} placeholder="Answer" maxLength={800} style={{ flex: 1 }} value={f.a} onChange={(e) => set("faq", s.faq.map((x: any, j: number) => (j === i ? { ...x, a: e.target.value } : x)))} />
-              <button className="btn sec sm" type="button" onClick={() => set("faq", s.faq.filter((_: any, j: number) => j !== i))}>✕</button>
+              <button className="btn sec sm" type="button" onClick={() => set("faq", s.faq.filter((_: any, j: number) => j !== i))}><Icon name="x" size={14} /></button>
             </div>
           </div>
         ))}
@@ -999,11 +999,51 @@ function Health({ call }: { call: Call }) {
         <button className="btn sec sm" onClick={load}><Icon name="refresh" size={15} /> Re-check</button>
       </Head2>
       {!d && <div className="empty">Checking…</div>}
+      <V20Health call={call} />
       {d && d.items.map((x: any) => (
         <div className="card" key={x.name}>
           <div className="row"><div><div className="title">{x.name}</div><div className="sub">{x.msg}</div></div><span className={`tag ${x.ok === true ? "ok" : x.ok === false ? "err" : "warn"}`}>{x.ok === true ? "OK" : x.ok === false ? "Fix" : "Info"}</span></div>
         </div>
       ))}
+    </>
+  );
+}
+
+/* ---------------- v20: integrity, errors, exports ---------------- */
+function V20Health({ call }: { call: Call }) {
+  const [chk, setChk] = useState<any>(null);
+  const [errs, setErrs] = useState<any[] | null>(null);
+  const dl = async (kind: string) => {
+    const r: any = await call({ action: "v20Export", kind });
+    if (!r) return;
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([r.csv], { type: "text/csv;charset=utf-8" }));
+    a.download = r.name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  };
+  return (
+    <>
+      <div className="card">
+        <div className="title">Money check</div>
+        <div className="sub">Looks for negative or broken balances and overdue held transfers.</div>
+        <button className="btn sec sm" style={{ marginTop: 8 }} onClick={async () => setChk(await call({ action: "v20Integrity" }))}>Run check</button>
+        {chk && <div style={{ marginTop: 8 }}>
+          <div className="sm">{chk.users} users · {Math.round(chk.coins).toLocaleString("en-US")} coins · {(chk.usdt_u / 1e6).toFixed(2)} USDT in wallets</div>
+          {chk.issues.length === 0 ? <div className="tag ok" style={{ marginTop: 6 }}>No problems found</div> : chk.issues.map((x: any, i: number) => <div key={i} className="xs" style={{ color: "#dc2626", marginTop: 4 }}>{x.uid}: {x.what}</div>)}
+        </div>}
+      </div>
+      <div className="card">
+        <div className="title">Errors from background jobs</div>
+        <div className="gap" style={{ marginTop: 6 }}>
+          <button className="btn sec sm" onClick={async () => { const r: any = await call({ action: "v20Errors" }); if (r) setErrs(r.items); }}>Show last errors</button>
+          {errs && errs.length > 0 && <button className="btn danger sm" onClick={async () => { if (await call({ action: "v20ErrorsClear" }, "Cleared")) setErrs([]); }}>Clear</button>}
+        </div>
+        {errs && (errs.length === 0 ? <div className="tag ok" style={{ marginTop: 8 }}>No errors recorded</div> : errs.slice(0, 30).map((x: any) => <div key={x.id} className="xs" style={{ marginTop: 4 }}>{new Date(x.at).toLocaleString()} · <b>{x.src}</b> · {x.msg}</div>))}
+      </div>
+      <div className="card">
+        <div className="title">Export data (CSV)</div>
+        <div className="sub">Open in Excel or Google Sheets. Keep these files private.</div>
+        <div className="gap" style={{ marginTop: 8 }}>{["users", "orders", "withdrawals", "transfers"].map((k) => <button key={k} className="btn sec sm" onClick={() => dl(k)}>{k}</button>)}</div>
+      </div>
     </>
   );
 }
@@ -1179,7 +1219,7 @@ function UsdtDesk({ call }: { call: Call }) {
             </div>
             <span className={`tag ${d.status === "approved" ? "ok" : d.status === "rejected" ? "err" : "warn"}`}>{d.status}{d.by === "binance-auto" ? " · auto" : ""}</span>
           </div>
-          {d.auto_note && d.status === "pending" && <div className="xs" style={{ marginTop: 6 }}>🤖 {d.auto_note}{d.verified ? ` — you can credit ${d.verified}` : ""}</div>}
+          {d.auto_note && d.status === "pending" && <div className="xs" style={{ marginTop: 6 }}><Icon name="bot" size={13} /> {d.auto_note}{d.verified ? ` — you can credit ${d.verified}` : ""}</div>}
           {d.status === "pending" && (
             <>
               <div className="grid2" style={{ marginTop: 10 }}>

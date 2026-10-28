@@ -182,7 +182,7 @@ export function SendPage({ say, onBack, cpt, reload, top, reqId, fixedAsset }: {
                   <label>Receiver&apos;s unique ID</label>
                   <div style={{ display: "flex", gap: 8 }}>
                     <input style={{ flex: 1 }} placeholder="10 letters / numbers" maxLength={10} autoCapitalize="off" autoCorrect="off" value={code} onChange={(e) => setCode(e.target.value.replace(/[^A-Za-z0-9]/g, ""))} />
-                    {typeof (tg() as any)?.showScanQrPopup === "function" && <button className="btn sec sm" type="button" onClick={() => scanQr((c) => setCode(c), say)}>📷 Scan QR</button>}
+                    {typeof (tg() as any)?.showScanQrPopup === "function" && <button className="btn sec sm" type="button" onClick={() => scanQr((c) => setCode(c), say)}><Icon name="camera" size={14} /> Scan QR</button>}
                   </div>
                   <Contacts key={contactsKey} onPick={(cc, last) => { setCode(cc); if (last && !amt) { setAsset(last.a); setAmt(String(last.v)); } }} say={say} />
                   {looking && <div className="xs muted" style={{ marginTop: 6 }}>Checking…</div>}
@@ -320,13 +320,9 @@ export function SendPage({ say, onBack, cpt, reload, top, reqId, fixedAsset }: {
                   <div className="sumrow"><span className="muted">Recipient ID</span><b className="num">{tx.to.code}</b></div>
                   <div className="sumrow"><span className="muted">Fee</span><b className="num">{T(tx.fee / unit)} {sym}</b></div>
                   <div className="sumrow"><span className="muted">Time</span><b className="num">{new Date(tx.at).toLocaleString()}</b></div>
-                  <div className="sumrow"><span className="muted">Transaction hash</span><b className="num" style={{ wordBreak: "break-all", textAlign: "right", marginLeft: 12, fontSize: 12 }}>{tx.txid}</b></div>
+                  <div className="sumrow"><span className="muted">Transaction hash</span><span style={{ display: "flex", alignItems: "flex-start", gap: 6, marginLeft: 12, minWidth: 0 }}><b className="num" style={{ wordBreak: "break-all", textAlign: "right", fontSize: 12 }}>{tx.txid}</b><CopyBtn text={tx.txid} className="btn ghost sm" size={14} /></span></div>
                 </div>
                 {tx.held && <div className="banner warn" style={{ marginTop: 0 }}><Icon name="clock" size={18} /><span>You can cancel this transfer from Send → History until it is released.</span></div>}
-                <div className="grid2" style={{ marginTop: 12 }}>
-                  <CopyBtn text={tx.txid} label="Copy hash" />
-                  <CopyBtn text={receipt} label="Copy receipt" />
-                </div>
                 <ReceiptActions txid={tx.txid} rc={rc} say={say} />
                 <SaveContact code={tx.to.code} name={tx.to.name} say={say} onSaved={() => setContactsKey((k) => k + 1)} />
                 <button className="btn" style={{ width: "100%", marginTop: 8 }} onClick={() => { setStage(""); setTx(null); setCode(""); setWho(""); sentRef.current = false; }}>Done</button>

@@ -1,4 +1,8 @@
 import { getCfg2 } from "@/lib/cfg2";
+import { gqView, vnum } from "@/lib/v20";
+import { eventMult } from "@/lib/events";
+import { VERSION } from "@/lib/version";
+import { CHANGELOG_HIGHLIGHTS } from "@/lib/changelog";
 import { featureOn } from "@/lib/features";
 import { settleAutoConvert, settleWeekly } from "@/lib/autoconv";
 import { authenticate } from "@/lib/auth";
@@ -150,6 +154,9 @@ export default route(async (req, res) => {
     cur: (await prefsP).val() === "usdt" ? "usdt" : (await prefsP).val() === "tfuel" ? "tfuel" : null,
     showIntro: !u.onboarded && !u.recovered && !(u.balance > 0) && !u.earn && !!u.created_at && now - u.created_at < 3 * 86400000,
     terms: termsP && (Number((await termsP).val()) || 0) < settings.terms_version ? { version: settings.terms_version, text: settings.terms_text, url: settings.terms_url } : null,
+    gq: await gqView().catch(() => null),
+    ev: await eventMult().then((m) => (m > 1 ? { mult: m } : null)).catch(() => null),
+    whatsnew: c2.v20.whatsnew && Number((await db().ref(`user_prefs/${user.id}/seen_v`).get()).val() || 0) < vnum(VERSION) && !!u.created_at && now - u.created_at > 86400000 ? { version: VERSION, text: (CHANGELOG_HIGHLIGHTS[0]?.text || "") } : null,
     faq: settings.faq,
     ret: await retentionState(user.id, u, settings, now).catch(() => null),
     dm: await missionsView(user.id, settings).catch(() => null),

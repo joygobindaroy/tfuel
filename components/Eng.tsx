@@ -17,7 +17,7 @@ export function LevelUpPopup({ up, cpt }: { up: { from: number; to: number; coin
   return (
     <div className="sheet-bg" onClick={() => setShow(false)}>
       <div className="sheet" onClick={(e) => e.stopPropagation()} style={{ textAlign: "center" }}>
-        <div style={{ fontSize: 46 }}>🎉</div>
+        <div style={{ fontSize: 46 }}><Icon name="sparkle" size={14} /></div>
         <div className="title" style={{ fontSize: 20 }}>Level {up.to}!</div>
         <div className="sub" style={{ margin: "6px 0 12px" }}>You earned <b>+{fmtTf(up.coins, cpt)} TFUEL</b> for leveling up.</div>
         <button className="btn block" onClick={() => setShow(false)}>Awesome</button>
@@ -117,7 +117,7 @@ export function MilestonesCard({ eng, say, cpt, reload }: { eng: any; say: Say; 
       <div className="sub" style={{ margin: "4px 0 6px" }}>{m.friends} friend{m.friends === 1 ? "" : "s"} invited.</div>
       {m.steps.map((x: any) => (
         <div className="hist" key={x.n}>
-          <div className="left"><span style={{ fontSize: 18, width: 30 }}>{x.claimed ? "✅" : x.ready ? "🎁" : "🔒"}</span><div><div className="title" style={{ fontSize: 14 }}>{x.n} friends</div><div className="sub" style={{ margin: 0 }}>+{fmtTf(x.coins, cpt)} TFUEL</div></div></div>
+          <div className="left"><span style={{ fontSize: 18, width: 30 }}><Icon name={x.claimed ? "check" : x.ready ? "gift" : "lock"} size={18} /></span><div><div className="title" style={{ fontSize: 14 }}>{x.n} friends</div><div className="sub" style={{ margin: 0 }}>+{fmtTf(x.coins, cpt)} TFUEL</div></div></div>
           {x.ready && <button className="btn sm" disabled={!!busy} onClick={() => claim(x.n)}>Claim</button>}
           {!x.ready && !x.claimed && <span className="muted xs">{Math.max(0, x.n - m.friends)} to go</span>}
         </div>
@@ -145,7 +145,7 @@ export function GiftCard({ eng, say }: { eng: any; say: Say }) {
       {d.friends.slice(0, 12).map((f: any) => (
         <div className="hist" key={f.id}>
           <span>{f.name}</span>
-          <button className="btn sec sm" disabled={f.sent || d.left < 1 || !!busy} onClick={() => send(f.id)}>{f.sent ? "Sent" : "🎁 Gift"}</button>
+          <button className="btn sec sm" disabled={f.sent || d.left < 1 || !!busy} onClick={() => send(f.id)}>{f.sent ? "Sent" : "Gift"}</button>
         </div>
       ))}
     </div>

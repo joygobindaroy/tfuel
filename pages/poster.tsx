@@ -1,4 +1,5 @@
 import type { GetServerSideProps } from "next";
+import Icon from "@/components/Icons";
 import Head from "next/head";
 
 interface P { ok: boolean; name?: string; code?: string; link?: string; qr?: string; err?: string }
@@ -37,7 +38,7 @@ export default function Poster({ ok, name, code, link, qr, err }: P) {
         </div>
       </div>
       <div className="np">
-        <button className="bt" onClick={() => window.print()}>🖨 Print / Save as PDF</button>
+        <button className="bt" onClick={() => window.print()}><Icon name="print" size={14} /> Print / Save as PDF</button>
         <button className="bt" style={{ background: "#fff", color: "#111827", border: "1px solid #d1d5db" }} onClick={() => { try { navigator.clipboard.writeText(link || ""); } catch {} }}>Copy link</button>
       </div>
     </div>

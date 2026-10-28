@@ -1,4 +1,5 @@
 import type { GetServerSideProps } from "next";
+import Icon from "@/components/Icons";
 import Head from "next/head";
 
 interface Row { at: number; d: "out" | "in"; amt: string; fee: string; peer: string; tx: string; tag: string }
@@ -35,16 +36,16 @@ export default function Statement({ ok, month, rows = [], tot = [], err }: P) {
       <Head><title>{`Statement ${month}`}</title><meta name="viewport" content="width=device-width,initial-scale=1" /><meta name="robots" content="noindex" /></Head>
       <style>{`body{margin:0;background:#f3f4f8;font:14px/1.5 -apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#111827}.st{max-width:820px;margin:0 auto;padding:18px 14px}.cd{background:#fff;border-radius:16px;padding:20px}table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13px}th,td{text-align:left;padding:7px 6px;border-bottom:1px solid #e5e7eb;vertical-align:top}.h{font-size:11px;color:#6b7280;word-break:break-all}.in{color:#15803d}.bt{margin-top:14px;padding:12px 18px;border:0;border-radius:12px;background:#111827;color:#fff;font:600 15px system-ui;cursor:pointer}@media print{body{background:#fff}.np{display:none}.st{padding:0}.cd{box-shadow:none;padding:0}}`}</style>
       <div className="cd">
-        <b style={{ fontSize: 20 }}>⛏ TFUEL — Transfer statement</b>
+        <b style={{ fontSize: 20 }}><Icon name="bolt" size={14} /> TFUEL — Transfer statement</b>
         <div style={{ color: "#6b7280" }}>{month} (UTC)</div>
         {tot.map((t) => <div key={t} style={{ marginTop: 6 }}><b>{t}</b></div>)}
         {rows.length === 0 ? <div style={{ marginTop: 14 }}>No transfers this month.</div> : (
           <table>
             <thead><tr><th>Date</th><th>Person</th><th>Amount</th><th>Fee</th><th>Hash / note</th></tr></thead>
-            <tbody>{rows.map((r, i) => <tr key={i}><td>{new Date(r.at).toISOString().replace("T", " ").slice(0, 16)}</td><td>{r.d === "in" ? "From " : "To "}{r.peer}</td><td className={r.d === "in" ? "in" : ""}><b>{r.d === "in" ? "+" : "−"}{r.amt}</b></td><td>{r.fee}</td><td><span className="h">{r.tx}</span>{r.tag ? <div>🏷 {r.tag}</div> : null}</td></tr>)}</tbody>
+            <tbody>{rows.map((r, i) => <tr key={i}><td>{new Date(r.at).toISOString().replace("T", " ").slice(0, 16)}</td><td>{r.d === "in" ? "From " : "To "}{r.peer}</td><td className={r.d === "in" ? "in" : ""}><b>{r.d === "in" ? "+" : "−"}{r.amt}</b></td><td>{r.fee}</td><td><span className="h">{r.tx}</span>{r.tag ? <div>tag: {r.tag}</div> : null}</td></tr>)}</tbody>
           </table>
         )}
-        <div className="np"><button className="bt" onClick={() => window.print()}>🖨 Print / Save as PDF</button></div>
+        <div className="np"><button className="bt" onClick={() => window.print()}><Icon name="print" size={14} /> Print / Save as PDF</button></div>
       </div>
     </div>
   );

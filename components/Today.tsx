@@ -22,7 +22,7 @@ export function MissionsCard({ dm, say, cpt, reload }: { dm: any; say: Say; cpt:
       <div className="row"><div className="title">Today&apos;s missions</div><span className="pill info">+{fmtTf(d.bonus, cpt)} TFUEL</span></div>
       {d.items.map((m: any) => (
         <div key={m.id} style={{ marginTop: 10 }}>
-          <div className="row"><div className="sub" style={{ margin: 0 }}>{m.done ? "✅ " : ""}{m.title}</div><span className="xs muted num">{Math.min(m.have, m.goal)}/{m.goal}</span></div>
+          <div className="row"><div className="sub" style={{ margin: 0 }}>{m.done && <Icon name="check" size={13} />} {m.title}</div><span className="xs muted num">{Math.min(m.have, m.goal)}/{m.goal}</span></div>
           <div className="bar" style={{ marginTop: 4 }}><div style={{ width: `${Math.min(100, Math.floor((m.have / Math.max(1, m.goal)) * 100))}%` }} /></div>
         </div>
       ))}
@@ -83,7 +83,7 @@ export function AwayPopup({ away, cpt }: { away: any; cpt: number }) {
   return (
     <div className="sheet-bg" onClick={() => setOpen(false)}>
       <div className="sheet" onClick={(e) => e.stopPropagation()}>
-        <div className="title" style={{ fontSize: 17 }}>Welcome back 👋</div>
+        <div className="title" style={{ fontSize: 17 }}>Welcome back</div>
         <div className="sub">You were away for {away.hours} h. Here is what you earned:</div>
         <div className="card" style={{ background: "var(--soft)", boxShadow: "none", marginTop: 10 }}>
           {rows.filter(([, v]) => v > 0).map(([k, v]) => <div className="sumrow" key={k}><span className="muted">{k}</span><b className="num">+{fmtTf(v, cpt)} TFUEL</b></div>)}

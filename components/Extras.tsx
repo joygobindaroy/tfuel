@@ -1,11 +1,13 @@
 import { fmtTf, fmtUsd } from "@/lib/client";
 import { CopyBtn } from "@/components/Ui";
+import { ReceiptActions } from "@/components/SendExtra";
 import Icon from "@/components/Icons";
 
 export interface ReceiptItem { id: string; t: string; c: number; u: number; n: string; at: number }
 
 /** Transaction receipt: details + copy/share */
 export function ReceiptSheet({ item, label, cpt, onClose }: { item: ReceiptItem; label: string; cpt: number; onClose: () => void }) {
+  const say = (m: string) => { try { alert(m); } catch {} };
   const when = new Date(item.at).toLocaleString();
   const amt = [item.c ? `${item.c > 0 ? "+" : ""}${fmtTf(item.c, cpt)} TFUEL` : "", item.u ? `${item.u > 0 ? "+" : ""}${fmtUsd(Math.abs(item.u))} USDT` : ""].filter(Boolean).join("  ");
   const text = `Receipt\n${label}\n${amt}\n${when}\n${(item.n || "").match(/TF[0-9A-F]{40}/) ? "Transaction hash: " + (item.n || "").match(/TF[0-9A-F]{40}/)![0] : "Transaction ID: " + item.id}`;
@@ -23,13 +25,10 @@ export function ReceiptSheet({ item, label, cpt, onClose }: { item: ReceiptItem;
         <div className="title" style={{ fontSize: 17, marginBottom: 8, display: "flex", alignItems: "center", gap: 8 }}><Icon name="check" size={18} /> Receipt</div>
         <div className="card" style={{ background: "var(--soft)", boxShadow: "none" }}>
           {rows.filter(([, v]) => v).map(([k, v]) => (
-            <div className="sumrow" key={k}><span className="muted">{k}</span><b className="num" style={{ wordBreak: "break-all", textAlign: "right", marginLeft: 12 }}>{v}</b></div>
+            <div className="sumrow" key={k}><span className="muted">{k}</span><span style={{ display: "flex", alignItems: "flex-start", gap: 6, marginLeft: 12, minWidth: 0 }}><b className="num" style={{ wordBreak: "break-all", textAlign: "right", fontSize: k.startsWith("Transaction") ? 12 : undefined }}>{v}</b>{k.startsWith("Transaction") && <CopyBtn text={v} className="btn ghost sm" size={14} />}</span></div>
           ))}
         </div>
-        <div className="grid2" style={{ marginTop: 12 }}>
-          <CopyBtn text={text} label="Copy receipt" />
-          <button className="btn sec sm" onClick={share}>Share</button>
-        </div>
+        {hash && (item.t === "send" || item.t === "receive") ? <ReceiptActions txid={hash} say={say} /> : <button className="btn sec sm" style={{ marginTop: 12 }} onClick={share}>Share</button>}
         <button className="btn sec" style={{ marginTop: 8, width: "100%" }} onClick={onClose}>Close</button>
       </div>
     </div>
@@ -51,7 +50,7 @@ export function NextReward({ me, cpt, onGo }: { me: any; cpt: number; onGo: () =
   if (!text) return null;
   return (
     <div className="card" role="button" style={{ cursor: "pointer" }} onClick={onGo}>
-      <div className="t" style={{ fontSize: 13 }}><span>🎯 Next reward</span><span className="muted">{pct}%</span></div>
+      <div className="t" style={{ fontSize: 13 }}><span><Icon name="target" size={14} /> Next reward</span><span className="muted">{pct}%</span></div>
       <div className="muted" style={{ fontSize: 13, margin: "4px 0 8px" }}>{text}</div>
       <div className="bar"><div style={{ width: `${Math.min(100, pct)}%` }} /></div>
     </div>

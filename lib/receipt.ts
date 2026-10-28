@@ -69,7 +69,7 @@ export async function botReceipt(uid: string, r: RView, cpt: number, force = fal
     const { page, img } = receiptLinks(r, uid, cpt);
     if (!/^https:\/\//.test(page)) return false;
     const caption = r.dir === "wd" ? `🧾 Withdrawal receipt · ${r.amtText}\nTo: ${r.other}\nStatus: ${r.st}\nRef: ${r.txid}` : `🧾 Receipt · ${r.dir === "out" ? "Sent" : "Received"} ${amtStr(r.asset, r.amount, cpt)}\n${r.dir === "out" ? "To" : "From"}: ${r.other}\nHash: ${r.txid}`;
-    const kb = JSON.stringify({ inline_keyboard: [[{ text: "🧾 Open / print receipt", url: page }]] });
+    const kb = JSON.stringify({ inline_keyboard: [[{ text: "🖨 Print / Save as PDF", url: page }], [{ text: "⬇ Download image", url: img }]] });
     const p = await tgCall("sendPhoto", { chat_id: uid, photo: img, caption, reply_markup: kb });
     if (p.ok) return true;
     const m = await tgCall("sendMessage", { chat_id: uid, text: caption, reply_markup: kb, disable_web_page_preview: "true" });

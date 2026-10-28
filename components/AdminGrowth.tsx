@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import Icon from "@/components/Icons";
 import BackupPanel from "@/components/AdminBackup";
 
 type Call = <T = any>(body: Record<string, any>, okMsg?: string) => Promise<T | null>;
@@ -207,7 +208,7 @@ export default function GrowthPage({ call }: { call: Call }) {
           {(v || []).map((t: any, i: number) => (
             <div className="grid2" key={i} style={{ marginTop: 6 }}>
               <input inputMode="numeric" placeholder="Friends" value={t.n} onChange={(e) => set({ ...v, [i]: { ...t, n: e.target.value } })} />
-              <div style={{ display: "flex", gap: 6 }}><input inputMode="decimal" placeholder="%" value={t.pct} onChange={(e) => set({ ...v, [i]: { ...t, pct: e.target.value } })} /><button className="btn sec sm" onClick={() => { const a = [...v]; a.splice(i, 1); set(Object.assign({}, a)); }}>✕</button></div>
+              <div style={{ display: "flex", gap: 6 }}><input inputMode="decimal" placeholder="%" value={t.pct} onChange={(e) => set({ ...v, [i]: { ...t, pct: e.target.value } })} /><button className="btn sec sm" onClick={() => { const a = [...v]; a.splice(i, 1); set(Object.assign({}, a)); }}><Icon name="x" size={14} /></button></div>
             </div>
           ))}
           <button className="btn sec sm" style={{ marginTop: 8 }} onClick={() => set({ ...v, [(v || []).length]: { n: "", pct: "" } })}>+ Add tier</button>
@@ -238,7 +239,7 @@ export default function GrowthPage({ call }: { call: Call }) {
             </div>
             <div style={{ display: "flex", gap: 6 }}>
               <button className="btn sec sm" onClick={() => { try { navigator.clipboard.writeText(x.link || `?startapp=cmp_${x.tag}`); } catch {} }}>Copy</button>
-              <button className="btn sec sm" onClick={async () => { if (confirm(`Remove campaign ${x.tag}?`)) { await call({ action: "growthCampaignDelete", tag: x.tag }, "Removed"); load(); } }}>✕</button>
+              <button className="btn sec sm" onClick={async () => { if (confirm(`Remove campaign ${x.tag}?`)) { await call({ action: "growthCampaignDelete", tag: x.tag }, "Removed"); load(); } }}><Icon name="x" size={14} /></button>
             </div>
           </div>
         ))}
@@ -353,7 +354,7 @@ export default function GrowthPage({ call }: { call: Call }) {
             {steps.map((t: any, i: number) => (
               <div className="grid2" key={i} style={{ marginTop: 6 }}>
                 <input inputMode="numeric" placeholder="Friends" value={t.n} onChange={(e) => up("invms", { steps: steps.map((y: any, j: number) => (j === i ? { ...y, n: e.target.value } : y)) })} />
-                <div style={{ display: "flex", gap: 6 }}><input inputMode="numeric" placeholder="Coins" value={t.coins} onChange={(e) => up("invms", { steps: steps.map((y: any, j: number) => (j === i ? { ...y, coins: e.target.value } : y)) })} /><button className="btn sec sm" onClick={() => up("invms", { steps: steps.filter((_: any, j: number) => j !== i) })}>✕</button></div>
+                <div style={{ display: "flex", gap: 6 }}><input inputMode="numeric" placeholder="Coins" value={t.coins} onChange={(e) => up("invms", { steps: steps.map((y: any, j: number) => (j === i ? { ...y, coins: e.target.value } : y)) })} /><button className="btn sec sm" onClick={() => up("invms", { steps: steps.filter((_: any, j: number) => j !== i) })}><Icon name="x" size={14} /></button></div>
               </div>
             ))}
             <button className="btn sec sm" style={{ marginTop: 8 }} onClick={() => up("invms", { steps: [...steps, { n: 10, coins: 1000 }] })}>+ Add milestone</button>
@@ -398,7 +399,7 @@ export default function GrowthPage({ call }: { call: Call }) {
             {disc.map((x: any, i: number) => (
               <div className="grid2" key={i} style={{ marginTop: 6 }}>
                 <input inputMode="numeric" placeholder="From days" value={x.days} onChange={(e) => set({ discounts: disc.map((y: any, j: number) => (j === i ? { ...y, days: e.target.value } : y)) })} />
-                <div style={{ display: "flex", gap: 6 }}><input inputMode="decimal" placeholder="% off" value={x.pct} onChange={(e) => set({ discounts: disc.map((y: any, j: number) => (j === i ? { ...y, pct: e.target.value } : y)) })} /><button className="btn sec sm" onClick={() => set({ discounts: disc.filter((_: any, j: number) => j !== i) })}>✕</button></div>
+                <div style={{ display: "flex", gap: 6 }}><input inputMode="decimal" placeholder="% off" value={x.pct} onChange={(e) => set({ discounts: disc.map((y: any, j: number) => (j === i ? { ...y, pct: e.target.value } : y)) })} /><button className="btn sec sm" onClick={() => set({ discounts: disc.filter((_: any, j: number) => j !== i) })}><Icon name="x" size={14} /></button></div>
               </div>
             ))}
             <button className="btn sec sm" style={{ marginTop: 8 }} onClick={() => set({ discounts: [...disc, { days: 7, pct: 10 }] })}>+ Add discount</button>
@@ -451,6 +452,45 @@ export default function GrowthPage({ call }: { call: Call }) {
         </>
       ))}
 
+      <div className="mhead">Events & goals</div>
+      {S("v20", "Bonus events, community goal, safety", "×2 reward events, a daily community goal, and a few safety / support switches.", (v, set) => {
+        const ev: any[] = v.events || [];
+        const setEv = (i: number, p: any) => set({ events: ev.map((e, j) => (j === i ? { ...e, ...p } : e)) });
+        const loc = (t: number) => { if (!t) return ""; const d = new Date(t - new Date(t).getTimezoneOffset() * 60000); return d.toISOString().slice(0, 16); };
+        const unloc = (s: string) => (s ? new Date(s).getTime() : 0);
+        return (
+          <>
+            <div className="title" style={{ fontSize: 14 }}>Bonus events (×2 rewards for a while)</div>
+            <div className="xs muted">Applies to daily rewards, tasks, games and puzzles. The bot posts the start to your channel. Times use your device time.</div>
+            {ev.map((e, i) => (
+              <div key={e.id} style={{ border: "1px solid var(--line, #e5e7eb)", borderRadius: 12, padding: 10, marginTop: 8 }}>
+                <div className="row"><b>{e.title || "Event"}</b><Sw on={!!e.on} set={(x) => setEv(i, { on: x })} /></div>
+                <div className="grid2">
+                  <L t="Title"><input value={e.title} onChange={(x) => setEv(i, { title: x.target.value })} /></L>
+                  <L t="Multiplier (1–5)"><input inputMode="decimal" value={e.mult} onChange={(x) => setEv(i, { mult: x.target.value })} /></L>
+                  <L t="Starts"><input type="datetime-local" value={loc(e.start)} onChange={(x) => setEv(i, { start: unloc(x.target.value), ann: false })} /></L>
+                  <L t="Ends"><input type="datetime-local" value={loc(e.end)} onChange={(x) => setEv(i, { end: unloc(x.target.value) })} /></L>
+                </div>
+                <button className="btn danger sm" style={{ marginTop: 6 }} onClick={() => set({ events: ev.filter((_, j) => j !== i) })}>Remove</button>
+              </div>
+            ))}
+            <button className="btn sec sm" style={{ marginTop: 8 }} onClick={() => set({ events: [...ev, { id: "e" + Date.now().toString(36), title: "Double rewards weekend", mult: 2, start: Date.now() + 3600000, end: Date.now() + 49 * 3600000, on: true }] })}>+ Add event</button>
+            <div className="title" style={{ marginTop: 14, fontSize: 14 }}>Daily community goal</div>
+            <Row t="Enabled" h="If enough people claim the daily reward today, everyone who did gets a bonus."><Sw on={!!v.gq?.enabled} set={(x) => set({ gq: { ...v.gq, enabled: x } })} /></Row>
+            <div className="grid2">
+              <L t="Goal title"><input value={v.gq?.title} onChange={(e) => set({ gq: { ...v.gq, title: e.target.value } })} /></L>
+              <L t="People needed"><input inputMode="numeric" value={v.gq?.target} onChange={(e) => set({ gq: { ...v.gq, target: e.target.value } })} /></L>
+              <L t="Bonus each (coins)"><input inputMode="numeric" value={v.gq?.bonus} onChange={(e) => set({ gq: { ...v.gq, bonus: e.target.value } })} /></L>
+            </div>
+            <div className="title" style={{ marginTop: 14, fontSize: 14 }}>Safety & support</div>
+            <div className="grid2">
+              <L t="Require a PIN for sends over (USDT value, 0 = off)"><input inputMode="decimal" value={v.pin_over_usd} onChange={(e) => set({ pin_over_usd: e.target.value })} /></L>
+              <L t="Close silent tickets after (days, 0 = never)"><input inputMode="numeric" value={v.ticket_close_days} onChange={(e) => set({ ticket_close_days: e.target.value })} /></L>
+            </div>
+            <Row t="“What's new” popup" h="Shown once after an update to people who joined more than a day ago."><Sw on={v.whatsnew !== false} set={(x) => set({ whatsnew: x })} /></Row>
+          </>
+        );
+      })}
       {S("plus", "Extras: schedules, alerts, quest, trial, subscriptions", "Small switches for the newer Send / games / shop features.", (v, set) => {
         const up = (k: string, p: any) => set({ [k]: { ...v[k], ...p } });
         const N = (k: string, f: string, t: string) => <L t={t}><input inputMode="decimal" value={v[k]?.[f]} onChange={(e) => up(k, { [f]: e.target.value })} /></L>;
@@ -534,7 +574,7 @@ export default function GrowthPage({ call }: { call: Call }) {
             return (
               <div key={i} className="grid2" style={{ marginTop: 8 }}>
                 <div style={{ display: "flex", gap: 6 }}><input style={{ width: 56 }} value={t.emoji} onChange={(e) => up({ emoji: e.target.value })} /><input placeholder="Name" value={t.name} onChange={(e) => up({ name: e.target.value })} /></div>
-                <div style={{ display: "flex", gap: 6 }}><input inputMode="numeric" placeholder="Price" value={t.price} onChange={(e) => up({ price: e.target.value })} /><input inputMode="numeric" placeholder="Coins/hour" value={t.rate} onChange={(e) => up({ rate: e.target.value })} /><button className="btn sec sm" onClick={() => { const a = [...v.tiers]; a.splice(i, 1); set({ tiers: a }); }}>✕</button></div>
+                <div style={{ display: "flex", gap: 6 }}><input inputMode="numeric" placeholder="Price" value={t.price} onChange={(e) => up({ price: e.target.value })} /><input inputMode="numeric" placeholder="Coins/hour" value={t.rate} onChange={(e) => up({ rate: e.target.value })} /><button className="btn sec sm" onClick={() => { const a = [...v.tiers]; a.splice(i, 1); set({ tiers: a }); }}><Icon name="x" size={14} /></button></div>
               </div>
             );
           })}
@@ -601,7 +641,7 @@ export default function GrowthPage({ call }: { call: Call }) {
                 <div style={{ display: "flex", gap: 6 }}>
                   <select value={t.kind} onChange={(e) => up(i, { kind: e.target.value })}><option value="badge">Badge</option><option value="frame">Frame</option></select>
                   <input inputMode="numeric" value={t.price} onChange={(e) => up(i, { price: e.target.value })} />
-                  <button className="btn sec sm" onClick={() => set({ items: items.filter((_: any, j: number) => j !== i) })}>✕</button>
+                  <button className="btn sec sm" onClick={() => set({ items: items.filter((_: any, j: number) => j !== i) })}><Icon name="x" size={14} /></button>
                 </div>
               </div>
             ))}

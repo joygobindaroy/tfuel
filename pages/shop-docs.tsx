@@ -6,7 +6,7 @@ function Code({ children, lang }: { children: string; lang?: string }) {
   const [ok, setOk] = useState(false);
   return (
     <div style={{ position: "relative", margin: "10px 0" }}>
-      <button onClick={() => { try { navigator.clipboard.writeText(children); setOk(true); setTimeout(() => setOk(false), 1500); } catch {} }} style={{ position: "absolute", top: 8, right: 8, border: 0, borderRadius: 8, padding: "5px 10px", background: "#374151", color: "#fff", cursor: "pointer", fontSize: 12 }}>{ok ? "Copied ✓" : "Copy"}</button>
+      <button onClick={() => { try { navigator.clipboard.writeText(children); setOk(true); setTimeout(() => setOk(false), 1500); } catch {} }} style={{ position: "absolute", top: 8, right: 8, border: 0, borderRadius: 8, padding: "5px 10px", background: "#374151", color: "#fff", cursor: "pointer", fontSize: 12 }}>{ok ? "Copied" : "Copy"}</button>
       <pre style={{ background: "#0f172a", color: "#e2e8f0", borderRadius: 12, padding: "14px 14px", overflowX: "auto", fontSize: 12.5, lineHeight: 1.55, margin: 0 }} data-lang={lang}><code>{children}</code></pre>
     </div>
   );
@@ -94,7 +94,7 @@ def tfuel(path, body):
           </ul>
         </li>
         <li>After saving, a <b>Shop ID</b> and <b>secret</b> (<code>tfs_…</code>) are shown <b>once</b>. Send them to the shop developer privately. Lost it? Use <b>New secret</b> — the old one stops immediately.</li>
-        <li>Press <b>Test connection</b> on the shop card. Fix every ❌ before going live (see <a href="#test">Test &amp; go live</a>).</li>
+        <li>Press <b>Test connection</b> on the shop card. Fix every failed check before going live (see <a href="#test">Test &amp; go live</a>).</li>
         <li>On each shop card, open <b>Copy-paste code</b> to get the exact script tag and button for that shop.</li>
       </ol>
 
@@ -309,7 +309,7 @@ add_action('rest_api_init', function () {
       <ol>
         <li>Admin → Shops → <b>Test connection</b>. It checks: payments switched on · bot link set · currencies · your website reachable · login page reachable · webhook answers a signed <code>ping</code>.</li>
         <li>Create a <b>$0.01</b> order (button or API). Open <code>pay_url</code> in Telegram and pay with USDT.</li>
-        <li>Check: webhook received (<code>order.paid</code>), <code>status</code> says <code>paid</code>, Admin → Orders shows it with webhook ✓.</li>
+        <li>Check: webhook received (<code>order.paid</code>), <code>status</code> says <code>paid</code>, Admin → Orders shows it with the webhook marked as received.</li>
         <li>Refund it (<code>refund</code> API or Admin → Orders → Refund) and confirm you get <code>order.refunded</code>.</li>
         <li>Go live: raise the <b>max order</b>, keep the secret in an environment variable, and set up an alert if your webhook returns errors.</li>
       </ol>

@@ -861,6 +861,32 @@ export default route(async (req, res) => {
       return void res.json({ success: true, settings: next });
     }
 
+    case "v20Integrity": {
+      const { integrityScan } = await import("@/lib/v20");
+      return void res.json({ success: true, ...(await integrityScan()) });
+    }
+    case "v20Errors": {
+      const { errList } = await import("@/lib/v20");
+      return void res.json({ success: true, items: await errList() });
+    }
+    case "v20ErrorsClear": {
+      await db().ref("err_log").remove();
+      await adminLog(who, "errors_clear", {});
+      return void res.json({ success: true });
+    }
+    case "v20Export": {
+      const { exportCsv } = await import("@/lib/v20");
+      const r = await exportCsv(String(b.kind || "")).catch(() => null);
+      if (!r) throw new HttpError(400, "Unknown export");
+      await adminLog(who, "export_csv", { kind: b.kind });
+      return void res.json({ success: true, ...r });
+    }
+    case "shopSales": {
+      const id = String(b.id || "");
+      if (!idRe.test(id)) throw new HttpError(400, "Invalid id");
+      const { shopSales } = await import("@/lib/v20");
+      return void res.json({ success: true, ...(await shopSales(id, 14)) });
+    }
     case "logs": {
       const snap = await db().ref("admin_logs").orderByKey().limitToLast(500).get();
       const logs: any[] = [];

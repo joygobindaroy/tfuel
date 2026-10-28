@@ -1,3 +1,4 @@
+import { pinGate } from "@/lib/v20";
 import { authenticate, HttpError } from "@/lib/auth";
 import { route, rateLimit } from "@/lib/api";
 import { db } from "@/lib/firebase";
@@ -84,6 +85,7 @@ export default route(async (req, res) => {
     if (s.send_min_age_hours > 0 && u.created_at && Date.now() < u.created_at + s.send_min_age_hours * 3600000) throw new HttpError(403, "send_too_new");
     const q = await sendQuota(user.id, s, asset);
     if (q.left !== null && total > q.left) throw new HttpError(429, "send_limit");
+    await pinGate(user.id, asset, t.amount, s);
     await checkPin(user.id, b.pin);
     const e = await getEmail(user.id);
     if (s.email_required && !e?.verified) throw new HttpError(403, "email_required");
@@ -94,6 +96,7 @@ export default route(async (req, res) => {
   if (action === "send") {
     const t = await resolve();
     if (!enabled(asset)) throw new HttpError(403, "send_disabled");
+    await pinGate(user.id, asset, t.amount, s);
     await checkPin(user.id, b.pin);
     const em = await getEmail(user.id);
     const det = { address: bindAddr(t.code), amount: shown(t.amount) };

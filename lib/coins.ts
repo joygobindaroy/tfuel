@@ -1,11 +1,13 @@
 import { ServerValue } from "firebase-admin/database";
 import { db } from "./firebase";
 import { HttpError } from "./auth";
+import { eventMult } from "./events";
 import { earn, spend, lbAdd, activity, EarnKey, SpendKey, ActType } from "./wallet";
 import type { UserRecord } from "./user";
 
 /** Pay coins to a user (admin-funded rewards): balance + earn counter + leaderboard + activity. Returns false if the user doesn't exist. */
 export async function creditCoins(uid: string, coins: number, key: EarnKey, type: ActType, note: string, lb = true): Promise<boolean> {
+  if (key === "tasks") coins *= await eventMult(); // bonus event: tasks, games, puzzles
   coins = Math.floor(coins);
   if (coins < 1) return false;
   if ((await db().ref(`users/${uid}/balance`).get()).val() === null) return false;

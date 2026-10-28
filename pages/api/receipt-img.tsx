@@ -19,48 +19,43 @@ export default async function handler(req: Request) {
   let r: any;
   try { r = dec(d); } catch { return new Response("bad request", { status: 400 }); }
   const wd = r.v === "wd", out = r.v !== "in";
-  const label = wd ? "Destination" : out ? "To" : "From";
   const rows: [string, string][] = [
-    [label, `${r.o}${r.c ? "  (" + r.c + ")" : ""}`],
+    [wd ? "Destination" : out ? "To" : "From", `${r.o}${r.c ? "  (" + r.c + ")" : ""}`],
     ...(r.f ? ([["Fee", r.f]] as [string, string][]) : []),
     ...(r.n ? ([["Note", r.n]] as [string, string][]) : []),
-    ["Time", new Date(r.at).toISOString().replace("T", " ").slice(0, 16) + " UTC"],
+    ["Date", new Date(r.at).toISOString().replace("T", " ").slice(0, 16) + " UTC"],
   ];
   const ok = wd ? r.s === "paid" : !r.h;
-  const status = wd ? (r.s === "paid" ? "PAID" : r.s === "rejected" ? "REJECTED" : "PENDING") : r.h ? "ON HOLD" : "DONE";
-  const A = out ? "#ff3d9a" : "#c6ff3d", B = out ? "#7c3aed" : "#22d3ee";
-  const W = 900, H = 760;
-  const sticker = (bg: string, fg: string, rot: number, children: React.ReactNode) => (
-    <div style={{ display: "flex", background: bg, color: fg, borderRadius: 16, padding: "8px 20px", fontWeight: 800, transform: `rotate(${rot}deg)`, border: "4px solid #0b0614", boxShadow: "5px 5px 0 #0b0614" }}>{children}</div>
-  );
+  const status = wd ? (r.s === "paid" ? "Paid" : r.s === "rejected" ? "Rejected" : "Pending") : r.h ? "On hold" : "Completed";
+  const sc = ok ? { fg: "#15803d", bg: "#dcfce7" } : r.s === "rejected" ? { fg: "#b91c1c", bg: "#fee2e2" } : { fg: "#b45309", bg: "#fef3c7" };
+  const W = 900, H = 700 + rows.length * 66;
   return new ImageResponse(
     (
-      <div style={{ display: "flex", position: "relative", width: W, height: H, background: "#0b0614", overflow: "hidden", fontFamily: "sans-serif" }}>
-        <div style={{ display: "flex", position: "absolute", left: -140, top: -150, width: 420, height: 420, borderRadius: 999, background: `linear-gradient(135deg,${A},${B})`, opacity: 0.9 }} />
-        <div style={{ display: "flex", position: "absolute", right: -120, bottom: -160, width: 440, height: 440, borderRadius: 999, background: `linear-gradient(135deg,${B},${A})`, opacity: 0.85 }} />
-        <div style={{ display: "flex", flexDirection: "column", width: W, height: H, padding: "40px 48px", position: "relative" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            {sticker("#c6ff3d", "#0b0614", -4, <span style={{ fontSize: 28, letterSpacing: 2 }}>TFUEL</span>)}
-            {sticker(ok ? "#ffffff" : "#ffd23d", "#0b0614", 3, <span style={{ fontSize: 24 }}>{status}</span>)}
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", background: "#ffffff", borderRadius: 26, border: "5px solid #0b0614", boxShadow: "9px 9px 0 #0b0614", padding: "26px 34px", marginTop: 30 }}>
-            <div style={{ display: "flex", fontSize: 24, color: "#6b7280", fontWeight: 700 }}>{wd ? "RECEIPT - WITHDRAWAL" : out ? "RECEIPT - YOU SENT" : "RECEIPT - YOU GOT"}</div>
-            <div style={{ display: "flex", fontSize: 70, fontWeight: 800, color: "#0b0614", lineHeight: 1.1 }}>{`${out ? "-" : "+"}${r.a}`}</div>
-            <div style={{ display: "flex", flexDirection: "column", marginTop: 10 }}>
-              {rows.map(([k, v]) => (
-                <div key={k} style={{ display: "flex", justifyContent: "space-between", padding: "9px 0", borderBottom: "2px dashed #d1d5db", fontSize: 25 }}>
-                  <div style={{ display: "flex", color: "#6b7280" }}>{k}</div>
-                  <div style={{ display: "flex", color: "#0b0614", fontWeight: 800 }}>{String(v).slice(0, 40)}</div>
-                </div>
-              ))}
+      <div style={{ display: "flex", flexDirection: "column", width: W, height: H, background: "#e8ebf2", padding: 40, fontFamily: "sans-serif" }}>
+        <div style={{ display: "flex", flexDirection: "column", flex: 1, background: "#ffffff", borderRadius: 28, overflow: "hidden", border: "2px solid #d5dae5" }}>
+          <div style={{ display: "flex", flexDirection: "column", background: "linear-gradient(135deg,#0b1220,#1e2a5a)", padding: "34px 44px 30px", position: "relative" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ display: "flex", alignItems: "center" }}>
+                <div style={{ display: "flex", width: 46, height: 46, borderRadius: 999, background: "#f5a623", alignItems: "center", justifyContent: "center", color: "#0b1220", fontSize: 26, fontWeight: 800 }}>T</div>
+                <div style={{ display: "flex", marginLeft: 14, fontSize: 32, fontWeight: 800, color: "#ffffff", letterSpacing: 2 }}>TFUEL</div>
+              </div>
+              <div style={{ display: "flex", fontSize: 22, fontWeight: 700, color: sc.fg, background: sc.bg, padding: "7px 22px", borderRadius: 999 }}>{status}</div>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", marginTop: 14 }}>
-              <div style={{ display: "flex", fontSize: 19, color: "#6b7280" }}>{wd ? "Reference" : "Transaction hash"}</div>
-              <div style={{ display: "flex", fontSize: 20, color: "#0b0614", fontWeight: 800, wordBreak: "break-all" }}>{r.t}</div>
-            </div>
+            <div style={{ display: "flex", fontSize: 22, color: "#aab4d4", marginTop: 26 }}>{wd ? "Withdrawal receipt" : out ? "Payment sent" : "Payment received"}</div>
+            <div style={{ display: "flex", fontSize: 72, fontWeight: 800, color: "#ffffff", lineHeight: 1.1, marginTop: 4 }}>{`${out ? "-" : "+"}${r.a}`}</div>
           </div>
-          <div style={{ display: "flex", marginTop: "auto", justifyContent: "flex-end" }}>
-            {sticker("#0b0614", "#c6ff3d", -3, <span style={{ fontSize: 22 }}>verified by TFUEL</span>)}
+          <div style={{ display: "flex", flexDirection: "column", padding: "14px 44px 0" }}>
+            {rows.map(([k, v]) => (
+              <div key={k} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", height: 66, borderBottom: "2px solid #eef0f6", fontSize: 25 }}>
+                <div style={{ display: "flex", color: "#6b7280" }}>{k}</div>
+                <div style={{ display: "flex", color: "#0b1220", fontWeight: 700 }}>{String(v).slice(0, 38)}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", marginTop: "auto", background: "#f6f7fb", borderTop: "3px dashed #cbd2e1", padding: "22px 44px 26px" }}>
+            <div style={{ display: "flex", fontSize: 19, color: "#6b7280", fontWeight: 700 }}>{wd ? "REFERENCE" : "TRANSACTION HASH"}</div>
+            <div style={{ display: "flex", fontSize: 21, color: "#0b1220", fontWeight: 700, wordBreak: "break-all", marginTop: 4 }}>{r.t}</div>
+            <div style={{ display: "flex", fontSize: 18, color: "#9aa3b5", marginTop: 12 }}>Electronic receipt issued by TFUEL. Check authenticity with the hash on the Verify page.</div>
           </div>
         </div>
       </div>

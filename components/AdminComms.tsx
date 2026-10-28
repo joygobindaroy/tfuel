@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import Icon from "@/components/Icons";
 
 type Call = <T = any>(body: Record<string, any>, okMsg?: string) => Promise<T | null>;
 interface Tpl { title: string; text: string }
@@ -7,7 +8,7 @@ const when = (t?: number) => (t ? new Date(t).toLocaleString("en-GB", { day: "nu
 const audLabel = (a: any) => (!a ? "All" : a.kind === "active" ? `Active ${a.days}d` : a.kind === "tag" ? `Tag: ${a.tag}` : a.kind === "country" ? `Country: ${a.country}` : "All users");
 const toMs = (v: string) => (v ? new Date(v).getTime() : 0);
 
-const KIND_LABEL: Record<string, string> = { price: "📈 Price update", top: "🔥 Top earners of the week", invite: "🚀 Invite card (join banner)", tour: "🏆 Live tournament", custom: "✍️ My own message (rotates)" };
+const KIND_LABEL: Record<string, string> = { price: "Price update", top: "Top earners of the week", invite: "Invite card (join banner)", tour: "Live tournament", custom: "My own message (rotates)" };
 const bdHour = (h: number) => (h + 6) % 24;
 const utcHour = (h: number) => (h - 6 + 24) % 24;
 /** Auto-post types: pick what the bot posts to your group / channel, when, and how often */
@@ -35,7 +36,7 @@ function AutoPostCard({ call }: { call: Call }) {
             <div><label>Every N days</label><input inputMode="numeric" value={r.every} onChange={(e) => up(i, { every: e.target.value })} /></div>
           </div>
           <div className="grid2" style={{ marginTop: 6 }}>
-            <div><label>Button text (optional)</label><input maxLength={24} value={r.btn} onChange={(e) => up(i, { btn: e.target.value })} placeholder="🚀 Open app" /></div>
+            <div><label>Button text (optional)</label><input maxLength={24} value={r.btn} onChange={(e) => up(i, { btn: e.target.value })} placeholder="Open app" /></div>
             {r.kind === "invite" && <div><label>Show the card picture</label><input type="checkbox" checked={r.image !== false} onChange={(e) => up(i, { image: e.target.checked })} /></div>}
           </div>
           {(r.kind === "custom" || r.kind === "invite") && <div style={{ marginTop: 6 }}><label>{r.kind === "custom" ? "Message — separate several messages with a line containing ===" : "Caption (optional)"}</label><textarea rows={r.kind === "custom" ? 5 : 2} maxLength={1500} value={r.text} onChange={(e) => up(i, { text: e.target.value })} /></div>}
@@ -53,7 +54,7 @@ function AutoPostCard({ call }: { call: Call }) {
       </div>
       <div className="chips" style={{ marginTop: 12 }}>{Object.entries(KIND_LABEL).map(([k, t]) => <button key={k} className="pill" onClick={() => add(k)}>+ {t}</button>)}</div>
       <button className="btn" style={{ marginTop: 12 }} onClick={async () => { const r: any = await call({ action: "autopostSave", rules, welcome: wel, winpost }, "Auto-posts saved"); if (r) { setRules(r.rules); setWel(r.welcome); setWinpost(r.winpost !== false); } }}>Save auto-posts</button>
-      {log.length > 0 && <div style={{ marginTop: 14 }}><div className="b">Recent posts</div>{log.slice(0, 15).map((x: any) => <div key={x.id} className="xs" style={{ marginTop: 4, color: x.ok ? undefined : "#dc2626" }}>{when(x.at)} · {KIND_LABEL[x.kind] || x.kind}{x.pic ? " · 🖼" : ""} · {x.ok ? "sent" : x.err}</div>)}</div>}
+      {log.length > 0 && <div style={{ marginTop: 14 }}><div className="b">Recent posts</div>{log.slice(0, 15).map((x: any) => <div key={x.id} className="xs" style={{ marginTop: 4, color: x.ok ? undefined : "#dc2626" }}>{when(x.at)} · {KIND_LABEL[x.kind] || x.kind}{x.pic ? " · with picture" : ""} · {x.ok ? "sent" : x.err}</div>)}</div>}
     </div>
   );
 }

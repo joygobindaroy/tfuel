@@ -289,7 +289,7 @@ function Friends({ g, cpt, say }: { g: G; cpt: number; say: Say }) {
           <div className="title" style={{ marginBottom: 4 }}>Your top friends</div>
           <div className="sub" style={{ marginBottom: 6 }}>Ranked by what they earned you.</div>
           {r.list.map((f, i) => (
-            <div className="hist" key={f.id}><span><span style={{ display: "inline-block", width: 26 }}>{["🥇", "🥈", "🥉"][i] || `#${i + 1}`}</span>{f.name}</span><b className="num">+{fmtTf(f.bonus + (f.comm || 0), cpt)}</b></div>
+            <div className="hist" key={f.id}><span><span style={{ display: "inline-block", width: 26 }}>{i < 3 ? <span style={{ color: i === 0 ? "#f5a623" : i === 1 ? "#94a3b8" : "#b45309", display: "inline-flex" }}><Icon name="medal" size={16} /></span> : `#${i + 1}`}</span>{f.name}</span><b className="num">+{fmtTf(f.bonus + (f.comm || 0), cpt)}</b></div>
           ))}
         </div>
       )}

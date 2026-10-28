@@ -37,8 +37,8 @@ export function HomeLayoutCard() {
         <div key={k} className="row" style={{ marginTop: 6, opacity: hide.includes(k) ? 0.5 : 1 }}>
           <div className="title" style={{ fontSize: 14 }}>{label[k]}</div>
           <div style={{ display: "flex", gap: 6 }}>
-            <button className="btn sec sm" aria-label="Up" onClick={() => move(i, -1)}>↑</button>
-            <button className="btn sec sm" aria-label="Down" onClick={() => move(i, 1)}>↓</button>
+            <button className="btn sec sm" aria-label="Up" onClick={() => move(i, -1)}><Icon name="arrowup" size={14} /></button>
+            <button className="btn sec sm" aria-label="Down" onClick={() => move(i, 1)}><Icon name="arrowdown" size={14} /></button>
             <button className="btn sec sm" onClick={() => toggle(k)}>{hide.includes(k) ? "Show" : "Hide"}</button>
           </div>
         </div>
@@ -168,7 +168,7 @@ export function NotifExtras({ a, act, busy, say }: P) {
         </div>
       ))}
       <div className="row" style={{ marginTop: 14 }}>
-        <div><div className="title">Quiet hours</div><div className="sub">No bot messages at night (they still appear in the 🔔 inbox).</div></div>
+        <div><div className="title">Quiet hours</div><div className="sub">No bot messages at night (they still appear in the notifications inbox).</div></div>
         <Sw on={!!q} disabled={busy} label="Toggle quiet hours" onClick={() => (q ? act({ action: "setPrefs", quiet: { on: false } }, "Quiet hours off") : setQ({}))} />
       </div>
       {q && (

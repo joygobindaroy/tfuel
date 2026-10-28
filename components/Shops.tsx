@@ -77,7 +77,7 @@ export function PaySheet({ id, cpt, say, onClose, reload }: { id: string; cpt: n
             ) : (
               <>
                 {!o.order.sub && (o.order.coupon ? (
-                  <div className="gap" style={{ marginBottom: 10, alignItems: "center" }}><span className="pill ok">🏷 {o.order.coupon} · −{fmtUsd(o.order.discount || 0)}</span><button className="btn ghost sm" onClick={offCp}>Remove</button></div>
+                  <div className="gap" style={{ marginBottom: 10, alignItems: "center" }}><span className="pill ok"><Icon name="tag" size={13} /> {o.order.coupon} · −{fmtUsd(o.order.discount || 0)}</span><button className="btn ghost sm" onClick={offCp}>Remove</button></div>
                 ) : (
                   <div className="gap" style={{ marginBottom: 10 }}><input style={{ flex: 1 }} placeholder="Coupon code" autoCapitalize="characters" maxLength={24} value={cp} onChange={(e) => setCp(e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, ""))} /><button className="btn sec" disabled={cp.length < 3} onClick={applyCp}>Apply</button></div>
                 ))}
@@ -172,6 +172,7 @@ export function ShopsPage({ say, onBack, cpt }: { say: Say; onBack: () => void; 
                     <div className="title num">{fmtUsd(o.usd)}</div>
                     <div className="sub">{o.shop_name || o.title || "Shop"} · {o.at ? when(o.at) : ""}{o.cur ? ` · ${o.cur === "usdt" ? "USDT" : "TFUEL"}` : ""}</div>
                   </div>
+                  {(o as any).inv && <a className="btn ghost sm" href={(o as any).inv} target="_blank" rel="noreferrer">Invoice</a>}
                   <span className={`pill ${o.status === "paid" ? "ok" : o.status === "refunded" ? "warn" : "err"}`}>{o.status[0].toUpperCase() + o.status.slice(1)}</span>
                 </div>
               ))}
@@ -262,7 +263,7 @@ export function InviteCard({ say }: { say: Say }) {
       <div className="title">Your referral link</div>
       <Qr text={link} size={150} />
       <div className="addrbox"><span>{link}</span><CopyBtn text={link} /></div>
-      {poster && <button className="btn sec block" style={{ marginTop: 10 }} onClick={() => openLink(poster)}>🖼 Poster (print / save)</button>}
+      {poster && <button className="btn sec block" style={{ marginTop: 10 }} onClick={() => openLink(poster)}><Icon name="image" size={14} /> Poster (print / save)</button>}
       <button className="btn sec block" style={{ marginTop: 10 }} onClick={() => openTgLink(`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent("Earn TFUEL by tapping and reading — join me!")}`)}>Share on Telegram</button>
     </div>
   );

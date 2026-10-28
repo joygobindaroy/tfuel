@@ -301,7 +301,7 @@ interface LB {
   prizes: number[];
   endsAt: number | null;
 }
-const medal = (r: number) => (r === 1 ? "🥇" : r === 2 ? "🥈" : r === 3 ? "🥉" : String(r));
+const medal = (r: number): React.ReactNode => (r <= 3 ? <span style={{ color: r === 1 ? "#f5a623" : r === 2 ? "#94a3b8" : "#b45309", display: "inline-flex" }}><Icon name="medal" size={18} /></span> : String(r));
 const lft = (t: number) => {
   const ms = Math.max(0, t - Date.now());
   const d = Math.floor(ms / 86400000), h = Math.floor((ms % 86400000) / 3600000), m = Math.floor((ms % 3600000) / 60000);
@@ -351,7 +351,7 @@ export function Leaderboard({ cpt, say }: { cpt: number; say: Say }) {
                 </div>
                 <span className="num" style={{ fontWeight: 700 }}>
                   {fmtTf(r.v, cpt)}
-                  {board === "w" && d.prizes[r.rank - 1] ? <span className="muted xs"> · 🎁 {fmtTf(d.prizes[r.rank - 1], cpt)}</span> : null}
+                  {board === "w" && d.prizes[r.rank - 1] ? <span className="muted xs"> · <Icon name="gift" size={12} /> {fmtTf(d.prizes[r.rank - 1], cpt)}</span> : null}
                 </span>
               </div>
             ))}

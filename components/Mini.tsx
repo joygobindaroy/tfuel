@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import Icon from "@/components/Icons";
 import { PageHead } from "@/components/Cashier";
 import { Empty, SkelList, confetti } from "@/components/Ui";
 import { api, errText, fmtTf, haptic } from "@/lib/client";
@@ -37,7 +38,7 @@ export function VipPage({ say, onBack, reload }: P) {
     <>
       {head}
       <div className="card" style={{ textAlign: "center" }}>
-        <div style={{ fontSize: 46 }}>{v.badge || "👑"}</div>
+        <div style={{ fontSize: 46 }}>{v.badge || <span style={{ color: "#f5a623", display: "inline-flex" }}><Icon name="crown" size={46} /></span>}</div>
         <div className="title">{v.active ? "You are VIP" : "Get the VIP pass"}</div>
         {v.active && <div className="sub">Active until {when(v.until)}</div>}
         <div style={{ textAlign: "left", margin: "14px 0" }}>
@@ -47,7 +48,7 @@ export function VipPage({ say, onBack, reload }: P) {
           <div className="sumrow"><span className="muted">Duration</span><b>{v.days} days</b></div>
         </div>
         <button className="btn" style={{ width: "100%" }} disabled={busy} onClick={buy}>{busy ? "Please wait…" : `${v.active ? "Extend" : "Buy"} for ${v.price} USDT`}</button>
-        {v.trial > 0 && !v.active && <button className="btn sec" style={{ width: "100%", marginTop: 8 }} disabled={busy} onClick={trial}>🎁 Try free for {v.trial} days</button>}
+        {v.trial > 0 && !v.active && <button className="btn sec" style={{ width: "100%", marginTop: 8 }} disabled={busy} onClick={trial}><Icon name="gift" size={14} /> Try free for {v.trial} days</button>}
         <div className="xs muted" style={{ marginTop: 8 }}>Paid from your USDT balance. Extending adds days to your current pass.</div>
       </div>
     </>
@@ -88,7 +89,7 @@ function Memory({ cfg, say, reload, done }: { cfg: any; say: P["say"]; reload: (
   };
   return (
     <div className="card">
-      <div className="title">🧠 Memory match</div>
+      <div className="title"><Icon name="bulb" size={14} /> Memory match</div>
       <div className="sub">Find all pairs in {cfg.max_moves} moves or fewer for the full reward: <b>{cfg.reward} coins</b>. {cfg.left} plays left today.</div>
       {!g || res ? (
         <>
@@ -134,7 +135,7 @@ function Trivia({ cfg, say, reload, done }: { cfg: any; say: P["say"]; reload: (
   };
   return (
     <div className="card">
-      <div className="title">❓ Crypto trivia</div>
+      <div className="title"><Icon name="help" size={14} /> Crypto trivia</div>
       <div className="sub">{cfg.rounds} questions · <b>{cfg.per_correct} coins</b> per correct answer · {cfg.left} plays left today.</div>
       {q ? (
         <div style={{ marginTop: 10 }}>
@@ -166,12 +167,12 @@ function Hunt({ cfg, say, reload, done }: { cfg: any; say: P["say"]; reload: () 
   };
   return (
     <div className="card">
-      <div className="title">🗺 Treasure hunt</div>
+      <div className="title"><Icon name="map" size={14} /> Treasure hunt</div>
       <div className="sub">Pick one tile — free to play. Prizes {cfg.min}–{cfg.max} coins. {cfg.left} picks left today.</div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8, marginTop: 10 }}>
         {Array.from({ length: 9 }, (_, i) => (
           <button key={i} className="btn sec" disabled={busy || (!r && cfg.left <= 0)} onClick={() => (r ? setR(null) : play(i))} style={{ height: 58, fontSize: 16, outline: r?.tile === i ? "2px solid var(--accent, #f5a623)" : undefined }}>
-            {r ? (r.board[i] > 0 ? `💰 ${r.board[i]}` : "·") : "📦"}
+            {r ? (r.board[i] > 0 ? `${r.board[i]}` : "·") : <Icon name="box" size={22} />}
           </button>
         ))}
       </div>
@@ -194,7 +195,7 @@ function Tours({ tours, say, load }: { tours: any[]; say: P["say"]; load: () => 
         <div className="card" key={t.id}>
           <div className="row" style={{ alignItems: "flex-start" }}>
             <div>
-              <div className="b">{t.game === "memory" ? "🧠" : "❓"} {t.title}</div>
+              <div className="b"><Icon name={t.game === "memory" ? "bulb" : "help"} size={14} /> {t.title}</div>
               <div className="xs muted">{t.state === "soon" ? `Starts ${when(t.start)}` : t.paid ? "Finished" : `Ends ${when(t.end)}`} · prizes: {t.prizes.map((p: number, i: number) => `#${i + 1} ${p}`).join(" · ")} coins</div>
               {t.mine && <div className="xs" style={{ marginTop: 2 }}>Your best: {t.game === "memory" ? `${t.mine.moves} moves` : `${t.mine.correct} correct`}</div>}
             </div>
@@ -203,7 +204,7 @@ function Tours({ tours, say, load }: { tours: any[]; say: P["say"]; load: () => 
               <button className="btn sec sm" onClick={() => show(t.id)}>{open === t.id ? "Hide" : "Board"}</button>
             </div>
           </div>
-          {open === t.id && (board.length ? board.map((r) => <div className="sumrow" key={r.rank} style={r.me ? { fontWeight: 700 } : undefined}><span>#{r.rank} {r.name}</span><span>{t.game === "memory" ? `${r.moves} moves` : `${r.correct} correct`}{r.prize ? ` · 🏆 ${r.prize}` : ""}</span></div>) : <div className="xs muted" style={{ marginTop: 8 }}>No scores yet.</div>)}
+          {open === t.id && (board.length ? board.map((r) => <div className="sumrow" key={r.rank} style={r.me ? { fontWeight: 700 } : undefined}><span>#{r.rank} {r.name}</span><span>{t.game === "memory" ? `${r.moves} moves` : `${r.correct} correct`}{r.prize ? ` · ${r.prize} coins` : ""}</span></div>) : <div className="xs muted" style={{ marginTop: 8 }}>No scores yet.</div>)}
         </div>
       ))}
     </>
@@ -222,9 +223,9 @@ export function MiniPage({ say, onBack, reload }: P) {
       <div className="sub" style={{ margin: "4px 2px 12px" }}>Free to play — no stake, no risk. Rewards are small coins from the app, limited per day.</div>
       {m.quest && (
         <div className="card">
-          <div className="title" style={{ fontSize: 14 }}>🎯 Daily quest</div>
-          <div className="sub">Play {m.quest.plays} games today for <b>+{m.quest.bonus} coins</b>. {m.quest.played >= m.quest.plays ? "Done for today ✅" : `${m.quest.played}/${m.quest.plays} played.`}</div>
-          <div className="xs muted" style={{ marginTop: 4 }}>🔥 Streak: {m.quest.streak} day{m.quest.streak === 1 ? "" : "s"} · every {m.quest.streak_days} days: +{m.quest.streak_bonus} coins</div>
+          <div className="title" style={{ fontSize: 14 }}><Icon name="target" size={14} /> Daily quest</div>
+          <div className="sub">Play {m.quest.plays} games today for <b>+{m.quest.bonus} coins</b>. {m.quest.played >= m.quest.plays ? "Done for today" : `${m.quest.played}/${m.quest.plays} played.`}</div>
+          <div className="xs muted" style={{ marginTop: 4 }}><Icon name="flame" size={14} /> Streak: {m.quest.streak} day{m.quest.streak === 1 ? "" : "s"} · every {m.quest.streak_days} days: +{m.quest.streak_bonus} coins</div>
         </div>
       )}
       {m.memory && <Memory cfg={m.memory} say={say} reload={reload} done={load} />}

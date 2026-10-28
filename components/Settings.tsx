@@ -67,7 +67,7 @@ export function AddrPicker({ acc, onPick }: { acc: Account | null; onPick: (addr
     <div style={{ marginBottom: 8 }}>
       <div className="xs muted" style={{ marginBottom: 4 }}>Saved addresses</div>
       <div className="chips">
-        {list.map((x) => <button type="button" key={x.id} className="chip" onClick={() => onPick(x.address)}>{x.fav ? "★ " : ""}{x.label} · {x.address.slice(0, 4)}…{x.address.slice(-4)}</button>)}
+        {list.map((x) => <button type="button" key={x.id} className="chip" onClick={() => onPick(x.address)}>{x.fav ? <><Icon name="star" size={12} /> </> : null}{x.label} · {x.address.slice(0, 4)}…{x.address.slice(-4)}</button>)}
       </div>
     </div>
   );
@@ -284,7 +284,7 @@ export function SettingsPanel({ say, notify, account, onCur }: { say: Say; notif
             <div className="sub" style={{ wordBreak: "break-all" }}>{x.address}</div>
           </div>
           <CopyBtn text={x.address} />
-          <button className="btn ghost sm" aria-label="Favorite" disabled={busy} style={{ fontSize: 17, color: x.fav ? "#f59e0b" : undefined }} onClick={() => act({ action: "favAddr", id: x.id, on: !x.fav }, x.fav ? "Removed from favorites" : "Added to favorites")}>{x.fav ? "★" : "☆"}</button>
+          <button className="btn ghost sm" aria-label="Favorite" disabled={busy} style={{ fontSize: 17, color: x.fav ? "#f59e0b" : undefined }} onClick={() => act({ action: "favAddr", id: x.id, on: !x.fav }, x.fav ? "Removed from favorites" : "Added to favorites")}><Icon name="star" size={18} /></button>
           <button className="btn sec sm" aria-label="Delete address" disabled={busy} onClick={() => act({ action: "delAddr", id: x.id }, "Removed")}><Icon name="trash" size={14} /></button>
         </div>
       ))}

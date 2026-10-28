@@ -4,6 +4,8 @@ import { dayKey } from "./log";
 import { earn, activity, lbAdd } from "./wallet";
 import { dailyMult } from "./retention";
 import { abMult } from "./abtest";
+import { eventMult } from "./events";
+import { gqTick } from "./v20";
 import { vipPerks } from "./vip";
 import { newUser, UserRecord } from "./user";
 import type { Settings } from "./settings";
@@ -13,7 +15,7 @@ export async function claimDaily(uid: string, s: Settings, now = Date.now()) {
   if (!s.daily_enabled) throw new HttpError(403, "daily_disabled");
   const today = dayKey(now);
   const yesterday = dayKey(now - 86400000);
-  const abm = await abMult(uid).catch(() => 1);
+  const abm = (await abMult(uid).catch(() => 1)) * (await eventMult());
   const vp = await vipPerks(uid);
   const vipm = vp.active ? 1 + vp.daily_pct / 100 : 1;
   let err = "";
@@ -44,5 +46,6 @@ export async function claimDaily(uid: string, s: Settings, now = Date.now()) {
   await lbAdd(uid, out.reward);
   await db().ref(`daily_day/${today}/${uid}`).set(out.streak).catch(() => {});
   await activity(uid, "daily", { coins: out.reward, note: `Day ${out.streak}` });
+  void gqTick(uid);
   return out;
 }

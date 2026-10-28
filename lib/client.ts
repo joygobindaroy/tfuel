@@ -235,6 +235,7 @@ const ERR: Record<string, string> = {
   addr_not_saved: "Withdrawals are only allowed to addresses saved in Settings.",
   addr_cooldown: "This address is new. For your safety it can be used after a short waiting period.",
   pin_required: "Enter your withdraw PIN.",
+  pin_needed_set: "For an amount this size you need a PIN first. Set one in Settings → Security.",
   pin_wrong: "Wrong PIN. Please try again.",
   pin_locked: "Too many wrong PINs. Try again in 15 minutes.",
   bad_pin: "PIN must be 4 to 6 digits.",

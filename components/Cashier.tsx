@@ -361,13 +361,13 @@ function StarsDeposit({ cfg, say, done }: { cfg: { per: number; min: number; max
   };
   return (
     <div className="card">
-      <div className="row"><div className="left"><div className="ico" style={{ background: "#fff3d1" }}>⭐</div><div><div className="title">Pay with Telegram Stars</div><div className="sub">Instant · pay inside Telegram</div></div></div></div>
+      <div className="row"><div className="left"><div className="ico" style={{ background: "#fff3d1" }}><Icon name="star" size={14} /></div><div><div className="title">Pay with Telegram Stars</div><div className="sub">Instant · pay inside Telegram</div></div></div></div>
       <label>Amount (USDT)</label>
       <AmtInput  value={amt} onChange={setAmt} />
       <div className="quick">{[1, 5, 10, 25].filter((v) => v >= cfg.min && v <= cfg.max).map((v) => <button key={v} onClick={() => setAmt(String(v))}>{v}</button>)}</div>
       <div className="amtbox" style={{ marginTop: 12 }}>
         <div className="xs">You pay</div>
-        <div className="big num">⭐ {ok ? stars.toLocaleString("en-US") : "—"}</div>
+        <div className="big num"><Icon name="star" size={18} /> {ok ? stars.toLocaleString("en-US") : "—"}</div>
         <div className="xs">to receive {ok ? usd(n) : "—"} USDT · 1 USDT = {cfg.per} Stars</div>
       </div>
       <div className="xs muted">Min {cfg.min} · Max {cfg.max} USDT per payment.</div>
