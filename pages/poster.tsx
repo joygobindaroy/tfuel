@@ -31,7 +31,7 @@ export default function Poster({ ok, name, code, link, qr, err }: P) {
           <span className="st" style={{ background: "#c6ff3d", color: "#0b0614", transform: "rotate(-3deg)", fontSize: 22, letterSpacing: 2 }}>TFUEL</span>
           <div className="big">{name ? `${name} says` : "join me"}<br />GET PAID<br />to scroll &amp; tap</div>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={qr} alt="QR code" />
+          <img loading="lazy" src={qr} alt="QR code" />
           <div className="code">my code: {code}</div>
           <div style={{ marginTop: 14, fontSize: 13, wordBreak: "break-all", fontWeight: 700 }}>{link}</div>
           <div style={{ marginTop: 6, fontSize: 14, fontWeight: 700 }}>scan it or tap the link. no cap.</div>

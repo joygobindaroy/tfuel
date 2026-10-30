@@ -54,8 +54,12 @@ export async function settleDeposit(id: string, approve: boolean, credit: number
   }
   await db().ref().update(upd);
   await activity(rec.uid, approve ? "deposit" : "deposit_rejected", { usdt_u: approve ? toU(credit) : toU(Number(rec.amount) || 0), note });
+  if (approve) {
+    try { const R = await import("./receipt"); const cpt = (await (await import("./settings")).getSettings()).coins_per_tfuel || 1000; await R.botReceipt(rec.uid, await R.loadDepositReceipt("DEP-" + id, rec.uid), cpt); } catch {}
+  }
+  if (approve) void import("./adminalert").then((m) => m.alertAdmins("big_deposit", `Large deposit approved: ${credit} USDT (user ${rec.uid}).`, { amountUsdt: Number(credit) })).catch(() => {});
   await notify(rec.uid, approve ? `✅ Deposit approved: +${credit} USDT added to your wallet.` : `❌ Deposit rejected.${note ? " Reason: " + note : ""}`);
-  await mailMoney(rec.uid, approve ? "deposit" : "deposit_rejected", [["Amount", `${approve ? credit : rec.amount} USDT`], ["Network", rec.network_name || rec.network || ""], ["TxID", rec.txid ? String(rec.txid).slice(0, 40) : ""], ["Note", note || ""]]);
+  await mailMoney(rec.uid, approve ? "deposit" : "deposit_rejected", [["Amount", `${approve ? credit : rec.amount} USDT`], ["Network", rec.network_name || rec.network || ""], ["TxID", rec.txid ? String(rec.txid).slice(0, 40) : ""], ["Note", note || ""]], approve ? { button: await (async () => { try { const R = await import("./receipt"); const cpt = (await (await import("./settings")).getSettings()).coins_per_tfuel || 1000; return { label: "Open receipt (print / download)", url: R.receiptLinks(await R.loadDepositReceipt("DEP-" + id, rec.uid), rec.uid, cpt).page }; } catch { return undefined; } })() } : {});
   await adminLog(who, approve ? "deposit_approved" : "deposit_rejected", { id, uid: rec.uid, claimed: rec.amount, credited: approve ? credit : 0, note });
   return rec;
 }

@@ -9,6 +9,9 @@ export default route(async (req, res) => {
   const user = authenticate(req);
   await rateLimit(user.id, "inbox", 30);
   const base = `inbox/${user.id}`;
+  const act = String(req.body?.action || "get");
+  if (act === "clear") { await db().ref(base).remove(); await db().ref(`inbox_meta/${user.id}/unread`).set(0); return void res.json({ success: true, unread: 0, items: [] }); }
+  if (act === "del") { const id = String(req.body?.id || ""); if (/^[-\w]{6,40}$/.test(id)) await db().ref(`${base}/${id}`).remove(); }
   const all = ((await db().ref(base).orderByKey().limitToLast(KEEP + 20).get()).val() || {}) as Record<string, { m: string; at: number }>;
   const keys = Object.keys(all).sort().reverse();
   const old = keys.slice(KEEP);

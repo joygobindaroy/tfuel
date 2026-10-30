@@ -275,6 +275,7 @@ function Dashboard({ call, go }: { call: Call; go: (t: Tab) => void }) {
           <Icon name="refresh" size={15} /> Refresh
         </button>
       </Head2>
+      <TodayCard call={call} go={go} />
       <div className="kpis">
         <div className="kpi"><div className="k"><Icon name="users" size={15} /> Total users</div><div className="v num">{fmt(d.usersTotal)}</div><div className="d">+{fmt(d.joinedToday)} today</div></div>
         <div className="kpi"><div className="k"><Icon name="activity" size={15} /> Active today</div><div className="v num">{fmt(d.activeToday)}</div></div>
@@ -1006,6 +1007,27 @@ function Health({ call }: { call: Call }) {
         </div>
       ))}
     </>
+  );
+}
+
+/* ---------------- today at a glance ---------------- */
+function TodayCard({ call, go }: { call: Call; go: (t: Tab) => void }) {
+  const [d, setD] = useState<any>(null);
+  useEffect(() => { call({ action: "v20Today" }).then((r: any) => r && setD(r)); }, [call]);
+  if (!d) return null;
+  const Cell = ({ k, v, sub, to }: { k: string; v: string; sub?: string; to?: Tab }) => <div style={{ cursor: to ? "pointer" : undefined, flex: "1 1 120px" }} onClick={() => to && go(to)}><div className="xs muted">{k}</div><div className="num" style={{ fontSize: 20, fontWeight: 800 }}>{v}</div>{sub && <div className="xs muted">{sub}</div>}</div>;
+  return (
+    <div className="card" style={{ marginBottom: 12 }}>
+      <div className="title">Today at a glance <span className="xs muted">(UTC day)</span></div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 14, marginTop: 8 }}>
+        <Cell k="New users" v={String(d.joined)} sub={`${d.active} active`} />
+        <Cell k="Deposits" v={`${d.depositU} USDT`} />
+        <Cell k="Paid out" v={`${d.payoutU} USDT`} sub={`${d.withdraws} requests`} />
+        <Cell k="Pending payouts" v={String(d.pendingPayouts)} to="withdrawals" />
+        <Cell k="Open tickets" v={String(d.openTickets)} to="support" />
+        <Cell k="Job errors" v={String(d.errors)} to="health" />
+      </div>
+    </div>
   );
 }
 

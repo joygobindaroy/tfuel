@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { CopyBtn, Empty, SkelList, Faq } from "@/components/Ui";
+import { CopyBtn, Empty, SkelList, Faq, RetryBox } from "@/components/Ui";
 import { api, cachedApi, errText, fmtTf, fmtUsd, openLink, openTgLink, tg } from "@/lib/client";
 import Icon from "@/components/Icons";
 import Logo from "@/components/Logo";
@@ -106,7 +106,8 @@ export function ShopsPage({ say, onBack, cpt }: { say: Say; onBack: () => void; 
   const [busy, setBusy] = useState("");
   const [subs, setSubs] = useState<any[]>([]);
   useEffect(() => { api<any>("shop-user", { action: "subs" }).then((r) => setSubs(r.items)).catch(() => {}); }, []);
-  const load = useCallback(() => { cachedApi<any>("shop-user", { action: "list" }, setD).catch((e) => say(errText(e))); }, [say]);
+  const [failS, setFailS] = useState(false);
+  const load = useCallback(() => { setFailS(false); cachedApi<any>("shop-user", { action: "list" }, setD).catch((e) => { setFailS(true); say(errText(e)); }); }, [say]);
   useEffect(() => { load(); }, [load]);
   const open = async (s: ShopRow) => {
     if (!s.connected && !confirm(`Connect ${s.name}?\n\nThe shop will receive your Telegram name and ID so you're signed in automatically. It never sees your balance or PIN.`)) return;
@@ -125,7 +126,7 @@ export function ShopsPage({ say, onBack, cpt }: { say: Say; onBack: () => void; 
   return (
     <>
       <PageHead title="Partner shops" onBack={onBack} />
-      {!d && <SkelList />}
+      {!d && (failS ? <RetryBox onRetry={load} /> : <SkelList />)}
       {d && !d.enabled && <div className="card empty">Shops aren&apos;t available right now.</div>}
       {d && d.enabled && (
         <>
@@ -193,7 +194,8 @@ export function SupportPage({ say, onBack, faq = [] }: { say: Say; onBack: () =>
   const [sub, setSub] = useState("");
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
-  const load = useCallback(() => { cachedApi<any>("support", { action: "list" }, (d) => setList(d.tickets)).catch((e) => say(errText(e))); }, [say]);
+  const [failT, setFailT] = useState(false);
+  const load = useCallback(() => { setFailT(false); cachedApi<any>("support", { action: "list" }, (d) => setList(d.tickets)).catch((e) => { setFailT(true); say(errText(e)); }); }, [say]);
   useEffect(() => { load(); }, [load]);
   const openT = async (id: string) => { try { setTh((await api<any>("support", { action: "get", id })).ticket); } catch (e: any) { say(errText(e)); } };
   const create = async () => {
@@ -236,7 +238,7 @@ export function SupportPage({ say, onBack, faq = [] }: { say: Say; onBack: () =>
         <button className="btn block" style={{ marginTop: 10 }} disabled={busy || sub.trim().length < 3 || msg.trim().length < 5} onClick={create}>Send to support</button>
       </div>
       <div className="mhead">Your tickets</div>
-      {!list && <SkelList />}
+      {!list && (failT ? <RetryBox onRetry={load} /> : <SkelList />)}
       {list && list.length === 0 && <Empty icon="news" title="No tickets yet" hint="Need help? Create a ticket and we'll reply here." />}
       {list && list.length > 0 && (
         <div className="menu">

@@ -35,5 +35,6 @@ export async function checkPin(uid: string, pin: unknown) {
     if (c.fails >= MAX_FAILS) { c.fails = 0; c.lock_until = now + LOCK_MS; locked = true; }
     return c;
   });
+  if (locked) void import("./adminalert").then((m) => m.alertAdmins("security", `Withdraw PIN locked after ${MAX_FAILS} wrong tries (user ${uid}).`)).catch(() => {});
   throw new HttpError(locked ? 429 : 403, locked ? "pin_locked" : "pin_wrong");
 }

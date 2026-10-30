@@ -1,4 +1,5 @@
 import { pinGate } from "@/lib/v20";
+import { rcptStyleOf } from "@/lib/styles";
 import { authenticate, HttpError } from "@/lib/auth";
 import { route, rateLimit } from "@/lib/api";
 import { db } from "@/lib/firebase";
@@ -124,7 +125,7 @@ export default route(async (req, res) => {
     await secLog(user.id, "withdraw_request", reqCtx(req), `send ${shown(t.amount)} ${asset}`).catch(() => {});
     if (mode === "person" && t.code) { try { if ((await db().ref(`contacts/${user.id}/${t.code}`).get()).exists()) await db().ref(`contacts/${user.id}/${t.code}/last`).set({ a: asset, v: shown(t.amount) }); } catch {} }
     let rc: { page: string; img: string } | null = null;
-    if (!out.held) { try { const R = await import("@/lib/receipt"); rc = R.receiptLinks(await R.loadReceipt(out.txid, user.id), user.id, cpt); } catch {} }
+    if (!out.held) { try { const R = await import("@/lib/receipt"); rc = R.receiptLinks(await R.loadReceipt(out.txid, user.id), user.id, cpt, undefined, await rcptStyleOf(user.id), true); } catch {} }
     return void res.json({ success: true, fee: out.fee, balance: out.balance, rc, tx: { id: out.id, txid: out.txid, at: out.at, amount: t.amount, fee: out.fee, to: out.to, asset, held: !!out.held, release_at: out.release_at || 0 } });
   }
 
@@ -199,7 +200,7 @@ export default route(async (req, res) => {
       if (!ok) throw new HttpError(409, "bot_unreachable");
       return void res.json({ success: true });
     }
-    return void res.json({ success: true, ...receiptLinks(r, user.id, cpt) });
+    return void res.json({ success: true, ...receiptLinks(r, user.id, cpt, undefined, await rcptStyleOf(user.id), true) });
   }
 
   // ── info ──

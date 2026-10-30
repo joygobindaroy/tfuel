@@ -9,6 +9,19 @@ export const getServerSideProps: GetServerSideProps<P> = async ({ query, res }) 
   res.setHeader("X-Robots-Tag", "noindex");
   const h = String(query.h || "").trim().toUpperCase();
   if (!h) return { props: { checked: false, found: false, h: "" } };
+  const ref = String(query.h || "").trim();
+  const m = /^(WD[UT]|DEP)-([-_A-Za-z0-9]{6,40})$/i.exec(ref);
+  if (m) {
+    try {
+      const { db } = await import("@/lib/firebase");
+      const k = m[1].toUpperCase();
+      const w: any = (await db().ref(`${k === "WDU" ? "usdt_withdrawals" : k === "WDT" ? "withdrawals" : "deposits"}/${m[2]}`).get()).val();
+      const done = w && (k === "DEP" ? w.status === "approved" : w.status === "paid");
+      if (!w || !done) return { props: { checked: true, found: false, h: ref.slice(0, 60) } };
+      const amt = k === "WDT" ? `${Math.round((Number(w.amount) / ((await (await import("@/lib/settings")).getSettings()).coins_per_tfuel || 1000)) * 1000) / 1000} TFUEL` : `${k === "DEP" ? w.credited ?? w.amount : w.amount} USDT`;
+      return { props: { checked: true, found: true, h: ref, info: { at: Number(w.handled_at || w.created_at) || 0, amount: amt, asset: k === "DEP" ? "deposit" : "withdrawal" } } };
+    } catch { return { props: { checked: true, found: false, h: ref.slice(0, 60) } }; }
+  }
   if (!/^TF[0-9A-F]{40}$/.test(h)) return { props: { checked: true, found: false, h: h.slice(0, 60) } };
   try {
     const { db } = await import("@/lib/firebase");
@@ -28,10 +41,10 @@ export default function Verify({ checked, found, h, info }: P) {
     <div style={{ maxWidth: 520, margin: "0 auto", padding: "28px 16px", font: "16px/1.5 -apple-system,Segoe UI,Roboto,Arial,sans-serif" }}>
       <Head><title>Verify a transfer</title><meta name="viewport" content="width=device-width,initial-scale=1" /><meta name="robots" content="noindex" /></Head>
       <h2 style={{ marginTop: 0 }}><Icon name="bolt" size={14} /> TFUEL — Verify a transfer</h2>
-      <form method="get"><input name="h" defaultValue={h} placeholder="Transaction hash (TF…)" style={{ width: "100%", boxSizing: "border-box", padding: 12, fontSize: 15, borderRadius: 10, border: "1px solid #d1d5db" }} /><button style={{ marginTop: 10, width: "100%", padding: 12, border: 0, borderRadius: 10, background: "#111827", color: "#fff", fontWeight: 600, fontSize: 16 }}>Check</button></form>
+      <form method="get"><input name="h" defaultValue={h} placeholder="Transaction hash or reference" style={{ width: "100%", boxSizing: "border-box", padding: 12, fontSize: 15, borderRadius: 10, border: "1px solid #d1d5db" }} /><button style={{ marginTop: 10, width: "100%", padding: 12, border: 0, borderRadius: 10, background: "#111827", color: "#fff", fontWeight: 600, fontSize: 16 }}>Check</button></form>
       {checked && (found && info ? (
         <div style={{ marginTop: 16, background: "#ecfdf5", border: "1px solid #6ee7b7", borderRadius: 12, padding: 16 }}>
-          <b style={{ color: "#047857" }}><Icon name="check" size={14} /> Genuine — this transfer is completed.</b>
+          <b style={{ color: "#047857" }}><Icon name="check" size={14} /> Genuine — this {info.asset === "deposit" ? "deposit is credited" : info.asset === "withdrawal" ? "withdrawal is paid" : "transfer is completed"}.</b>
           <div style={{ marginTop: 6 }}>Amount: <b>{info.amount}</b></div>
           <div>Time: {new Date(info.at).toISOString().replace("T", " ").slice(0, 19)} UTC</div>
         </div>

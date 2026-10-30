@@ -128,7 +128,8 @@ export async function cardInfo(uid: string, s: Settings, name: string): Promise<
   if (!base || !code || !s.referral_link || !s.referral_enabled) return null;
   const nm = String(name || "").replace(/[<>]/g, "").trim().slice(0, 20) || "a friend";
   const link = `${s.referral_link}?startapp=${code}`;
-  return { url: cardUrl(base, code, nm), caption: `${s.invite_msg || "Join me on TFUEL — tap, earn and invite friends!"}\n\n👉 ${link}`, link };
+  const { cardStyleOf } = await import("./styles");
+  return { url: cardUrl(base, code, nm, await cardStyleOf(uid), /^https:\/\/t\.me\//.test(link) ? link : ""), caption: `${s.invite_msg || "Join me on TFUEL — tap, earn and invite friends!"}\n\n👉 ${link}`, link };
 }
 
 // ---------------- admin ----------------

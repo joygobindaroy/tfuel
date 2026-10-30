@@ -170,6 +170,7 @@ export function HistoryTab({ cpt, say, onCancelled }: { cpt: number; say: Say; o
     api<any>("send", { action: "link_list" }).then((r) => setLinks(r.items)).catch(() => {});
   };
   useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const [lim, setLim] = useState(30);
   const shown = useMemo(() => (items || []).filter((x) => (f === "all" || x.d === f) && (!q.trim() || `${x.tx} ${x.peer} ${x.pc} ${x.n}`.toLowerCase().includes(q.trim().toLowerCase()))), [items, f, q]);
   const exportCsv = () => {
     const esc = (v: unknown) => { const t = String(v ?? ""); return /[",\n\r]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
@@ -225,7 +226,7 @@ export function HistoryTab({ cpt, say, onCancelled }: { cpt: number; say: Say; o
         </div>
         {items === null && <SkelList n={3} />}
         {items && shown.length === 0 && <div className="small muted" style={{ marginTop: 10 }}>No transfers found.</div>}
-        {shown.map((x) => (
+        {shown.slice(0, lim).map((x) => (
           <div className="hist" key={x.id}>
             <div style={{ minWidth: 0 }}>
               <div className="title" style={{ fontSize: 14, color: x.d === "in" ? "#15803d" : undefined }}>{x.d === "in" ? "+" : "−"}{money(x.a, x.amt, cpt)} {x.st === "held" && <span className="tag warn">on hold</span>}{x.st === "cancelled" && <span className="tag err">cancelled</span>}{x.st === "claimed" && <span className="tag ok">claimed</span>}</div>
@@ -247,6 +248,7 @@ export function HistoryTab({ cpt, say, onCancelled }: { cpt: number; say: Say; o
             </div>
           </div>
         ))}
+        {shown.length > lim && <button className="btn sec block" style={{ marginTop: 10 }} onClick={() => setLim((n) => n + 30)}>Load more ({shown.length - lim} more)</button>}
         {shown.length > 0 && <button className="btn sec block" style={{ marginTop: 10 }} onClick={exportCsv}><Icon name="download" size={15} /> Export CSV ({shown.length})</button>}
       </div>
     </>

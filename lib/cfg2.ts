@@ -49,7 +49,7 @@ export interface Mini {
 }
 export interface PostRule { id: string; kind: "price" | "top" | "invite" | "tour" | "custom"; on: boolean; hour: number; every: number; text: string; image: boolean; btn: string }
 export interface EventRule { id: string; title: string; mult: number; start: number; end: number; on: boolean; ann?: boolean }
-export interface V20 { events: EventRule[]; gq: { enabled: boolean; title: string; target: number; bonus: number }; pin_over_usd: number; ticket_close_days: number; whatsnew: boolean }
+export interface V20 { events: EventRule[]; gq: { enabled: boolean; title: string; target: number; bonus: number }; pin_over_usd: number; ticket_close_days: number; whatsnew: boolean; ref_guard: boolean }
 export interface Cfg2 {
   v20: V20;
   posts: { rules: PostRule[]; welcome: { enabled: boolean; text: string }; winpost: boolean };
@@ -98,7 +98,7 @@ const QUIZ: Quiz[] = [
 ];
 
 export const CFG2_DEFAULTS: Cfg2 = {
-  v20: { events: [], gq: { enabled: false, title: "Community goal", target: 100, bonus: 100 }, pin_over_usd: 0, ticket_close_days: 7, whatsnew: true },
+  v20: { events: [], gq: { enabled: false, title: "Community goal", target: 100, bonus: 100 }, pin_over_usd: 0, ticket_close_days: 7, whatsnew: true, ref_guard: true },
   posts: { rules: [], welcome: { enabled: false, text: "Glad you are here! Tap the button to start earning TFUEL." }, winpost: true },
   xfer: { usdt: { enabled: true, fee_pct: 0.5, min: 1, daily: 500 }, hold: { tfuel: 0, usdt: 0, minutes: 10 }, links: { request: true, claim: true, days: 7 } },
   plus: { sched: { enabled: true, max: 5 }, alert: { tfuel: 0, usdt: 0 }, quest: { enabled: false, plays: 2, bonus: 50, streak_days: 7, streak_bonus: 500 }, trial_days: 0, tour_remind: true, subs: true, nudges: true },
@@ -195,6 +195,7 @@ export const SECTIONS: { [K in keyof Cfg2]: (v: any, cur: Cfg2[K]) => Cfg2[K] } 
     pin_over_usd: num(v?.pin_over_usd, 0, 1e7, 0),
     ticket_close_days: int(v?.ticket_close_days, 0, 90, 7),
     whatsnew: v?.whatsnew === undefined ? true : bool(v.whatsnew),
+    ref_guard: v?.ref_guard === undefined ? true : bool(v.ref_guard),
   }),
   posts: (v, cur) => ({
     winpost: v?.winpost === undefined ? (cur?.winpost ?? true) : bool(v.winpost),

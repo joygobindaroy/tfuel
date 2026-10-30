@@ -1,5 +1,6 @@
 /** Short highlights shown in Admin → Controls → Version (full history is in CHANGELOG.md) */
 export const CHANGELOG_HIGHLIGHTS: { v: string; text: string }[] = [
+  { v: "20.2", text: "Choose your card and receipt style, verify QR on receipts, deposit receipts, earnings card + Story share, Upload QR, retry boxes, admin today card and security alerts." },
   { v: "20.1", text: "Emoji replaced by premium line icons across the app, admin and receipts." },
   { v: "20.0", text: "New receipt design, bonus events, community goal, What's new popup, PIN for big sends, money check, error monitor, CSV export, ticket auto-close, shop invoices & sales chart." },
   { v: "19.8", text: "Group welcome and /today, banner posts, winner cards in the channel, withdrawal receipts, QR scan in Send, shop Buy-now links, fresh poster & receipt style." },

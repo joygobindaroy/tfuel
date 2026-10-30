@@ -410,7 +410,7 @@ export function CollectPage({ say, onBack, cpt, reload }: P) {
   const over = !!s.end && now >= s.end;
   const mine = d.items.filter((i) => i.owned > 0);
   const Img = ({ it, size }: { it: CollV["items"][0]; size: number }) =>
-    it.image ? <img src={it.image} alt="" width={size} height={size} style={{ borderRadius: 12, objectFit: "cover" }} /> : <span style={{ fontSize: size * 0.8, lineHeight: 1 }}>{it.emoji || "◆"}</span>;
+    it.image ? <img loading="lazy" src={it.image} alt="" width={size} height={size} style={{ borderRadius: 12, objectFit: "cover" }} /> : <span style={{ fontSize: size * 0.8, lineHeight: 1 }}>{it.emoji || "◆"}</span>;
 
   return (
     <>

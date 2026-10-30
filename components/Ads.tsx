@@ -17,7 +17,7 @@ export function AdBanner({ ad }: { ad?: { id: string; title: string; text: strin
   if (!ad) return null;
   return (
     <a className="card" href={`/api/ad-click?id=${encodeURIComponent(ad.id)}`} target="_blank" rel="noreferrer" style={{ display: "flex", gap: 12, alignItems: "center", textDecoration: "none", color: "inherit" }}>
-      {ad.image && /* eslint-disable-next-line @next/next/no-img-element */ <img src={ad.image} alt="" width={52} height={52} style={{ borderRadius: 10, objectFit: "cover", flexShrink: 0 }} />}
+      {ad.image && /* eslint-disable-next-line @next/next/no-img-element */ <img loading="lazy" src={ad.image} alt="" width={52} height={52} style={{ borderRadius: 10, objectFit: "cover", flexShrink: 0 }} />}
       <div style={{ minWidth: 0, flex: 1 }}>
         <div className="title" style={{ fontSize: 14 }}>{ad.title}</div>
         {ad.text && <div className="sub" style={{ margin: 0 }}>{ad.text}</div>}

@@ -861,6 +861,13 @@ export default route(async (req, res) => {
       return void res.json({ success: true, settings: next });
     }
 
+    case "v20Today": {
+      const { daySummary } = await import("@/lib/insights");
+      const { errList } = await import("@/lib/v20");
+      const x = await daySummary(dayKey());
+      const errs = (await errList()).filter((e: any) => dayKey(e.at) === dayKey()).length;
+      return void res.json({ success: true, ...x, errors: errs });
+    }
     case "v20Integrity": {
       const { integrityScan } = await import("@/lib/v20");
       return void res.json({ success: true, ...(await integrityScan()) });

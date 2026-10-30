@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import qrcode from "qrcode-generator";
-import { CopyBtn, Empty, ConfirmSheet, SkelList, AmtInput, PayStepper } from "@/components/Ui";
+import { CopyBtn, Empty, ConfirmSheet, SkelList, RetryBox, AmtInput, PayStepper } from "@/components/Ui";
 import { api, cachedApi, errText, fmtUsd, tg } from "@/lib/client";
 import Icon from "@/components/Icons";
 import Logo from "@/components/Logo";
@@ -25,11 +25,13 @@ const short = (a: string) => (a.length > 16 ? a.slice(0, 7) + "…" + a.slice(-6
 
 export function useCash(say: Say) {
   const [m, setM] = useState<CashM | null>(null);
+  const [failed, setFailed] = useState(false);
   const load = useCallback(async () => {
-    try { await cachedApi<CashM>("market", {}, setM); } catch (e: any) { say(errText(e)); }
+    setFailed(false);
+    try { await cachedApi<CashM>("market", {}, setM); } catch (e: any) { setFailed(true); say(errText(e)); }
   }, [say]);
   useEffect(() => { load(); }, [load]);
-  return { m, load };
+  return { m, load, failed };
 }
 
 export function PageHead({ title, onBack, right }: { title: string; onBack: () => void; right?: React.ReactNode }) {
@@ -86,7 +88,7 @@ function Tracker({ status }: { status: string }) {
 type Method = "crypto" | "binance" | "stars" | "user";
 
 export function DepositPage({ say, reload, onBack, onHistory, onBuy }: { say: Say; reload: () => void; onBack: () => void; onHistory: () => void; onBuy?: () => void }) {
-  const { m, load } = useCash(say);
+  const { m, load, failed } = useCash(say);
   const [userOn, setUserOn] = useState(false);
   useEffect(() => { api<any>("send", { action: "info" }).then((r) => setUserOn(!!r.enabled)).catch(() => {}); }, []);
   const methods = useMemo(() => {
@@ -105,7 +107,7 @@ export function DepositPage({ say, reload, onBack, onHistory, onBuy }: { say: Sa
   return (
     <>
       <PageHead title="Deposit" onBack={onBack} right={<button className="btn sec sm" onClick={onHistory}><Icon name="clock" size={14} /> History</button>} />
-      {!m && <SkelList />}
+      {!m && (failed ? <RetryBox onRetry={load} /> : <SkelList />)}
       {m && (
         <>
           <div className="card" style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -436,7 +438,7 @@ function RecentDeposits({ m, say, done }: { m: CashM; say: Say; done: () => void
 
 /* ------------------------------ Withdraw ------------------------------ */
 export function WithdrawPage({ say, reload, onBack, onHistory, top }: { say: Say; reload: () => void; onBack: () => void; onHistory: () => void; top?: React.ReactNode }) {
-  const { m, load } = useCash(say);
+  const { m, load, failed } = useCash(say);
   const { a: acct } = useAccount();
   const [id, setId] = useState("");
   const [addr, setAddr] = useState("");
@@ -475,7 +477,7 @@ export function WithdrawPage({ say, reload, onBack, onHistory, top }: { say: Say
     <>
       <PageHead title="Withdraw" onBack={onBack} right={<button className="btn sec sm" onClick={onHistory}><Icon name="clock" size={14} /> History</button>} />
       {top}
-      {!m && <SkelList />}
+      {!m && (failed ? <RetryBox onRetry={load} /> : <SkelList />)}
       {m && (!m.payout.enabled || !nets.length) && <div className="card empty">USDT withdrawals aren&apos;t available right now.</div>}
       {m && m.payout.enabled && net && (
         <>
@@ -521,11 +523,11 @@ export function WithdrawPage({ say, reload, onBack, onHistory, top }: { say: Say
 
 /* ------------------------------ History pages ------------------------------ */
 export function DepositHistory({ say, onBack }: { say: Say; onBack: () => void }) {
-  const { m, load } = useCash(say);
+  const { m, load, failed } = useCash(say);
   return (
     <>
       <PageHead title="Deposit history" onBack={onBack} />
-      {!m && <SkelList />}
+      {!m && (failed ? <RetryBox onRetry={load} /> : <SkelList />)}
       {m && m.deposits.length === 0 && <Empty icon="download" title="No deposits yet" hint="Your deposits will appear here once you make one." />}
       {m && m.deposits.length > 0 && <div className="card">{m.deposits.map((d) => (
         <div className="hist" key={d.id} style={{ alignItems: "flex-start" }}>
@@ -546,7 +548,7 @@ export function DepositHistory({ say, onBack }: { say: Say; onBack: () => void }
 export interface LegacyW { id: string; amount: number; method: string; status: string; created_at: number }
 /** USDT + TFUEL (পুরনো পদ্ধতি) দুই ধরনের payout একসাথে */
 export function PayoutHistory({ say, onBack, legacy, cpt, fmtTf }: { say: Say; onBack: () => void; legacy: LegacyW[]; cpt: number; fmtTf: (n: number, c: number) => string }) {
-  const { m, load } = useCash(say);
+  const { m, load, failed } = useCash(say);
   const [f, setF] = useState<"all" | "usdt" | "tfuel">("all");
   const rows = useMemo(() => {
     const u = (m?.payouts || []).map((p) => ({ key: "u" + p.id, kind: "usdt" as const, t: p.created_at, title: `${usd(p.amount)} USDT`, sub: `${p.network_name}${p.address ? " · " + short(p.address) : ""}`, extra: p.status === "paid" || p.status === "pending" ? `You receive ${usd(p.receive)} USDT` : "", status: p.status, note: p.note, addr: p.address || "", rid: "WDU-" + p.id }));
@@ -559,7 +561,7 @@ export function PayoutHistory({ say, onBack, legacy, cpt, fmtTf }: { say: Say; o
       <div className="chips" style={{ marginBottom: 10 }}>
         {(["all", "usdt", "tfuel"] as const).map((k) => <button key={k} className={`chip ${f === k ? "on" : ""}`} onClick={() => setF(k)}>{k === "all" ? "All" : k === "usdt" ? "USDT" : "TFUEL"}</button>)}
       </div>
-      {!m && <SkelList />}
+      {!m && (failed ? <RetryBox onRetry={load} /> : <SkelList />)}
       {m && rows.length === 0 && <Empty icon="wallet" title="No payout requests yet" hint="When you withdraw, you can track it here." />}
       {rows.length > 0 && <div className="card">{rows.map((r) => (
         <div className="hist" key={r.key} style={{ alignItems: "flex-start" }}>

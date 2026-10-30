@@ -4,6 +4,7 @@ import { CopyBtn, AmtInput, Cta, SkelCard, confetti } from "@/components/Ui";
 import { PageHead } from "@/components/Cashier";
 import { useAccount, PinField } from "@/components/Settings";
 import Icon from "@/components/Icons";
+import { useMainButton } from "@/components/V20";
 import { RequestTab, HistoryTab, ToolsTab, ReceiptActions, Contacts, shareLink, SaveContact, type Asset } from "@/components/SendExtra";
 
 type Say = (t: string, ok?: boolean) => void;
@@ -17,6 +18,7 @@ export function SendPage({ say, onBack, cpt, reload, top, reqId, fixedAsset }: {
   const [info, setInfo] = useState<Info | null>(null);
   const { a: acct } = useAccount();
   const [tab, setTab] = useState<"send" | "request" | "history" | "tools">("send");
+  const qrFile = useRef<HTMLInputElement>(null);
   const [asset, setAsset] = useState<Asset>(fixedAsset || "tfuel");
   useEffect(() => { if (fixedAsset) { setAsset(fixedAsset); setAmt(""); } }, [fixedAsset]);
   const [mode, setMode] = useState<"person" | "link" | "sched">("person");
@@ -115,6 +117,15 @@ export function SendPage({ say, onBack, cpt, reload, top, reqId, fixedAsset }: {
   const holdsHere = !!info?.hold && !!ai && ((usdt ? info.hold.usdt : info.hold.tfuel) > 0) && n * unit >= (usdt ? info.hold.usdt : info.hold.tfuel);
   const showTabs = !top && !reqId && info && (info.links.request || true);
 
+  const mbCfg = (() => {
+    if (tab !== "send") return null;
+    if (stage === "") return { t: mode === "link" ? "Review & create link" : mode === "sched" ? "Review & schedule" : "Review & send", on: !busy && valid, fn: () => { setErr(""); setStage("confirm"); } };
+    if (stage === "confirm") return { t: "Confirm", on: !busy, fn: () => prepare() };
+    if (stage === "code") return { t: mode === "link" ? "Create link" : "Send now", on: !busy && otp.length === 6, fn: () => doSend(otp) };
+    return null;
+  })();
+  useMainButton(mbCfg?.t || "", !!mbCfg?.on, () => mbCfg?.fn());
+
   return (
     <>
       <PageHead title={top ? "Withdraw" : reqId ? "Pay request" : "Send money"} onBack={onBack} />
@@ -182,6 +193,8 @@ export function SendPage({ say, onBack, cpt, reload, top, reqId, fixedAsset }: {
                   <label>Receiver&apos;s unique ID</label>
                   <div style={{ display: "flex", gap: 8 }}>
                     <input style={{ flex: 1 }} placeholder="10 letters / numbers" maxLength={10} autoCapitalize="off" autoCorrect="off" value={code} onChange={(e) => setCode(e.target.value.replace(/[^A-Za-z0-9]/g, ""))} />
+                    <input ref={qrFile} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) readQrFile(f, (c) => setCode(c), say); }} />
+                    <button className="btn sec sm" type="button" onClick={() => qrFile.current?.click()}><Icon name="image" size={14} /> Upload QR</button>
                     {typeof (tg() as any)?.showScanQrPopup === "function" && <button className="btn sec sm" type="button" onClick={() => scanQr((c) => setCode(c), say)}><Icon name="camera" size={14} /> Scan QR</button>}
                   </div>
                   <Contacts key={contactsKey} onPick={(cc, last) => { setCode(cc); if (last && !amt) { setAsset(last.a); setAmt(String(last.v)); } }} say={say} />
@@ -352,4 +365,25 @@ function scanQr(onCode: (c: string) => void, say: (m: string, ok?: boolean) => v
       return true;
     });
   } catch { say("Scanner not available here"); }
+}
+
+/** Pick a QR picture from the gallery and read the receiver ID from it */
+async function readQrFile(file: File, onCode: (c: string) => void, say: (m: string, ok?: boolean) => void) {
+  try {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    await new Promise<void>((ok, bad) => { img.onload = () => ok(); img.onerror = () => bad(new Error("img")); img.src = url; });
+    const max = 1400, k = Math.min(1, max / Math.max(img.width, img.height));
+    const cv = document.createElement("canvas");
+    cv.width = Math.max(1, Math.round(img.width * k)); cv.height = Math.max(1, Math.round(img.height * k));
+    const cx = cv.getContext("2d");
+    if (!cx) throw new Error("canvas");
+    cx.drawImage(img, 0, 0, cv.width, cv.height);
+    URL.revokeObjectURL(url);
+    const { default: jsQR } = await import("jsqr");
+    const data = cx.getImageData(0, 0, cv.width, cv.height);
+    const r = jsQR(data.data, data.width, data.height, { inversionAttempts: "attemptBoth" });
+    const c = r ? parseUserId(r.data) : "";
+    if (c) { onCode(c); say("ID found", true); } else say(r ? "That QR is not a TFUEL ID" : "No QR code found in this picture");
+  } catch { say("Could not read this picture"); }
 }

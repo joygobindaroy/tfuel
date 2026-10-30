@@ -226,3 +226,13 @@ export function Faq({ items }: { items: { q: string; a: string }[] }) {
     </div>
   );
 }
+
+/** Shown instead of an endless skeleton when a list could not be loaded */
+export function RetryBox({ onRetry, text = "Could not load. Check your connection." }: { onRetry: () => void; text?: string }) {
+  return (
+    <div className="card" style={{ textAlign: "center" }}>
+      <div className="sub" style={{ marginBottom: 10 }}>{text}</div>
+      <button className="btn sec sm" onClick={onRetry}>Try again</button>
+    </div>
+  );
+}

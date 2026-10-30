@@ -14,7 +14,7 @@ import { DepositPage, WithdrawPage, DepositHistory, PayoutHistory, PageHead } fr
 import { Bell, Onboarding, CurrencyPick, TermsGate } from "@/components/Inbox";
 import { PaySheet, ShopsPage, SupportPage, InviteCard } from "@/components/Shops";
 import { SendPage } from "@/components/Send";
-import { WhatsNew, EventStrip } from "@/components/V20";
+import { WhatsNew, EventStrip, LooksCard } from "@/components/V20";
 import { ClaimSheet } from "@/components/SendExtra";
 import { MissionsCard, TodoCard, FeedCard, AwayPopup, CosmeticsPage } from "@/components/Today";
 import { AdBanner, AdsPage } from "@/components/Ads";
@@ -92,6 +92,7 @@ const hm = (ms: number) => {
 
 export default function Home() {
   const [me, setMe] = useState<Me | null>(null);
+  const [loadErr, setLoadErr] = useState("");
   const [tab, setTab] = useState<Tab>("tap");
   const [toast, setToast] = useState<{ t: string; ok: boolean } | null>(null);
   const [floats, setFloats] = useState<{ id: number; x: number }[]>([]);
@@ -124,6 +125,7 @@ export default function Home() {
     try {
       const d = await api<Me>("me");
       setMe(d);
+      setLoadErr("");
       // new notification arrived (reward, deposit, transfer…) → small popup
       const un = d.unread || 0;
       if (prevUnread.current !== null && un > prevUnread.current) {
@@ -138,6 +140,7 @@ export default function Home() {
       rerender();
     } catch (e: any) {
       say(errText(e));
+      setLoadErr(errText(e));
     }
   }, [say]);
 
@@ -243,8 +246,9 @@ export default function Home() {
   if (!me)
     return (
       <div className="splash">
-        <Logo size={84} className="spin" />
-        <div>Loading…</div>
+        <Logo size={84} className={loadErr ? "" : "spin"} />
+        <div>{loadErr ? "Could not load. Check your connection." : "Loading…"}</div>
+        {loadErr && <button className="btn" style={{ marginTop: 14 }} onClick={() => { setLoadErr(""); load(); }}>Try again</button>}
       </div>
     );
   if (me.banned)
@@ -856,7 +860,7 @@ function SettingsPage({ say, onBack, userId, onCur }: { say: Say; onBack: () => 
     <>
       <PageHead title="Settings" onBack={onBack} />
       <SettingsPanel say={say} onCur={onCur} notify={<NotifyToggle />} account={
-        <><InviteCard say={say} /><div className="row" style={{ marginTop: 14 }}>
+        <><InviteCard say={say} /><LooksCard say={say} /><div className="row" style={{ marginTop: 14 }}>
           <div><div className="title">Your ID</div><div className="sub num">{userId}</div></div>
           <CopyBtn text={userId} />
         </div></>

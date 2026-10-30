@@ -49,7 +49,7 @@ export default function Logo({ size = 32, className = "", style, kind = "tfuel" 
   const gid = "lg" + useId().replace(/[^a-zA-Z0-9]/g, "");
   if (src)
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={src} alt="" width={size} height={size} className={className} style={{ objectFit: "contain", ...style }} draggable={false} />;
+    return <img loading="lazy" src={src} alt="" width={size} height={size} className={className} style={{ objectFit: "contain", ...style }} draggable={false} />;
   if (kind === "usdt")
     return (
       <svg width={size} height={size} viewBox="0 0 48 48" className={className} style={style} aria-hidden>

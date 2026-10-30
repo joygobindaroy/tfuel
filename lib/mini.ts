@@ -189,7 +189,7 @@ export async function settleTours(): Promise<number> {
       await notify(r.uid, `🏆 You finished #${r.rank} in "${t.title}" and won ${r.prize.toLocaleString("en-US")} coins!`).catch(() => {});
       try {
         const base = appBase();
-        if (base) await tgCall("sendPhoto", { chat_id: r.uid, photo: winUrl(base, t.title, r.rank, r.prize, r.name), caption: `🏆 #${r.rank} · ${t.title} — share your win!` });
+        if (base) await tgCall("sendPhoto", { chat_id: r.uid, photo: winUrl(base, t.title, r.rank, r.prize, r.name, (await (await import("./styles")).cardStyleOf(r.uid))), caption: `🏆 #${r.rank} · ${t.title} — share your win!` });
       } catch {}
     }
     try {

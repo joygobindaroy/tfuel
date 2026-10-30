@@ -82,6 +82,7 @@ export async function checkCode(uid: string, purpose: Purpose, code: unknown, em
   const ok = rec.email === em && crypto.timingSafeEqual(Buffer.from(hash(uid, purpose, em, c, bindOf(purpose, details)), "hex"), Buffer.from(rec.h, "hex"));
   if (!ok) {
     await ref.child("fails").set((rec.fails || 0) + 1);
+    if ((rec.fails || 0) + 1 >= 5) void import("./adminalert").then((m) => m.alertAdmins("security", `Email code locked after 5 wrong tries (user ${uid}, ${purpose}).`)).catch(() => {});
     throw new HttpError(403, "ecode_wrong");
   }
   await ref.remove();

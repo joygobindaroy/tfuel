@@ -256,7 +256,12 @@ export async function qualifyReferral(uid: string) {
     const s = await getSettings();
     if (!s.referral_enabled) return;
     const u = (await db().ref(`users/${uid}`).get()).val() as UserRecord | null;
-    if (!u?.referred_by || u.ref_paid || !Object.keys(u.completed_tasks || {}).length) return;
+    if (!u?.referred_by || u.ref_paid || (u as any).ref_hold || !Object.keys(u.completed_tasks || {}).length) return;
+    if ((await getCfg2()).v20.ref_guard && (await sameDevice(uid, u.referred_by))) {
+      await db().ref(`users/${uid}`).update({ ref_hold: true });
+      void import("./adminalert").then((m) => m.alertAdmins("security", `Referral bonus held: user ${uid} shares a device with inviter ${u.referred_by}.`)).catch(() => {});
+      return;
+    }
     let first = false;
     await db()
       .ref(`users/${uid}`)
@@ -348,4 +353,13 @@ export async function settleCommission(refId: string, force = false): Promise<nu
     console.error("settleCommission failed", e);
     return 0;
   }
+}
+
+/** the invited person and the inviter have logged in from the same device (self-referral) */
+async function sameDevice(a: string, b: string): Promise<boolean> {
+  try {
+    const [x, y] = await Promise.all([db().ref(`user_prefs/${a}/devices`).get(), db().ref(`user_prefs/${b}/devices`).get()]);
+    const ka = Object.keys((x.val() || {}) as object), kb = new Set(Object.keys((y.val() || {}) as object));
+    return ka.some((k) => kb.has(k));
+  } catch { return false; }
 }

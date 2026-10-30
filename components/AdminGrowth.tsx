@@ -487,6 +487,7 @@ export default function GrowthPage({ call }: { call: Call }) {
               <L t="Require a PIN for sends over (USDT value, 0 = off)"><input inputMode="decimal" value={v.pin_over_usd} onChange={(e) => set({ pin_over_usd: e.target.value })} /></L>
               <L t="Close silent tickets after (days, 0 = never)"><input inputMode="numeric" value={v.ticket_close_days} onChange={(e) => set({ ticket_close_days: e.target.value })} /></L>
             </div>
+            <Row t="Hold referral bonus on same device" h="If the invited person logs in from the same phone as the inviter, no bonus is paid and you get an alert."><Sw on={v.ref_guard !== false} set={(x) => set({ ref_guard: x })} /></Row>
             <Row t="“What's new” popup" h="Shown once after an update to people who joined more than a day ago."><Sw on={v.whatsnew !== false} set={(x) => set({ whatsnew: x })} /></Row>
           </>
         );

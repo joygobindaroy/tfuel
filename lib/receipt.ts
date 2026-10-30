@@ -4,6 +4,7 @@ import { HttpError } from "./auth";
 import { getSettings } from "./settings";
 import { tgCall } from "./telegram";
 import { appBase } from "./mailtpl";
+import { rcptStyleOf } from "./styles";
 import { getRefCode } from "./refcode";
 import { amtStr, displayName, maskName, Asset } from "./transfer";
 
@@ -11,11 +12,12 @@ import { amtStr, displayName, maskName, Asset } from "./transfer";
 const key = () => crypto.createHash("sha256").update("card:" + (process.env.BOT_TOKEN || "dev")).digest("hex");
 const hmac = (s: string) => crypto.createHmac("sha256", key()).update(s).digest("hex").slice(0, 20);
 
-export interface RView { txid: string; at: number; asset: Asset; amount: number; fee: number; dir: "out" | "in" | "wd"; other: string; otherCode: string; note: string; held: boolean; amtText?: string; st?: string }
+export interface RView { txid: string; at: number; asset: Asset; amount: number; fee: number; dir: "out" | "in" | "wd" | "dep"; other: string; otherCode: string; note: string; held: boolean; amtText?: string; st?: string; feeText?: string; netText?: string; created?: number }
 
 /** the receipt as one party sees it; the other party's name is masked for the receiver */
 export async function loadReceipt(txid: string, uid: string): Promise<RView> {
   if (/^WD[UT]-[-_A-Za-z0-9]{6,40}$/.test(String(txid || ""))) return loadWithdrawReceipt(String(txid), uid);
+  if (/^DEP-[-_A-Za-z0-9]{6,40}$/.test(String(txid || ""))) return loadDepositReceipt(String(txid), uid);
   const tid = String(txid || "").toUpperCase();
   if (!/^TF[0-9A-F]{40}$/.test(tid)) throw new HttpError(400, "bad_request");
   const id = (await db().ref(`transfer_tx/${tid}`).get()).val();
@@ -45,14 +47,26 @@ export async function loadWithdrawReceipt(txid: string, uid: string): Promise<RV
   const addr = String(w.address || w.account || "");
   const masked = addr.length > 14 ? `${addr.slice(0, 6)}...${addr.slice(-6)}` : addr;
   const amtText = usdt ? `${w.amount} USDT` : `${Math.round((Number(w.amount) / cpt) * 1000) / 1000} TFUEL`;
-  return { txid, at: Number(w.handled_at || w.created_at) || Date.now(), asset: usdt ? "usdt" : "tfuel", amount: Number(w.amount) || 0, fee: 0, dir: "wd", other: `${w.network_name || w.method || "Wallet"}${masked ? " " + masked : ""}`.slice(0, 44), otherCode: "", note: usdt && w.receive ? `You receive ${w.receive} USDT` : "", held: false, amtText, st: String(w.status || "pending") };
+  const fee = usdt && w.receive ? Math.max(0, Math.round((Number(w.amount) - Number(w.receive)) * 100) / 100) : 0;
+  return { txid, at: Number(w.handled_at || w.created_at) || Date.now(), asset: usdt ? "usdt" : "tfuel", amount: Number(w.amount) || 0, fee: 0, dir: "wd", other: `${w.network_name || w.method || "Wallet"}${masked ? " " + masked : ""}`.slice(0, 44), otherCode: "", note: "", held: false, amtText, st: String(w.status || "pending"), feeText: fee ? `${fee} USDT` : "", netText: usdt && w.receive ? `${w.receive} USDT` : amtText, created: Number(w.created_at) || 0 };
+}
+
+/** Deposit receipt: txid = "DEP-<id>" */
+export async function loadDepositReceipt(txid: string, uid: string): Promise<RView> {
+  const id = txid.slice(4);
+  const w = ((await db().ref(`deposits/${id}`).get()).val() || null) as any;
+  if (!w || String(w.uid) !== uid) throw new HttpError(404, "not_found");
+  const approved = w.status === "approved";
+  const amt = approved ? Number(w.credited ?? w.amount) : Number(w.amount);
+  const tx = String(w.txid || "");
+  return { txid, at: Number(w.handled_at || w.created_at) || Date.now(), asset: "usdt", amount: amt || 0, fee: 0, dir: "dep", other: `${w.network_name || w.network || "Deposit"}${tx ? " " + tx.slice(0, 6) + "..." + tx.slice(-6) : ""}`.slice(0, 44), otherCode: "", note: "", held: false, amtText: `${amt} USDT`, st: approved ? "paid" : String(w.status || "pending"), netText: `${amt} USDT`, created: Number(w.created_at) || 0 };
 }
 
 export const pageSig = (txid: string, uid: string) => hmac(`r|${txid}|${uid}`);
-export function receiptLinks(r: RView, uid: string, cpt: number, base = appBase()) {
-  const page = `${base}/receipt?t=${r.txid}&u=${encodeURIComponent(uid)}&s=${pageSig(r.txid, uid)}`;
-  const d = Buffer.from(JSON.stringify({ t: r.txid, at: r.at, v: r.dir === "wd" ? "wd" : r.dir, a: r.amtText || amtStr(r.asset, r.amount, cpt), s: r.st || "", f: r.fee ? amtStr(r.asset, r.fee, cpt) : "", o: r.other, c: r.otherCode, n: r.note, h: r.held ? 1 : 0 })).toString("base64url");
-  const img = `${base}/api/receipt-img?d=${d}&s=${hmac("i|" + d)}`;
+export function receiptLinks(r: RView, uid: string, cpt: number, base = appBase(), style = "b", y1 = false) {
+  const page = `${base}/receipt?t=${r.txid}&u=${encodeURIComponent(uid)}&s=${pageSig(r.txid, uid)}${style !== "b" || y1 ? `&y=${style}` : ""}`;
+  const d = Buffer.from(JSON.stringify({ t: r.txid, at: r.at, v: r.dir === "wd" ? "wd" : r.dir, a: r.amtText || amtStr(r.asset, r.amount, cpt), s: r.st || "", c0: r.created || 0, x: r.netText || "", fe: r.feeText || "", f: r.fee ? amtStr(r.asset, r.fee, cpt) : "", o: r.other, c: r.otherCode, n: r.note, h: r.held ? 1 : 0 })).toString("base64url");
+  const img = `${base}/api/receipt-img?d=${d}&s=${hmac("i|" + d)}&y=${style}`;
   return { page, img };
 }
 
@@ -66,9 +80,9 @@ export async function botReceipt(uid: string, r: RView, cpt: number, force = fal
       const pr = ((await db().ref(`user_prefs/${uid}`).get()).val() || {}) as any;
       if (pr.notif && pr.notif.money === false) return false;
     }
-    const { page, img } = receiptLinks(r, uid, cpt);
+    const { page, img } = receiptLinks(r, uid, cpt, appBase(), await rcptStyleOf(uid));
     if (!/^https:\/\//.test(page)) return false;
-    const caption = r.dir === "wd" ? `🧾 Withdrawal receipt · ${r.amtText}\nTo: ${r.other}\nStatus: ${r.st}\nRef: ${r.txid}` : `🧾 Receipt · ${r.dir === "out" ? "Sent" : "Received"} ${amtStr(r.asset, r.amount, cpt)}\n${r.dir === "out" ? "To" : "From"}: ${r.other}\nHash: ${r.txid}`;
+    const caption = r.dir === "dep" ? `🧾 Deposit receipt · ${r.amtText}\nVia: ${r.other}\nStatus: ${r.st}\nRef: ${r.txid}` : r.dir === "wd" ? `🧾 Withdrawal receipt · ${r.amtText}\nTo: ${r.other}\nStatus: ${r.st}\nRef: ${r.txid}` : `🧾 Receipt · ${r.dir === "out" ? "Sent" : "Received"} ${amtStr(r.asset, r.amount, cpt)}\n${r.dir === "out" ? "To" : "From"}: ${r.other}\nHash: ${r.txid}`;
     const kb = JSON.stringify({ inline_keyboard: [[{ text: "🖨 Print / Save as PDF", url: page }], [{ text: "⬇ Download image", url: img }]] });
     const p = await tgCall("sendPhoto", { chat_id: uid, photo: img, caption, reply_markup: kb });
     if (p.ok) return true;

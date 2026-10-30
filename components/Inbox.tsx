@@ -32,7 +32,10 @@ export function Bell({ unread, onRead }: { unread: number; onRead: () => void })
           <div className="sheet" style={{ maxHeight: "62vh" }} onClick={(e) => e.stopPropagation()}>
             <div className="row" style={{ marginBottom: 4 }}>
               <div className="title" style={{ fontSize: 17 }}>Notifications</div>
-              <button className="btn ghost sm" onClick={() => setOpen(false)} aria-label="Close"><Icon name="x" size={18} /></button>
+              <div className="gap">
+                {items && items.length > 0 && <button className="btn ghost sm" onClick={async () => { try { await api("inbox", { action: "clear" }); setItems([]); } catch {} }}>Clear all</button>}
+                <button className="btn ghost sm" onClick={() => setOpen(false)} aria-label="Close"><Icon name="x" size={18} /></button>
+              </div>
             </div>
             {items === null && <div className="small muted">Loading…</div>}
             {items && items.length === 0 && <div className="empty">No notifications yet.<div className="xs">Deposits, payouts, stakes and alerts show up here.</div></div>}
@@ -40,6 +43,7 @@ export function Bell({ unread, onRead }: { unread: number; onRead: () => void })
               <div className="hist" key={n.id} role="button" onClick={() => setOpenId(openId === n.id ? "" : n.id)} style={{ alignItems: "flex-start", padding: "8px 0", cursor: "pointer" }}>
                 <div style={{ flex: 1, fontSize: 13, lineHeight: 1.35, ...(openId === n.id ? {} : { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as const, overflow: "hidden" }) }}>{n.m}</div>
                 <div className="xs muted" style={{ marginLeft: 8, whiteSpace: "nowrap" }}>{ago(n.at)}</div>
+                {openId === n.id && <button className="btn ghost sm" aria-label="Delete" onClick={async (e) => { e.stopPropagation(); try { await api("inbox", { action: "del", id: n.id }); setItems((l) => (l || []).filter((x) => x.id !== n.id)); } catch {} }}><Icon name="trash" size={14} /></button>}
               </div>
             ))}
           </div>
