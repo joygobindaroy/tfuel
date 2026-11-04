@@ -5,7 +5,7 @@ import { tgCall } from "./telegram";
 import { inboxPush } from "./notify";
 import { dayKey } from "./log";
 
-export interface Audience { kind: "all" | "active" | "tag" | "country" | "tasks"; days?: number; tag?: string; country?: string }
+export interface Audience { kind: "all" | "active" | "tag" | "country" | "tasks" | "inactive" | "rich" | "new" | "wd_no_dep" | "dep_no_wd" | "never_wd"; days?: number; min?: number; tag?: string; country?: string }
 export interface BroadcastJob { text: string; url?: string; btn?: string; aud: Audience; inbox?: boolean }
 export interface Progress { id: string; status: "queued" | "sending" | "done"; total: number; sent: number; failed: number; created_at: number; done_at?: number; text: string; aud: Audience; cursor: number; ids?: string[]; job: BroadcastJob }
 
@@ -23,6 +23,24 @@ export async function audienceIds(a: Audience): Promise<string[]> {
     const since = Date.now() - Math.max(1, Math.min(365, a.days || 7)) * 86400000;
     const users = ((await db().ref("users").get()).val() || {}) as Record<string, any>;
     return ids.filter((id) => (users[id]?.last_seen || 0) >= since && !users[id]?.banned);
+  }
+  if (a.kind === "wd_no_dep" || a.kind === "dep_no_wd" || a.kind === "never_wd") {
+    const users = ((await db().ref("users").get()).val() || {}) as Record<string, any>;
+    const since = Date.now() - Math.max(1, Math.min(365, a.days || 7)) * 86400000;
+    const wds = (u: any) => [...Object.values(u?.withdrawals || {}), ...Object.values(u?.usdt_withdrawals || {})] as any[];
+    const deps = (u: any) => Object.values(u?.deposits || {}) as any[];
+    return ids.filter((id) => {
+      const u = users[id]; if (!u || u.banned) return false;
+      const w = wds(u), dp = deps(u);
+      if (a.kind === "never_wd") return w.length === 0 && (Number(u.balance) || 0) > 0;
+      if (a.kind === "wd_no_dep") return w.some((x) => (x.created_at || 0) >= since) && dp.length === 0;
+      return dp.length > 0 && w.length === 0;
+    });
+  }
+  if (a.kind === "inactive" || a.kind === "new" || a.kind === "rich") {
+    const users = ((await db().ref("users").get()).val() || {}) as Record<string, any>;
+    const d = Math.max(1, Math.min(365, a.days || 7)) * 86400000, now = Date.now();
+    return ids.filter((id) => { const u = users[id]; if (!u || u.banned) return false; if (a.kind === "inactive") return (u.last_seen || 0) < now - d; if (a.kind === "new") return (u.created_at || 0) >= now - d; return (Number(u.balance) || 0) >= (a.min || 0); });
   }
   const meta = ((await db().ref("user_admin").get()).val() || {}) as Record<string, any>;
   if (a.kind === "tag") { const t = String(a.tag || "").trim().toLowerCase(); return ids.filter((id) => Object.keys(meta[id]?.tags || {}).some((k) => k.toLowerCase() === t)); }
@@ -53,6 +71,7 @@ export async function pumpBroadcasts(): Promise<{ sent: number; jobs: number }> 
       while (cur < ids.length && budget > 0) {
         const uid = ids[cur++];
         budget--;
+        if ((await db().ref(`user_prefs/${uid}/mute/promo`).get()).val()) continue;
         if (p.job.inbox !== false) await inboxPush(uid, p.job.text);
         const params: Record<string, string | number> = { chat_id: uid, text: p.job.text.slice(0, 3500), disable_web_page_preview: "true" };
         if (kb) params.reply_markup = kb;

@@ -1,4 +1,5 @@
 import React from "react";
+import { BR } from "./brandimg";
 
 export type RcptStyle = "b" | "d" | "e" | "f" | "g";
 export const RCPT_STYLES: { id: RcptStyle; name: string }[] = [
@@ -72,7 +73,7 @@ export function rcptJsx(style: RcptStyle, d: RcptData) {
   if (style === "d") {
     return f({ flexDirection: "column", width: W, height: H, background: "#e9edf5", padding: 36, fontFamily: "sans-serif" }, f({ flexDirection: "column", flex: 1, background: "#fff", borderTop: "14px solid #0b1220", padding: "34px 44px 30px" }, <>
       {f({ justifyContent: "space-between", alignItems: "flex-start" }, <>
-        {f({ fontSize: 38, fontWeight: 800, letterSpacing: 4, color: "#0b1220" }, "TFUEL")}
+        {f({ fontSize: 38, fontWeight: 800, letterSpacing: 4, color: "#0b1220" }, BR.label)}
         {f({ flexDirection: "column", alignItems: "flex-end" }, <>{f({ fontSize: 18, color: "#6b7280", letterSpacing: 2 }, "RECEIPT")}{f({ fontSize: 22, fontWeight: 700, color: "#0b1220" }, d.hash.slice(0, 26))}</>)}
       </>)}
       {f({ justifyContent: "space-between", marginTop: 26 }, <>
@@ -87,7 +88,7 @@ export function rcptJsx(style: RcptStyle, d: RcptData) {
       {f({ justifyContent: "space-between", alignItems: "flex-end", marginTop: "auto", paddingTop: 20 }, <>
         {f({ flexDirection: "column" }, <>
           {f({ fontSize: 22, fontWeight: 800, color: sc }, d.status.toUpperCase())}
-          {f({ fontSize: 18, color: "#9aa3b5", marginTop: 4 }, "Electronic receipt issued by TFUEL.")}
+          {f({ fontSize: 18, color: "#9aa3b5", marginTop: 4 }, BR.foot || `Electronic receipt issued by ${BR.label}.`)}
         </>)}
         {qrBlock(d.qr, 100, "Verify")}
       </>)}
@@ -95,7 +96,7 @@ export function rcptJsx(style: RcptStyle, d: RcptData) {
   }
   if (style === "e") {
     return f({ flexDirection: "column", width: W, height: H, background: "#efe6cf", padding: 30, fontFamily: "sans-serif" }, f({ flexDirection: "column", flex: 1, background: "#fbf7ec", border: "6px solid #8a6d2f", outline: "2px solid #8a6d2f", padding: "40px 48px 34px", alignItems: "center", position: "relative" }, <>
-      {f({ fontSize: 22, letterSpacing: 8, color: "#6b5a2c" }, "TFUEL")}
+      {f({ fontSize: 22, letterSpacing: 8, color: "#6b5a2c" }, BR.label)}
       {f({ fontSize: 46, fontWeight: 800, color: "#3b2f12", marginTop: 14 }, d.kind === "w" ? "Certificate of Payout" : d.kind === "d" ? "Certificate of Deposit" : "Certificate of Transfer")}
       {f({ width: 160, height: 4, background: "#8a6d2f", marginTop: 18 })}
       {f({ fontSize: 26, color: "#6b5a2c", marginTop: 26 }, d.kind === "d" ? "This confirms that a deposit of" : d.kind === "w" ? "This confirms that a payout of" : d.out ? "This confirms that you sent" : "This confirms that you received")}
@@ -113,7 +114,7 @@ export function rcptJsx(style: RcptStyle, d: RcptData) {
   if (style === "f") {
     return f({ flexDirection: "column", width: W, height: H, background: "#e9edf5", padding: 36, fontFamily: "sans-serif" }, f({ flexDirection: "column", flex: 1, background: "#fff", borderRadius: 36, padding: "40px 48px 30px" }, <>
       {f({ justifyContent: "space-between", alignItems: "center" }, <>
-        {f({ fontSize: 24, fontWeight: 800, letterSpacing: 3, color: "#0b1220" }, "TFUEL")}
+        {f({ fontSize: 24, fontWeight: 800, letterSpacing: 3, color: "#0b1220" }, BR.label)}
         {f({ fontSize: 21, fontWeight: 700, color: sc, background: SOFT[d.state], padding: "6px 20px", borderRadius: 999 }, d.status)}
       </>)}
       {f({ fontSize: 24, color: "#6b7280", marginTop: 22 }, d.title)}
@@ -135,7 +136,7 @@ export function rcptJsx(style: RcptStyle, d: RcptData) {
   // g — explorer (dark)
   const g = { bg: "#0d1117", line: "#30363d", mute: "#8b949e", txt: "#e6edf3", ok: "#3fb950" };
   return f({ flexDirection: "column", width: W, height: H, background: "#05070a", padding: 36, fontFamily: "monospace" }, f({ flexDirection: "column", flex: 1, background: g.bg, border: `2px solid ${g.line}`, borderRadius: 24, padding: "34px 40px" }, <>
-    {f({ justifyContent: "space-between", fontSize: 21, color: g.mute }, <>{f({}, "TFUEL EXPLORER")}{f({ alignItems: "center", color: d.state === "ok" ? g.ok : d.state === "wait" ? "#d29922" : "#f85149" }, <>{f({ width: 14, height: 14, borderRadius: 999, background: d.state === "ok" ? g.ok : d.state === "wait" ? "#d29922" : "#f85149", marginRight: 10 })}{d.status.toUpperCase()}</>)}</>)}
+    {f({ justifyContent: "space-between", fontSize: 21, color: g.mute }, <>{f({}, `${BR.label} EXPLORER`)}{f({ alignItems: "center", color: d.state === "ok" ? g.ok : d.state === "wait" ? "#d29922" : "#f85149" }, <>{f({ width: 14, height: 14, borderRadius: 999, background: d.state === "ok" ? g.ok : d.state === "wait" ? "#d29922" : "#f85149", marginRight: 10 })}{d.status.toUpperCase()}</>)}</>)}
     {f({ fontSize: 70, fontWeight: 700, color: g.txt, marginTop: 24 }, `${sign}${d.amount}`)}
     {f({ fontSize: 22, color: g.mute, marginTop: 4 }, `${d.title.toUpperCase()}`)}
     {f({ flexDirection: "column", marginTop: 26, borderTop: `2px solid ${g.line}` }, d.rows.concat([[d.hashLabel, d.hash.slice(0, 30)], ["Time", utc(d.at)]]).map(([k, v]) => f({ key: k, justifyContent: "space-between", height: 56, alignItems: "center", fontSize: 22, borderBottom: `2px solid ${g.line}` }, <>{f({ color: g.mute }, k.toUpperCase())}{f({ color: g.txt }, String(v).slice(0, 34))}</>)))}

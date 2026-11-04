@@ -1,5 +1,12 @@
 /** Short highlights shown in Admin → Controls → Version (full history is in CHANGELOG.md) */
 export const CHANGELOG_HIGHLIGHTS: { v: string; text: string }[] = [
+  { v: "27.0", text: "Exchange (calculator, buy and sell requests, price lock, trusted badge), one-tap image sharing to any app, pending items with reasons, low balance alert, search in saved people, last amounts in Send." },
+  { v: "26.0", text: "Invoice links, support page with a goal, Learn lessons with rewards, recovery codes, dark mode schedule, identity check for big USDT withdrawals, admin calendar, ledger CSV and smart alerts." },
+  { v: "25.0", text: "Daily combo, birthday gift, cashback on send fees, daily limit per contact, send again, tournament history, friends milestone card, custom invite name for creators, scheduled pop-ups, keyword auto-replies, admin activity and money audit, activity heatmap, weekly admin summary, public numbers page." },
+  { v: "24.0", text: "Merchant QR: accept payments with a permanent QR, optional fixed price, sales list with today and all-time totals." },
+  { v: "23.0", text: "Hindi language, savings goal, short bio, free lucky draw, shop search, admin read-only API key, broadcast preview." },
+  { v: "22.0", text: "Block list, report a user, note templates, help center with search, ratings for app and support, polls and surveys, bot message switches, invite QR button, new broadcast audiences." },
+  { v: "21.0", text: "Preferences (who can pay you, name shown, lock & hide timers, text size, time format), direct receipt/card save, invite tree, friends ranking, tip link, data export, delete account, admin brand/menu/pages/popup, daily admin digest." },
   { v: "20.2", text: "Choose your card and receipt style, verify QR on receipts, deposit receipts, earnings card + Story share, Upload QR, retry boxes, admin today card and security alerts." },
   { v: "20.1", text: "Emoji replaced by premium line icons across the app, admin and receipts." },
   { v: "20.0", text: "New receipt design, bonus events, community goal, What's new popup, PIN for big sends, money check, error monitor, CSV export, ticket auto-close, shop invoices & sales chart." },

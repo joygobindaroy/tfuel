@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import qrcode from "qrcode-generator";
 import { CopyBtn, Empty, ConfirmSheet, SkelList, RetryBox, AmtInput, PayStepper } from "@/components/Ui";
 import { api, cachedApi, errText, fmtUsd, tg } from "@/lib/client";
+import { LocalAmt } from "@/components/V27";
 import Icon from "@/components/Icons";
 import Logo from "@/components/Logo";
 import { ReceiptActions } from "@/components/SendExtra";
@@ -115,6 +116,7 @@ export function DepositPage({ say, reload, onBack, onHistory, onBuy }: { say: Sa
             <div style={{ flex: 1 }}>
               <div className="sub" style={{ marginTop: 0 }}>USDT balance</div>
               <div className="title num" style={{ fontSize: 22 }}>{usd(m.balances.usdt)} <span className="muted" style={{ fontSize: 13 }}>USDT</span></div>
+              <LocalAmt usdt={m.balances.usdt} />
             </div>
           </div>
           <div className="card" style={{ paddingBottom: 12 }}>

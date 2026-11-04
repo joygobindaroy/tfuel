@@ -1,3 +1,4 @@
+import { assertRequestOk } from "./pv";
 import { ServerValue } from "firebase-admin/database";
 import { db } from "./firebase";
 import { HttpError } from "./auth";
@@ -44,6 +45,7 @@ export async function reqHold(id: string, payer: string): Promise<PayReq> {
   const r0 = (await db().ref(`pay_requests/${id}`).get()).val() as PayReq | null;
   if (!r0) throw new HttpError(404, "request_not_found");
   if (r0.to === payer) throw new HttpError(400, "send_self");
+  await assertRequestOk(payer, r0.to);
   const t = await db().ref(`pay_requests/${id}`).transaction((c: PayReq | null) => {
     if (c === null) return c;
     const n = c.n || 1;
@@ -220,7 +222,8 @@ export async function listLinks(uid: string, s: Settings) {
 /* ───────────── History + contacts ───────────── */
 export async function listXfers(uid: string, limit = 100) {
   const m = ((await db().ref(`user_xfers/${uid}`).get()).val() || {}) as Record<string, any>;
-  return Object.entries(m).sort((a, b) => (b[1].at - a[1].at) || b[0].localeCompare(a[0])).slice(0, limit).map(([id, r]) => ({ id, ...r }));
+  const ct = ((await db().ref(`contacts/${uid}`).get()).val() || {}) as Record<string, Contact>;
+  return Object.entries(m).sort((a, b) => (b[1].at - a[1].at) || b[0].localeCompare(a[0])).slice(0, limit).map(([id, r]) => ({ id, ...r, ...(r.pc && ct[r.pc]?.label ? { peer: ct[r.pc].label } : {}) }));
 }
 export interface Contact { name: string; label: string; at: number; last?: { a: Asset; v: number } }
 export async function listContacts(uid: string) {

@@ -1,3 +1,4 @@
+import { getPvNow } from "@/lib/pvclient";
 import { useState } from "react";
 import { WithdrawPage, PageHead } from "@/components/Cashier";
 import { SendPage } from "@/components/Send";
@@ -6,7 +7,7 @@ type Say = (t: string, ok?: boolean) => void;
 
 /** Withdraw: On-chain (to another exchange / wallet) or Internal transfer (to another user by their unique ID, instant, no network fee) */
 export function WithdrawChoice({ say, reload, onBack, onHistory, cpt, internal, onTrade }: { say: Say; reload: () => void; onBack: () => void; onHistory: () => void; cpt: number; internal: boolean; onTrade?: () => void }) {
-  const [coin, setCoin] = useState<"usdt" | "tfuel">("usdt");
+  const [coin, setCoin] = useState<"usdt" | "tfuel">(getPvNow().da === "tfuel" ? "tfuel" : "usdt");
   const [mode, setMode] = useState<"chain" | "internal">("chain");
   const tabs = (
     <div className="card" style={{ paddingBottom: 12 }}>

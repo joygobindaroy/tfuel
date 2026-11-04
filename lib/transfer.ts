@@ -1,3 +1,4 @@
+import { assertReceiverOk, pvGet } from "./pv";
 import { ServerValue } from "firebase-admin/database";
 import { db } from "./firebase";
 import { HttpError } from "./auth";
@@ -16,8 +17,9 @@ import { assertCanMoveMoney } from "./freeze";
 
 /** Name shown for a user in transfers: nickname if they set one, else their Telegram name */
 export async function displayName(uid: string): Promise<string> {
-  const [nm, nick] = await Promise.all([db().ref(`users/${uid}/name`).get(), db().ref(`user_prefs/${uid}/nick`).get()]);
-  return String(nick.val() || nm.val() || "User").replace(/[\u0000-\u001f\u007f<>]/g, " ").trim().slice(0, 24) || "User";
+  const [nm, nick, sn] = await Promise.all([db().ref(`users/${uid}/name`).get(), db().ref(`user_prefs/${uid}/nick`).get(), db().ref(`user_prefs/${uid}/pv/sn`).get()]);
+  if (sn.val() === "id") { const { getRefCode } = await import("./refcode"); const c = await getRefCode(uid).catch(() => ""); if (c) return `ID ${c}`; }
+  return String(sn.val() === "name" ? nm.val() || "User" : nick.val() || nm.val() || "User").replace(/[\u0000-\u001f\u007f<>]/g, " ").trim().slice(0, 24) || "User";
 }
 /** Transaction hash like an exchanger's internal transfer ID: TF + 40 hex */
 export const makeTxid = (id: string, from: string, to: string, amount: number, at: number) => "TF" + sha256(`tx:${id}:${from}:${to}:${amount}:${at}`).slice(0, 40).toUpperCase();
@@ -124,6 +126,7 @@ export async function sendAsset(from: { id: string; name: string }, toUid: strin
   if (asset === "usdt" ? !c2.xfer.usdt.enabled : !s.send_enabled) throw new HttpError(403, "send_disabled");
   if (toUid === from.id) throw new HttpError(400, "send_self");
   await assertCanMoveMoney(from.id, s);
+  await (await import("./v25")).assertContactLimit(from.id, await getRefCode(toUid).catch(() => ""), asset, amount);
   if (!Number.isInteger(amount) || amount < (await minFor(asset, s))) throw new HttpError(400, "send_min");
   const { fee } = await feeFor(from.id, asset, amount, s);
   const total = amount + fee;
@@ -132,6 +135,7 @@ export async function sendAsset(from: { id: string; name: string }, toUid: strin
   const rcp = (await db().ref(`users/${toUid}`).get()).val() as UserRecord | null;
   if (!rcp) throw new HttpError(404, "send_no_user");
   if ((rcp as any).banned) throw new HttpError(403, "send_no_user");
+  await assertReceiverOk(from.id, toUid);
 
   const unreserve = await reserveDaily(from.id, asset, total, s, now);
   let balance = 0;
@@ -191,6 +195,8 @@ export async function afterSend(fromId: string, fromName: string, toUid: string,
   await activity(toUid, "receive", { ...b, note: `From ${maskName(fromName)} (${fromCode}) · ${txid}` });
   await notify(toUid, `💸 You received ${amtStr(asset, amount, cpt)} from ${maskName(fromName)}.`);
   import("./plus").then((P) => P.xferStat(asset, amount, fee)).catch(() => {});
+  import("./v24").then((M) => M.merchantSale(toUid, fromName, asset, amount, txid, note)).catch(() => {});
+  import("./v26").then((M) => M.afterXfer(toUid, fromName, asset, amount, txid, note)).catch(() => {});
   // receipt: link in the email + picture in the bot chat (both sides, automatically)
   const R = await import("./receipt");
   const rv = new Map<string, import("./receipt").RView>();

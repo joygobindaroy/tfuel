@@ -50,8 +50,36 @@ export interface Mini {
 export interface PostRule { id: string; kind: "price" | "top" | "invite" | "tour" | "custom"; on: boolean; hour: number; every: number; text: string; image: boolean; btn: string }
 export interface EventRule { id: string; title: string; mult: number; start: number; end: number; on: boolean; ann?: boolean }
 export interface V20 { events: EventRule[]; gq: { enabled: boolean; title: string; target: number; bonus: number }; pin_over_usd: number; ticket_close_days: number; whatsnew: boolean; ref_guard: boolean }
+export interface NavItem { id: "tap" | "tasks" | "boost" | "tfuel" | "profile"; name: string; hide: boolean }
+export interface Brand {
+  name: string; logo: string; accent: string; label: string; head: string; foot: string;
+  def_card: string; def_rcpt: string; coin_name: string; contact_label: string; contact_url: string;
+  nav: NavItem[]; pages: { id: string; title: string; body: string }[];
+  popup: { on: boolean; id: string; title: string; text: string; image: string; link: string; btn: string; from: number; to: number };
+  popups: { on: boolean; id: string; title: string; text: string; image: string; link: string; btn: string; from: number; to: number }[];
+}
+export interface V21 { digest: boolean; tree: boolean; friends_board: boolean }
+export interface Poll { id: string; title: string; on: boolean; end: number; qs: { q: string; opts: string[] }[] }
+export interface V22 { help: { id: string; q: string; a: string }[]; polls: Poll[]; feedback: boolean }
+export interface Draw { on: boolean; title: string; prize: number; end: number; every_days: number; per_friend: number; winner: { name: string; at: number; prize: number } | null }
+export interface V23 { draw: Draw }
+export interface V24 { merchant: boolean }
+export interface V25 { combo: { on: boolean; bonus: number }; birthday: { on: boolean; bonus: number }; cashback: { on: boolean; pct: number; min_fee: number }; kw: { words: string; reply: string }[]; stats_public: boolean }
+export interface V26 { lessons: { id: string; title: string; body: string; reward: number }[]; kyc: { on: boolean; usd: number } }
+export interface XMethod { id: string; name: string; details: string; kind: "buy" | "sell" | "both"; min: number; max: number; fee_pct: number }
+export interface Xchg { on: boolean; buy_on: boolean; sell_on: boolean; cur: string; rate_buy: number; rate_sell: number; show_local: boolean; methods: XMethod[]; new_user_hours: number; daily_max_usdt: number; lock_min: number; trusted_after: number; terms: string }
+export interface V27 { sla_h: number; lowbal: boolean }
 export interface Cfg2 {
+  xchg: Xchg;
+  v27: V27;
+  v26: V26;
+  v25: V25;
+  v24: V24;
+  v23: V23;
+  v22: V22;
   v20: V20;
+  brand: Brand;
+  v21: V21;
   posts: { rules: PostRule[]; welcome: { enabled: boolean; text: string }; winpost: boolean };
   xfer: Xfer;
   vip: Vip;
@@ -98,6 +126,15 @@ const QUIZ: Quiz[] = [
 ];
 
 export const CFG2_DEFAULTS: Cfg2 = {
+  xchg: { on: false, buy_on: true, sell_on: true, cur: "BDT", rate_buy: 0, rate_sell: 0, show_local: true, methods: [], new_user_hours: 24, daily_max_usdt: 500, lock_min: 15, trusted_after: 5, terms: "" },
+  v27: { sla_h: 24, lowbal: true },
+  v26: { lessons: [], kyc: { on: false, usd: 500 } },
+  v25: { combo: { on: false, bonus: 200 }, birthday: { on: false, bonus: 500 }, cashback: { on: false, pct: 20, min_fee: 100 }, kw: [], stats_public: false },
+  v24: { merchant: true },
+  v23: { draw: { on: false, title: "Weekly lucky draw", prize: 10000, end: 0, every_days: 7, per_friend: 1, winner: null } },
+  v22: { help: [], polls: [], feedback: true },
+  brand: { name: "", logo: "", accent: "#f5a623", label: "TFUEL", head: "Earn crypto\nevery day", foot: "", def_card: "1", def_rcpt: "b", coin_name: "", contact_label: "Contact us", contact_url: "", nav: [], pages: [], popup: { on: false, id: "", title: "", text: "", image: "", link: "", btn: "Open", from: 0, to: 0 }, popups: [] },
+  v21: { digest: true, tree: true, friends_board: true },
   v20: { events: [], gq: { enabled: false, title: "Community goal", target: 100, bonus: 100 }, pin_over_usd: 0, ticket_close_days: 7, whatsnew: true, ref_guard: true },
   posts: { rules: [], welcome: { enabled: false, text: "Glad you are here! Tap the button to start earning TFUEL." }, winpost: true },
   xfer: { usdt: { enabled: true, fee_pct: 0.5, min: 1, daily: 500 }, hold: { tfuel: 0, usdt: 0, minutes: 10 }, links: { request: true, claim: true, days: 7 } },
@@ -188,7 +225,65 @@ const parseQuiz = (v: any): Quiz[] => {
   return out.slice(0, 300);
 };
 
+const url = (x: any) => (/^https:\/\/[^\s<>"']{3,300}$/.test(String(x || "").trim()) ? String(x).trim() : "");
+const NAVIDS = ["tap", "tasks", "boost", "tfuel", "profile"] as const;
 export const SECTIONS: { [K in keyof Cfg2]: (v: any, cur: Cfg2[K]) => Cfg2[K] } = {
+  xchg: (v) => ({
+    on: bool(v?.on), buy_on: v?.buy_on === undefined ? true : bool(v.buy_on), sell_on: v?.sell_on === undefined ? true : bool(v.sell_on),
+    cur: (str(v?.cur, 6).toUpperCase().replace(/[^A-Z]/g, "") || "BDT"),
+    rate_buy: num(v?.rate_buy, 0, 1e7, 0), rate_sell: num(v?.rate_sell, 0, 1e7, 0), show_local: v?.show_local === undefined ? true : bool(v.show_local),
+    methods: (Array.isArray(v?.methods) ? v.methods : []).slice(0, 12).map((m: any, i: number) => ({
+      id: idOk(m?.id, "m" + (i + 1)), name: str(m?.name, 30), details: String(m?.details ?? "").replace(/[\u0000-\u0008\u000b-\u001f\u007f<>]/g, " ").trim().slice(0, 300),
+      kind: m?.kind === "buy" || m?.kind === "sell" ? m.kind : "both", min: num(m?.min, 0, 1e7, 1), max: num(m?.max, 0, 1e7, 1000), fee_pct: num(m?.fee_pct, 0, 50, 0),
+    })).filter((m: any) => m.name),
+    new_user_hours: int(v?.new_user_hours, 0, 24 * 90, 24), daily_max_usdt: num(v?.daily_max_usdt, 0, 1e7, 500), lock_min: int(v?.lock_min, 1, 240, 15), trusted_after: int(v?.trusted_after, 1, 1000, 5),
+    terms: str(v?.terms, 400),
+  }),
+  v27: (v) => ({ sla_h: int(v?.sla_h, 1, 720, 24), lowbal: v?.lowbal === undefined ? true : bool(v.lowbal) }),
+  v26: (v) => ({
+    lessons: (Array.isArray(v?.lessons) ? v.lessons : []).slice(0, 20).map((l: any, i: number) => ({ id: idOk(l?.id, "l" + (i + 1)), title: str(l?.title, 60), body: String(l?.body ?? "").replace(/[\u0000-\u0008\u000b-\u001f\u007f<>]/g, " ").trim().slice(0, 3000), reward: int(l?.reward, 0, 1e8, 0) })).filter((l: any) => l.title && l.body),
+    kyc: { on: bool(v?.kyc?.on), usd: num(v?.kyc?.usd, 1, 1e7, 500) },
+  }),
+  v25: (v) => ({
+    combo: { on: bool(v?.combo?.on), bonus: int(v?.combo?.bonus, 0, 1e8, 200) },
+    birthday: { on: bool(v?.birthday?.on), bonus: int(v?.birthday?.bonus, 0, 1e8, 500) },
+    cashback: { on: bool(v?.cashback?.on), pct: num(v?.cashback?.pct, 0, 100, 20), min_fee: int(v?.cashback?.min_fee, 0, 1e9, 100) },
+    kw: (Array.isArray(v?.kw) ? v.kw : []).slice(0, 30).map((k: any) => ({ words: str(k?.words, 120).toLowerCase(), reply: String(k?.reply ?? "").replace(/[\u0000-\u0008\u000b-\u001f\u007f<>]/g, " ").trim().slice(0, 800) })).filter((k: any) => k.words && k.reply),
+    stats_public: bool(v?.stats_public),
+  }),
+  v24: (v) => ({ merchant: v?.merchant === undefined ? true : bool(v.merchant) }),
+  v23: (v, cur) => ({
+    draw: {
+      on: bool(v?.draw?.on), title: str(v?.draw?.title, 40) || "Lucky draw", prize: int(v?.draw?.prize, 1, 1e10, 10000),
+      end: int(v?.draw?.end, 0, 4e12, 0), every_days: int(v?.draw?.every_days, 0, 90, 7), per_friend: int(v?.draw?.per_friend, 0, 20, 1),
+      winner: v?.draw?.winner === undefined ? (cur?.draw?.winner ?? null) : v.draw.winner && v.draw.winner.name ? { name: str(v.draw.winner.name, 30), at: int(v.draw.winner.at, 0, 4e12, 0), prize: int(v.draw.winner.prize, 0, 1e10, 0) } : null,
+    },
+  }),
+  v22: (v) => ({
+    help: (Array.isArray(v?.help) ? v.help : []).slice(0, 60).map((h: any, i: number) => ({ id: idOk(h?.id, "h" + (i + 1)), q: str(h?.q, 120), a: String(h?.a ?? "").replace(/[\u0000-\u0008\u000b-\u001f\u007f<>]/g, " ").trim().slice(0, 1500) })).filter((h: any) => h.q && h.a),
+    polls: (Array.isArray(v?.polls) ? v.polls : []).slice(0, 10).map((p: any, i: number) => ({
+      id: idOk(p?.id, "q" + (i + 1)), title: str(p?.title, 80) || "Poll", on: bool(p?.on), end: int(p?.end, 0, 4e12, 0),
+      qs: (Array.isArray(p?.qs) ? p.qs : []).slice(0, 8).map((q: any) => ({ q: str(q?.q, 140), opts: (Array.isArray(q?.opts) ? q.opts : []).map((o: any) => str(o, 60)).filter(Boolean).slice(0, 8) })).filter((q: any) => q.q && q.opts.length >= 2),
+    })).filter((p: any) => p.qs.length),
+    feedback: v?.feedback === undefined ? true : bool(v.feedback),
+  }),
+  brand: (v) => {
+    const nav = NAVIDS.map((id) => { const r = (Array.isArray(v?.nav) ? v.nav : []).find((x: any) => x?.id === id); return r ? { id, name: str(r.name, 10), hide: bool(r.hide) && id !== "tap" && id !== "profile" } : null; }).filter(Boolean) as NavItem[];
+    const order = (Array.isArray(v?.nav) ? v.nav : []).map((x: any) => x?.id);
+    nav.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+    const hex = (x: any, d: string) => (/^#[0-9a-fA-F]{6}$/.test(String(x || "")) ? String(x) : d);
+    return {
+      name: str(v?.name, 30), logo: url(v?.logo), accent: hex(v?.accent, "#f5a623"), label: str(v?.label, 12).toUpperCase() || "TFUEL",
+      head: String(v?.head ?? "Earn crypto\nevery day").replace(/[\u0000-\u0009\u000b-\u001f<>]/g, " ").slice(0, 40) || "Earn crypto\nevery day", foot: str(v?.foot, 60),
+      def_card: ["1", "3", "4", "7"].includes(String(v?.def_card)) ? String(v.def_card) : "1", def_rcpt: ["b", "d", "e", "f", "g"].includes(String(v?.def_rcpt)) ? String(v.def_rcpt) : "b",
+      coin_name: str(v?.coin_name, 14), contact_label: str(v?.contact_label, 20) || "Contact us", contact_url: /^https:\/\/\S{3,300}$/.test(String(v?.contact_url || "")) ? String(v.contact_url) : "",
+      nav,
+      pages: (Array.isArray(v?.pages) ? v.pages : []).slice(0, 8).map((p: any, i: number) => ({ id: idOk(p?.id, "p" + (i + 1)), title: str(p?.title, 30) || "Page", body: String(p?.body ?? "").replace(/[\u0000-\u0008\u000b-\u001f\u007f<>]/g, " ").trim().slice(0, 4000) })),
+      popup: { on: bool(v?.popup?.on), id: str(v?.popup?.id, 20) || String(Date.now()), title: str(v?.popup?.title, 60), text: str(v?.popup?.text, 400), image: url(v?.popup?.image), link: url(v?.popup?.link), btn: str(v?.popup?.btn, 16) || "Open", from: int(v?.popup?.from, 0, 4e12, 0), to: int(v?.popup?.to, 0, 4e12, 0) },
+      popups: (Array.isArray(v?.popups) ? v.popups : []).slice(0, 6).map((p: any, i: number) => ({ on: bool(p?.on), id: str(p?.id, 20) || "pp" + (i + 1), title: str(p?.title, 60), text: str(p?.text, 400), image: url(p?.image), link: url(p?.link), btn: str(p?.btn, 16) || "Open", from: int(p?.from, 0, 4e12, 0), to: int(p?.to, 0, 4e12, 0) })).filter((p: any) => p.title),
+    };
+  },
+  v21: (v) => ({ digest: v?.digest === undefined ? true : bool(v.digest), tree: v?.tree === undefined ? true : bool(v.tree), friends_board: v?.friends_board === undefined ? true : bool(v.friends_board) }),
   v20: (v) => ({
     events: (Array.isArray(v?.events) ? v.events : []).slice(0, 10).map((e: any, i: number) => ({ id: idOk(e?.id, "e" + Date.now().toString(36) + i), title: str(e?.title, 60) || "Bonus event", mult: num(e?.mult, 1, 5, 2), start: int(e?.start, 0, 4e12, 0), end: int(e?.end, 0, 4e12, 0), on: bool(e?.on), ann: bool(e?.ann) })),
     gq: { enabled: bool(v?.gq?.enabled), title: str(v?.gq?.title, 60) || "Community goal", target: int(v?.gq?.target, 2, 5000, 100), bonus: int(v?.gq?.bonus, 1, 1e7, 100) },

@@ -278,6 +278,10 @@ const ERR: Record<string, string> = {
   "Too fast": "Slow down a little.",
   "Not enough energy": "Out of energy. It refills over time.",
   "Too many requests": "Too many requests. Please wait a moment.",
+  kyc_required: "For this amount we need a quick identity check first. Open Settings → Identity check.",
+  contact_limit: "This would pass the daily limit you set for this contact.",
+  recipient_blocks: "This person doesn't accept money from you.",
+  requests_off: "You turned off paying requests from this person. Change it in Settings → Preferences.",
   "Already claimed": "You've already claimed this reward.",
   "Too early": "Please wait a bit longer.",
   "Session expired, reopen the app": "Session expired. Please reopen the app.",
@@ -295,4 +299,49 @@ export function errText(e: any): string {
   if (e?.status >= 500) return "We're having trouble right now. Please try again in a moment.";
   if (/^[A-Z][^_]{8,110}[.!]?$/.test(m) && /\s/.test(m) && !/^Error \d+/.test(m)) return m; // already a readable server sentence
   return /^[a-z][a-z0-9_:]{2,40}$/.test(m) ? `Something went wrong (${m}). Please try again.` : "Something went wrong. Please try again.";
+}
+
+/** Save a picture straight to the phone (no page opens, the site address is not shown).
+ *  Telegram's own download dialog when available; otherwise a normal file download made from the fetched image. */
+export async function saveImage(url: string, name: string): Promise<void> {
+  const abs = url.startsWith("/") ? window.location.origin + url : url;
+  const w: any = tg();
+  try {
+    if (typeof w?.downloadFile === "function" && /^https:\/\//.test(abs) && (typeof w.isVersionAtLeast !== "function" || w.isVersionAtLeast("8.0"))) {
+      w.downloadFile({ url: abs, file_name: name });
+      return;
+    }
+  } catch { /* fall back */ }
+  const r = await fetch(abs);
+  if (!r.ok) throw new Error("download_failed");
+  const b = await r.blob();
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(b);
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+
+/** Preload a picture as a File so a later click can call navigator.share at once (browsers need a fresh tap) */
+export async function loadShareFile(url: string, name: string): Promise<File | null> {
+  try {
+    const abs = url.startsWith("/") ? window.location.origin + url : url;
+    const r = await fetch(abs);
+    if (!r.ok) return null;
+    const b = await r.blob();
+    return new File([b], name, { type: b.type || "image/png" });
+  } catch { return null; }
+}
+/** One-tap share of a picture to any app (system share sheet). Falls back to saving it. */
+export async function shareImage(url: string, name: string, text = "", pre?: File | null): Promise<"shared" | "saved" | "cancelled"> {
+  const f = pre || (await loadShareFile(url, name));
+  const n: any = typeof navigator !== "undefined" ? navigator : null;
+  if (f && n?.canShare && n.canShare({ files: [f] })) {
+    try { await n.share({ files: [f], ...(text ? { text } : {}) }); return "shared"; }
+    catch (e: any) { if (e?.name === "AbortError") return "cancelled"; }
+  }
+  await saveImage(url, name);
+  return "saved";
 }

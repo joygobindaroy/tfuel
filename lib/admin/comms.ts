@@ -14,10 +14,10 @@ import { sendPost } from "../autopost";
 const clean = (v: any, n: number) => String(v ?? "").replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, " ").trim().slice(0, n);
 const httpsOrEmpty = (v: any) => { const s = String(v || "").trim(); if (!s) return ""; if (!/^https:\/\/\S+$/i.test(s)) throw new HttpError(400, "Button link must be an https URL"); return s.slice(0, 300); };
 function parseAud(a: any): Audience {
-  const kind = ["all", "active", "tag", "country"].includes(a?.kind) ? a.kind : "all";
+  const kind = ["all", "active", "tag", "country", "inactive", "rich", "new", "wd_no_dep", "dep_no_wd", "never_wd"].includes(a?.kind) ? a.kind : "all";
   if (kind === "tag" && !clean(a.tag, 30)) throw new HttpError(400, "Enter a tag");
   if (kind === "country" && !/^[A-Za-z]{2}$/.test(String(a.country || ""))) throw new HttpError(400, "Country must be a 2-letter code (BD, IN…)");
-  return { kind, days: Math.min(365, Math.max(1, Math.floor(Number(a?.days)) || 7)), tag: clean(a?.tag, 30), country: String(a?.country || "").toUpperCase().slice(0, 2) };
+  return { kind, days: Math.min(365, Math.max(1, Math.floor(Number(a?.days)) || 7)), tag: clean(a?.tag, 30), country: String(a?.country || "").toUpperCase().slice(0, 2), min: Math.max(0, Math.floor(Number(a?.min)) || 0) };
 }
 const needSuper = (role: string) => { if (role !== "super") throw new HttpError(403, "Only the Super admin can do this"); };
 
@@ -37,7 +37,9 @@ const mod: AdminMod = async (action, b, ctx) => {
       };
     }
     case "broadcastCount": {
-      return { count: (await audienceIds(parseAud(b.aud))).length };
+      const ids = await audienceIds(parseAud(b.aud));
+      const sample = await Promise.all(ids.slice(0, 5).map(async (id) => String((await db().ref(`users/${id}/name`).get()).val() || id).slice(0, 20)));
+      return { count: ids.length, sample };
     }
     case "broadcastSend": {
       needSuper(ctx.role);
@@ -92,7 +94,8 @@ const mod: AdminMod = async (action, b, ctx) => {
     case "commsTickets": {
       const snap = await db().ref("tickets").orderByKey().limitToLast(150).get();
       const items: any[] = [];
-      snap.forEach((c) => { const x = c.val() || {}; items.push({ id: c.key, uid: x.uid, name: x.name, subject: x.subject, status: x.status, tag: x.tag || "", updated_at: x.updated_at, n: Object.keys(x.msgs || {}).length }); });
+      const slaMs = ((await getCfg2()).v27?.sla_h || 24) * 3600000;
+      snap.forEach((c) => { const x = c.val() || {}; const ms = Object.values(x.msgs || {}) as any[]; const last = ms.sort((a, b2) => (a.at || 0) - (b2.at || 0))[ms.length - 1]; const late = x.status !== "closed" && last?.f === "user" && Date.now() - (last.at || 0) > slaMs; items.push({ id: c.key, uid: x.uid, name: x.name, subject: x.subject, status: x.status, tag: x.tag || "", updated_at: x.updated_at, n: ms.length, late }); });
       return { items: items.sort((a, c) => c.updated_at - a.updated_at) };
     }
     case "chatsList": {

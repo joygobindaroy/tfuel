@@ -18,8 +18,8 @@ export const bannerUrl = (base: string, kind: "price" | "top" | "tour", title: s
   return `${base}/api/banner?k=${kind}&t=${encodeURIComponent(t)}&a=${encodeURIComponent(a)}&r=${encodeURIComponent(r)}&s=${sig}`;
 };
 
-export const earnUrl = (base: string, amount: string, period: string, name: string, style = "1") => {
-  const a = amount.slice(0, 24), p = period.slice(0, 20), n = name.slice(0, 24);
-  const sig = crypto.createHmac("sha256", key()).update(`earn|${a}|${p}|${n}`).digest("hex").slice(0, 16);
-  return `${base}/api/earn?a=${encodeURIComponent(a)}&p=${encodeURIComponent(p)}&n=${encodeURIComponent(n)}&s=${sig}&v=${style}`;
+export const earnUrl = (base: string, amount: string, period: string, name: string, style = "1", head = "") => {
+  const a = amount.slice(0, 24), p = period.slice(0, 20), n = name.slice(0, 24), h = head.slice(0, 20);
+  const sig = crypto.createHmac("sha256", key()).update(`earn|${a}|${p}|${n}${h ? "|" + h : ""}`).digest("hex").slice(0, 16);
+  return `${base}/api/earn?a=${encodeURIComponent(a)}&p=${encodeURIComponent(p)}&n=${encodeURIComponent(n)}&s=${sig}&v=${style}${h ? `&h=${encodeURIComponent(h)}` : ""}`;
 };

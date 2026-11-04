@@ -1,4 +1,5 @@
 import React from "react";
+import { BR } from "./brandimg";
 
 export type CardStyle = "1" | "3" | "4" | "7";
 export const CARD_STYLES: { id: CardStyle; name: string }[] = [
@@ -27,8 +28,8 @@ const fit = (s: string) => (s.length > 14 ? 40 : s.length > 9 ? 50 : 62);
 export function cardJsx(style: CardStyle, d: CardData) {
   const base: React.CSSProperties = { display: "flex", position: "relative", width: CARD_W, height: CARD_H, overflow: "hidden", fontFamily: "sans-serif" };
   const pad: React.CSSProperties = { display: "flex", flexDirection: "column", justifyContent: "space-between", width: CARD_W, height: CARD_H, padding: "44px 56px", position: "relative" };
-  const logo = (bg: string, fg: string, col: string, label = "TFUEL") => row({ alignItems: "center" }, <>
-    <div style={{ display: "flex", width: 46, height: 46, borderRadius: 999, background: bg, color: fg, alignItems: "center", justifyContent: "center", fontSize: 26, fontWeight: 800 }}>T</div>
+  const logo = (bg: string, fg: string, col: string, label = BR.label) => row({ alignItems: "center" }, <>
+    <div style={{ display: "flex", width: 46, height: 46, borderRadius: 999, background: bg, color: fg, alignItems: "center", justifyContent: "center", fontSize: 26, fontWeight: 800 }}>{BR.label.slice(0, 1)}</div>
     <div style={{ display: "flex", marginLeft: 14, fontSize: 30, fontWeight: 800, letterSpacing: 4, color: col }}>{label}</div>
   </>);
 
@@ -90,7 +91,7 @@ export function cardJsx(style: CardStyle, d: CardData) {
       <div style={{ ...base, background: "linear-gradient(135deg,#111827,#1f2a5c 60%,#3b2a7a)" }}>
         <div style={pad}>
           {row({ justifyContent: "space-between", alignItems: "center" }, <>
-            {logo("#f5a623", "#111827", "#ffffff")}
+            {logo(BR.accent, "#111827", "#ffffff")}
             <div style={{ display: "flex", fontSize: 22, color: "#aab4d4", letterSpacing: 3 }}>{d.tag || "MEMBER CARD"}</div>
           </>)}
           <div style={{ display: "flex", flexDirection: "column" }}>
@@ -117,18 +118,18 @@ export function cardJsx(style: CardStyle, d: CardData) {
       <div style={{ display: "flex", position: "absolute", left: -200, bottom: -260, width: 640, height: 640, borderRadius: 999, background: "radial-gradient(circle,#0e6b8f,#0a102000 70%)" }} />
       <div style={pad}>
         {row({ justifyContent: "space-between", alignItems: "center" }, <>
-          {logo("#f5a623", "#0a1020", "#ffffff")}
+          {logo(BR.accent, "#0a1020", "#ffffff")}
           {d.tag && <div style={{ display: "flex", fontSize: 22, color: "#aab4d4", letterSpacing: 3 }}>{d.tag}</div>}
         </>)}
         <div style={{ display: "flex", flexDirection: "column" }}>
           <div style={{ display: "flex", fontSize: 26, color: "#aab4d4" }}>{d.kicker}</div>
           {lines(d.h1, { fontSize: 72, fontWeight: 800, color: "#fff", lineHeight: 1.05 })}
-          {d.big && <div style={{ display: "flex", fontSize: 60, fontWeight: 800, color: "#f5a623", marginTop: 8 }}>{d.big}</div>}
+          {d.big && <div style={{ display: "flex", fontSize: 60, fontWeight: 800, color: BR.accent, marginTop: 8 }}>{d.big}</div>}
         </div>
         {row({ justifyContent: "space-between", alignItems: "flex-end" }, <>
           <div style={{ display: "flex", flexDirection: "column" }}>
             {d.code && <div style={{ display: "flex", fontSize: 20, color: "#aab4d4" }}>Your code</div>}
-            {d.code && <div style={{ display: "flex", fontSize: fit(d.code), fontWeight: 800, color: "#f5a623", letterSpacing: 4 }}>{d.code}</div>}
+            {d.code && <div style={{ display: "flex", fontSize: fit(d.code), fontWeight: 800, color: BR.accent, letterSpacing: 4 }}>{d.code}</div>}
             {d.foot && <div style={{ display: "flex", fontSize: 24, color: "#aab4d4", marginTop: 6 }}>{d.foot}</div>}
           </div>
           {qrBox(d.qr, "#ffffff")}

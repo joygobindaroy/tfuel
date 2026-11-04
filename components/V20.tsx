@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import Icon from "@/components/Icons";
-import { api, tg, openLink, openTgLink, errText } from "@/lib/client";
+import { api, tg, openLink, openTgLink, errText, saveImage, shareImage } from "@/lib/client";
 
 /** "What's new" popup: shown once per version to people who have been here a day or more */
 export function WhatsNew({ w, onDone }: { w: { version: string; text: string }; onDone: () => void }) {
@@ -39,7 +39,7 @@ export function EventStrip({ ev, gq }: { ev?: { mult: number } | null; gq?: { ti
 type Looks = { card: string; rcpt: string; cards: { id: string; name: string; url: string }[]; rcpts: { id: string; name: string; url: string }[]; share: { link: string; card: string; earn: string; earned: string; text: string } };
 
 /** Settings → Looks: pick the card and receipt style, then share the pictures (chat or Telegram Story) */
-export function LooksCard({ say }: { say: (m: string, ok?: boolean) => void }) {
+export function LooksCard({ say, part = "all" }: { say: (m: string, ok?: boolean) => void; part?: "all" | "card" | "rcpt" }) {
   const [d, setD] = useState<Looks | null>(null);
   const [busy, setBusy] = useState(false);
   const load = async (b: Record<string, string> = {}) => { try { setD(await api<Looks>("looks", b)); } catch (e) { say(errText(e)); } };
@@ -64,13 +64,11 @@ export function LooksCard({ say }: { say: (m: string, ok?: boolean) => void }) {
   );
   return (
     <div className="card">
-      <div className="title">Looks</div>
-      <div className="sub">Choose how your cards and receipts look.</div>
-      <div className="b" style={{ marginTop: 10 }}>Card style</div>
-      <Chips k="card" items={d.cards} cur={d.card} />
-      <div className="b" style={{ marginTop: 14 }}>Receipt style</div>
-      <Chips k="rcpt" items={d.rcpts} cur={d.rcpt} />
-      {d.share.card && (
+      <div className="title">{part === "card" ? "My invite card" : part === "rcpt" ? "Receipt style" : "Looks"}</div>
+      <div className="sub">{part === "card" ? "Pick the card people see when you share your invite." : part === "rcpt" ? "Choose how your receipts look." : "Choose how your cards and receipts look."}</div>
+      {part !== "rcpt" && <><div className="b" style={{ marginTop: 10 }}>Card style</div><Chips k="card" items={d.cards} cur={d.card} /></>}
+      {part !== "card" && <><div className="b" style={{ marginTop: 14 }}>Receipt style</div><Chips k="rcpt" items={d.rcpts} cur={d.rcpt} /></>}
+      {part !== "rcpt" && d.share.card && (
         <>
           <div className="b" style={{ marginTop: 14 }}>Share</div>
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -78,7 +76,8 @@ export function LooksCard({ say }: { say: (m: string, ok?: boolean) => void }) {
           <div className="gap" style={{ marginTop: 8 }}>
             <button className="btn sec sm" onClick={() => chat(d.share.text)}><Icon name="send" size={13} /> Send</button>
             <button className="btn sec sm" onClick={() => story(d.share.card, d.share.text)}><Icon name="image" size={13} /> Story</button>
-            <button className="btn sec sm" onClick={() => openLink(d.share.card)}><Icon name="download" size={13} /> Image</button>
+            <button className="btn sec sm" onClick={() => saveImage(d.share.card, "tfuel-invite.png").catch(() => say("Could not save the picture"))}><Icon name="download" size={13} /> Save</button>
+            <button className="btn sec sm" onClick={() => shareImage(d.share.card, "tfuel-invite.png", d.share.text).catch(() => say("Could not share the picture"))}><Icon name="send" size={13} /> Share image</button>
           </div>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           {d.share.earn && <img src={d.share.earn} alt="" loading="lazy" style={{ width: "100%", borderRadius: 14, marginTop: 14 }} />}
@@ -86,7 +85,8 @@ export function LooksCard({ say }: { say: (m: string, ok?: boolean) => void }) {
             <div className="gap" style={{ marginTop: 8 }}>
               <button className="btn sec sm" onClick={() => chat(`I earned ${d.share.earned} this week on TFUEL!`)}><Icon name="send" size={13} /> Send</button>
               <button className="btn sec sm" onClick={() => story(d.share.earn, `I earned ${d.share.earned} this week`)}><Icon name="image" size={13} /> Story</button>
-              <button className="btn sec sm" onClick={() => openLink(d.share.earn)}><Icon name="download" size={13} /> Image</button>
+              <button className="btn sec sm" onClick={() => saveImage(d.share.earn, "tfuel-earnings.png").catch(() => say("Could not save the picture"))}><Icon name="download" size={13} /> Save</button>
+              <button className="btn sec sm" onClick={() => shareImage(d.share.earn, "tfuel-earnings.png", `I earned ${d.share.earned} this week on TFUEL!`).catch(() => say("Could not share the picture"))}><Icon name="send" size={13} /> Share image</button>
             </div>
           )}
         </>

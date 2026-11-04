@@ -1,4 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
+import { LooksCard } from "@/components/V20";
+import { TreeCard, FriendsBoard } from "@/components/V21";
+import { QrSheet } from "@/components/V22";
+import { MilestoneCard, AliasCard } from "@/components/V25";
 import { CopyBtn, SkelList, AmtInput, confetti } from "@/components/Ui";
 import { api, cachedApi, errText, fmtTf, fmtUsd, openTgLink, tg } from "@/lib/client";
 import Icon from "@/components/Icons";
@@ -250,6 +254,7 @@ function Stake({ g, cpt, price, say, done }: { g: G; cpt: number; price: number;
 
 function Friends({ g, cpt, say }: { g: G; cpt: number; say: Say }) {
   const r = g.referral;
+  const [qr, setQr] = useState(false);
   if (!r.enabled) return <div className="card empty">Referrals are paused right now.</div>;
   const share = () => {
     const text = "Earn TFUEL by tapping and reading — join me!";
@@ -273,13 +278,22 @@ function Friends({ g, cpt, say }: { g: G; cpt: number; say: Say }) {
               <span className="xs" style={{ wordBreak: "break-all", flex: 1, userSelect: "text", fontWeight: 600 }}>{r.link}</span>
               <CopyBtn text={r.link} />
             </div>
-            <button className="btn block" style={{ marginTop: 12 }} onClick={share}><Icon name="send" size={16} /> Share invite</button>
+            <div className="grid2" style={{ marginTop: 12 }}>
+              <button className="btn" onClick={share}><Icon name="send" size={16} /> Share invite</button>
+              <button className="btn sec" onClick={() => setQr(true)}><Icon name="image" size={16} /> Show QR</button>
+            </div>
+            {qr && <QrSheet link={r.link} onClose={() => setQr(false)} />}
           </>
         ) : (
           <div className="banner warn"><Icon name="alert" size={18} /><span>Invite link isn&apos;t ready yet. Please check back soon.</span></div>
         )}
         {r.pending && <div className="banner info"><Icon name="info" size={18} /><span>You joined through an invite. Finish your first task to unlock your welcome bonus.</span></div>}
       </div>
+      {r.link && <LooksCard say={say} part="card" />}
+      <TreeCard say={say} cpt={cpt} />
+      <MilestoneCard say={say} />
+      <AliasCard say={say} />
+      <FriendsBoard say={say} />
       <div className="grid2" style={{ marginBottom: 12 }}>
         <div className="card" style={{ marginBottom: 0 }}><div className="sub">Friends joined</div><div className="title num" style={{ fontSize: 20 }}>{r.count}</div></div>
         <div className="card" style={{ marginBottom: 0 }}><div className="sub">Earned</div><div className="title num" style={{ fontSize: 20 }}>{fmtTf(r.earned, cpt)}</div>{r.commissionPct > 0 && <div className="xs muted">incl. {fmtTf(r.commission, cpt)} from {r.commissionPct}% commission</div>}</div>

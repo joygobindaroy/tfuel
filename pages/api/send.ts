@@ -71,7 +71,8 @@ export default route(async (req, res) => {
     const rows = Object.values(((await db().ref(`user_xfers/${user.id}`).get()).val() || {}) as Record<string, any>);
     const first = !rows.some((x: any) => x.d === "out" && x.pc === code0 && x.st !== "cancelled");
     const ct = (await db().ref(`contacts/${user.id}/${code0}`).get()).val() as any;
-    return void res.json({ success: true, name: r.name, first, last: ct?.last || null });
+    const bio = r.uid ? String((await db().ref(`user_prefs/${r.uid}/bio`).get()).val() || "") : "";
+    return void res.json({ success: true, name: r.name, bio, first, last: ct?.last || null });
   }
   if (action === "prepare") {
     const t = await resolve();

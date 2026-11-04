@@ -1,4 +1,5 @@
 import { ImageResponse } from "next/og";
+import { loadBr } from "@/lib/brandimg";
 import { cardJsx, cardStyleOk, CARD_W, CARD_H } from "@/lib/cardkit";
 import { qrDataUrl } from "@/lib/qrsvg";
 
@@ -14,6 +15,7 @@ const out = (el: React.ReactElement) => new ImageResponse(el, { width: CARD_W, h
 
 /** Tournament winner card: /api/win?t=<title>&r=<rank>&p=<prize>&n=<name>&s=<sig>&v=<style> */
 export default async function handler(req: Request) {
+  await loadBr(req.url);
   const q = new URL(req.url).searchParams;
   const t = (q.get("t") || "").slice(0, 50), r = (q.get("r") || "").slice(0, 3), p = (q.get("p") || "").slice(0, 14), n = (q.get("n") || "").slice(0, 24);
   if (!t || (await sign(`win|${t}|${r}|${p}|${n}`)) !== q.get("s")) return new Response("forbidden", { status: 403 });

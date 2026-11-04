@@ -46,6 +46,9 @@ async function askAi(text: string, faq: { q: string; a: string }[], model: strin
 /** Reply text for a free-text message sent to the bot, or null when the bot shouldn't answer */
 export async function faqReply(text: string, s: Settings): Promise<{ text: string; found: boolean } | null> {
   const cfg = await getCfg2();
+  const low = text.toLowerCase();
+  const kw = cfg.v25.kw.find((k) => k.words.split(/[,\s]+/).filter(Boolean).some((w) => low.includes(w)));
+  if (kw) return { text: kw.reply, found: true };
   if (!cfg.faqbot.enabled || !s.faq?.length) return null;
   const hit = matchFaq(text, s.faq, cfg.faqbot.min_score);
   if (hit) return { text: `${hit.a}`, found: true };

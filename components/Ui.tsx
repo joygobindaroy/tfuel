@@ -110,7 +110,7 @@ export function OfflineBar() {
 export function confetti(n = 36) {
   haptic("success");
   try {
-    if (typeof document === "undefined" || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    if (typeof document === "undefined" || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches || document.documentElement.classList.contains("noanim")) return;
     const host = document.createElement("div");
     host.className = "confetti";
     const colors = ["#f59e0b", "#16a34a", "#2563eb", "#e5484d", "#a855f7", "#ffd27a"];

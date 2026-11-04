@@ -2,6 +2,7 @@ import crypto from "crypto";
 import { db } from "./firebase";
 import { HttpError } from "./auth";
 import { getSettings } from "./settings";
+import { pvGet } from "./pv";
 import { tgCall } from "./telegram";
 import { appBase } from "./mailtpl";
 import { rcptStyleOf } from "./styles";
@@ -12,10 +13,23 @@ import { amtStr, displayName, maskName, Asset } from "./transfer";
 const key = () => crypto.createHash("sha256").update("card:" + (process.env.BOT_TOKEN || "dev")).digest("hex");
 const hmac = (s: string) => crypto.createHmac("sha256", key()).update(s).digest("hex").slice(0, 20);
 
-export interface RView { txid: string; at: number; asset: Asset; amount: number; fee: number; dir: "out" | "in" | "wd" | "dep"; other: string; otherCode: string; note: string; held: boolean; amtText?: string; st?: string; feeText?: string; netText?: string; created?: number }
+export interface RView { txid: string; at: number; asset: Asset; amount: number; fee: number; dir: "out" | "in" | "wd" | "dep"; other: string; otherCode: string; note: string; held: boolean; amtText?: string; st?: string; z?: number | null; p12?: boolean; feeText?: string; netText?: string; created?: number }
 
 /** the receipt as one party sees it; the other party's name is masked for the receiver */
-export async function loadReceipt(txid: string, uid: string): Promise<RView> {
+export async function loadReceipt(txid: string, uid: string): Promise<RView> { return withPv(await loadReceiptRaw(txid, uid), uid); }
+/** time style and the person's own name for the other side (saved contact) */
+export async function withPv(r: RView, uid: string): Promise<RView> {
+  try {
+    const p = await pvGet(uid);
+    const out: RView = { ...r, z: p.tz, p12: p.tf === "12" };
+    if (r.dir === "out" || r.dir === "in") {
+      if (r.otherCode) { const lb = (await db().ref(`contacts/${uid}/${r.otherCode}/label`).get()).val(); if (typeof lb === "string" && lb) out.other = lb; }
+      if (!out.note && p.rn) out.note = "";
+    }
+    return out;
+  } catch { return r; }
+}
+async function loadReceiptRaw(txid: string, uid: string): Promise<RView> {
   if (/^WD[UT]-[-_A-Za-z0-9]{6,40}$/.test(String(txid || ""))) return loadWithdrawReceipt(String(txid), uid);
   if (/^DEP-[-_A-Za-z0-9]{6,40}$/.test(String(txid || ""))) return loadDepositReceipt(String(txid), uid);
   const tid = String(txid || "").toUpperCase();
@@ -65,7 +79,7 @@ export async function loadDepositReceipt(txid: string, uid: string): Promise<RVi
 export const pageSig = (txid: string, uid: string) => hmac(`r|${txid}|${uid}`);
 export function receiptLinks(r: RView, uid: string, cpt: number, base = appBase(), style = "b", y1 = false) {
   const page = `${base}/receipt?t=${r.txid}&u=${encodeURIComponent(uid)}&s=${pageSig(r.txid, uid)}${style !== "b" || y1 ? `&y=${style}` : ""}`;
-  const d = Buffer.from(JSON.stringify({ t: r.txid, at: r.at, v: r.dir === "wd" ? "wd" : r.dir, a: r.amtText || amtStr(r.asset, r.amount, cpt), s: r.st || "", c0: r.created || 0, x: r.netText || "", fe: r.feeText || "", f: r.fee ? amtStr(r.asset, r.fee, cpt) : "", o: r.other, c: r.otherCode, n: r.note, h: r.held ? 1 : 0 })).toString("base64url");
+  const d = Buffer.from(JSON.stringify({ t: r.txid, at: r.at, v: r.dir === "wd" ? "wd" : r.dir, a: r.amtText || amtStr(r.asset, r.amount, cpt), s: r.st || "", c0: r.created || 0, z: r.z ?? 0, p: r.p12 ? 1 : 0, x: r.netText || "", fe: r.feeText || "", f: r.fee ? amtStr(r.asset, r.fee, cpt) : "", o: r.other, c: r.otherCode, n: r.note, h: r.held ? 1 : 0 })).toString("base64url");
   const img = `${base}/api/receipt-img?d=${d}&s=${hmac("i|" + d)}&y=${style}`;
   return { page, img };
 }

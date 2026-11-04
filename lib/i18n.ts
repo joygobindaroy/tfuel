@@ -3,14 +3,14 @@
  * known texts on screen (text nodes and placeholders only, never the page structure). Changing the language reloads the app.
  * Text that is not in the list simply stays in English.
  */
-export type Lang = "en" | "bn";
+export type Lang = "en" | "bn" | "hi";
 const KEY = "tfuel_lang";
 export function getLang(): Lang {
   try {
     const v = localStorage.getItem(KEY);
-    if (v === "bn" || v === "en") return v;
+    if (v === "bn" || v === "en" || v === "hi") return v;
     const tg = (window as any).Telegram?.WebApp?.initDataUnsafe?.user?.language_code;
-    return tg === "bn" ? "bn" : "en";
+    return tg === "bn" ? "bn" : tg === "hi" ? "hi" : "en";
   } catch { return "en"; }
 }
 export function setLang(l: Lang) {
@@ -19,8 +19,10 @@ export function setLang(l: Lang) {
 }
 
 import { BN } from "./i18n-bn";
+import { HI } from "./i18n-hi";
 const norm = (s: string) => s.replace(/[’‘]/g, "'").replace(/\s+/g, " ").trim();
-const MAP: Record<string, string> = Object.fromEntries(Object.entries(BN).map(([k, v]) => [norm(k), v]));
+const LANG0 = typeof window !== "undefined" ? getLang() : "en";
+const MAP: Record<string, string> = Object.fromEntries(Object.entries(LANG0 === "hi" ? HI : BN).map(([k, v]) => [norm(k), v]));
 export const tr = (s: string) => MAP[norm(s)] || s;
 
 const orig = new WeakMap<Node, string>();
@@ -49,9 +51,9 @@ function node(n: Node) {
 let started = false;
 /** Call once on the client. Does nothing for English. */
 export function startTranslator() {
-  if (started || typeof document === "undefined" || getLang() !== "bn") return;
+  if (started || typeof document === "undefined" || getLang() === "en") return;
   started = true;
-  document.documentElement.lang = "bn";
+  document.documentElement.lang = getLang();
   let queue = new Set<Node>();
   let raf = 0;
   const flush = () => { raf = 0; const q = queue; queue = new Set(); q.forEach((n) => { if (n.isConnected) node(n); }); };

@@ -105,6 +105,7 @@ export function ShopsPage({ say, onBack, cpt }: { say: Say; onBack: () => void; 
   const [d, setD] = useState<{ enabled: boolean; shops: ShopRow[]; orders: OrderRow[] } | null>(null);
   const [busy, setBusy] = useState("");
   const [subs, setSubs] = useState<any[]>([]);
+  const [sq, setSq] = useState("");
   useEffect(() => { api<any>("shop-user", { action: "subs" }).then((r) => setSubs(r.items)).catch(() => {}); }, []);
   const [failS, setFailS] = useState(false);
   const load = useCallback(() => { setFailS(false); cachedApi<any>("shop-user", { action: "list" }, setD).catch((e) => { setFailS(true); say(errText(e)); }); }, [say]);
@@ -132,7 +133,8 @@ export function ShopsPage({ say, onBack, cpt }: { say: Say; onBack: () => void; 
         <>
           <div className="banner" style={{ marginTop: 0 }}><Icon name="info" size={18} /><span>Open a partner shop and you&apos;re signed in automatically. At checkout, choose to pay with TFUEL or USDT.</span></div>
           {d.shops.length === 0 && <Empty icon="gift" title="No shops yet" hint="Partner shops will appear here." />}
-          {d.shops.map((s) => (
+          {d.shops.length > 4 && <input placeholder="Search shops…" value={sq} onChange={(e) => setSq(e.target.value)} style={{ margin: "8px 0" }} />}
+          {d.shops.filter((s) => !sq.trim() || (s.name + " " + s.domain).toLowerCase().includes(sq.trim().toLowerCase())).map((s) => (
             <div className="card" key={s.id}>
               <div className="row">
                 <div className="left">

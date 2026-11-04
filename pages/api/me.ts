@@ -1,5 +1,6 @@
 import { getCfg2 } from "@/lib/cfg2";
 import { gqView, vnum } from "@/lib/v20";
+import { pvGet } from "@/lib/pv";
 import { eventMult } from "@/lib/events";
 import { VERSION } from "@/lib/version";
 import { CHANGELOG_HIGHLIGHTS } from "@/lib/changelog";
@@ -154,9 +155,12 @@ export default route(async (req, res) => {
     cur: (await prefsP).val() === "usdt" ? "usdt" : (await prefsP).val() === "tfuel" ? "tfuel" : null,
     showIntro: !u.onboarded && !u.recovered && !(u.balance > 0) && !u.earn && !!u.created_at && now - u.created_at < 3 * 86400000,
     terms: termsP && (Number((await termsP).val()) || 0) < settings.terms_version ? { version: settings.terms_version, text: settings.terms_text, url: settings.terms_url } : null,
+    pv: await pvGet(user.id),
     gq: await gqView().catch(() => null),
     ev: await eventMult().then((m) => (m > 1 ? { mult: m } : null)).catch(() => null),
+    brand: (() => { const b = c2.brand; const t = Date.now(); const pp = b.popup; return { name: b.name, logo: b.logo, coin: b.coin_name, contact: b.contact_url ? { label: b.contact_label, url: b.contact_url } : null, nav: b.nav, pages: b.pages, popup: (() => { const q = [pp, ...(b.popups || [])].find((x) => x.on && x.title && (!x.from || t >= x.from) && (!x.to || t <= x.to)); return q ? { id: q.id, title: q.title, text: q.text, image: q.image, link: q.link, btn: q.btn } : null; })() }; })(),
     whatsnew: c2.v20.whatsnew && Number((await db().ref(`user_prefs/${user.id}/seen_v`).get()).val() || 0) < vnum(VERSION) && !!u.created_at && now - u.created_at > 86400000 ? { version: VERSION, text: (CHANGELOG_HIGHLIGHTS[0]?.text || "") } : null,
+    xl: await (await import("@/lib/v27")).xLocal().catch(() => null),
     faq: settings.faq,
     ret: await retentionState(user.id, u, settings, now).catch(() => null),
     dm: await missionsView(user.id, settings).catch(() => null),

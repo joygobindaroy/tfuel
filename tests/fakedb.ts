@@ -15,6 +15,7 @@ export function makeDb() {
     get: async () => ({ val: () => clone(getAt(path)), exists: () => getAt(path) !== null }),
     set: async (v: any) => setAt(path, v),
     remove: async () => setAt(path, null),
+    orderByKey: () => ({ limitToLast: (n: number) => ({ get: async () => { const v = getAt(path) || {}; const ks = Object.keys(v).sort().slice(-n); return { val: () => clone(Object.fromEntries(ks.map((k) => [k, v[k]]))), forEach: (cb: any) => { for (const k of ks) cb({ key: k, val: () => clone(v[k]) }); } }; } }) }),
     child: (k: string) => ref(path + "/" + k),
     update: async (u: any) => { for (const [k, v] of Object.entries(u)) setAt(path + "/" + k, (v as any)?.[".sv"] ? (Number(getAt(path + "/" + k)) || 0) + (v as any)[".sv"].increment : v); },
     transaction: async (fn: (c: any) => any) => {

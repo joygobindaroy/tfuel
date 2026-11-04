@@ -1,0 +1,60 @@
+import { ServerValue } from "firebase-admin/database";
+import { db } from "./firebase";
+import { HttpError } from "./auth";
+import { getCfg2 } from "./cfg2";
+import { getRefCode, resolveRef } from "./refcode";
+import { getSettings } from "./settings";
+import { sortableId } from "./crypto";
+import { dayKey } from "./log";
+
+const val = async (p: string) => (await db().ref(p).get()).val();
+const clean = (v: any, n: number) => String(v ?? "").replace(/[\u0000-\u001f\u007f<>]/g, " ").trim().slice(0, n);
+export interface Merchant { name: string; on: boolean; amt: number; asset: "tfuel" | "usdt" }
+
+export async function merchantGet(uid: string): Promise<Merchant | null> {
+  const m = await val(`merchants/${uid}`);
+  return m ? { name: String(m.name || ""), on: !!m.on, amt: Number(m.amt) || 0, asset: m.asset === "usdt" ? "usdt" : "tfuel" } : null;
+}
+export async function merchantSet(uid: string, b: any): Promise<Merchant> {
+  if (!(await getCfg2()).v24.merchant) throw new HttpError(403, "feature_off:Merchant QR is turned off.");
+  const name = clean(b?.name, 30);
+  if (name.length < 2) throw new HttpError(400, "Enter your shop name (2 or more letters).");
+  const asset = b?.asset === "usdt" ? "usdt" : "tfuel";
+  const amt = Math.max(0, Math.min(1e9, Math.round(Number(b?.amt || 0) * 1e6) / 1e6)) || 0;
+  const m: Merchant = { name, on: !!b?.on, amt, asset };
+  await db().ref(`merchants/${uid}`).update({ ...m, at: Date.now() });
+  return m;
+}
+/** What a customer sees after scanning */
+export async function merchantPub(code: string) {
+  if (!/^[A-Za-z0-9]{10}$/.test(code)) throw new HttpError(400, "bad_code");
+  const uid = await resolveRef(code);
+  const m = uid ? await merchantGet(uid) : null;
+  if (!uid || !m || !m.on || !(await getCfg2()).v24.merchant) throw new HttpError(404, "This shop isn't accepting payments right now.");
+  return { name: m.name, amt: m.amt, asset: m.asset };
+}
+export async function merchantLink(uid: string) {
+  const base = (await getSettings()).referral_link;
+  return base ? `${base.replace(/\?.*$/, "")}?startapp=mer_${await getRefCode(uid)}` : "";
+}
+/** Called after every completed transfer: if the receiver is an open merchant, record a sale */
+export async function merchantSale(toUid: string, fromName: string, asset: "tfuel" | "usdt", amount: number, txid: string, note: string) {
+  const m = await val(`merchants/${toUid}/on`);
+  if (!m) return;
+  const day = dayKey();
+  await db().ref().update({
+    [`merchant_sales/${toUid}/${sortableId()}`]: { at: Date.now(), a: asset, amt: amount, who: clean(fromName, 20).replace(/^(.).*$/, (s) => s.slice(0, 1) + "***" + (s.length > 4 ? s.slice(-1) : "")), tx: txid, n: clean(note, 40) },
+    [`merchant_tot/${toUid}/${day}/${asset}`]: ServerValue.increment(amount),
+    [`merchant_tot/${toUid}/${day}/n`]: ServerValue.increment(1),
+    [`merchant_tot/${toUid}/all/${asset}`]: ServerValue.increment(amount),
+    [`merchant_tot/${toUid}/all/n`]: ServerValue.increment(1),
+  });
+}
+export async function merchantSales(uid: string) {
+  let rows: any[] = [];
+  try { rows = Object.values(((await db().ref(`merchant_sales/${uid}`).orderByKey().limitToLast(50).get()).val() || {}) as Record<string, any>); }
+  catch { rows = Object.values(((await val(`merchant_sales/${uid}`)) || {}) as Record<string, any>).slice(-50); }
+  const t = ((await val(`merchant_tot/${uid}`)) || {}) as any;
+  const pick = (x: any) => ({ tfuel: Number(x?.tfuel) || 0, usdt: Number(x?.usdt) || 0, n: Number(x?.n) || 0 });
+  return { today: pick(t[dayKey()]), all: pick(t.all), list: rows.sort((a, b) => b.at - a.at).slice(0, 30) };
+}

@@ -24,6 +24,8 @@ export async function resolveRef(param: string | undefined): Promise<string | nu
   if (!param) return null;
   const old = /^ref_(\d{1,20})$/.exec(param);
   if (old) return old[1];
+  const al = /^c_([a-z0-9]{3,16})$/.exec(param);
+  if (al) { const v = (await db().ref(`ref_alias/${al[1]}`).get()).val(); return typeof v === "string" ? v : null; }
   if (/^[A-Za-z0-9]{10}$/.test(param)) {
     const v = (await db().ref(`ref_codes/${param}`).get()).val();
     return typeof v === "string" ? v : null;

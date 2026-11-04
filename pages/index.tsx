@@ -5,7 +5,7 @@ import { ReceiptSheet, NextReward } from "@/components/Extras";
 import { ClanPage, RigsPage, PuzzlePage, CollectPage } from "@/components/Games";
 import { MiniPage, VipPage } from "@/components/Mini";
 import { InvitePlusPage, ReportPage, AutoConvertCard, MoveAlertCard, PlCard } from "@/components/More";
-import { BRAND } from "@/lib/brand";
+import { BRAND, LOGO_SOURCES } from "@/lib/brand";
 import Logo from "@/components/Logo";
 import Icon from "@/components/Icons";
 import Market from "@/components/Market";
@@ -15,6 +15,18 @@ import { Bell, Onboarding, CurrencyPick, TermsGate } from "@/components/Inbox";
 import { PaySheet, ShopsPage, SupportPage, InviteCard } from "@/components/Shops";
 import { SendPage } from "@/components/Send";
 import { WhatsNew, EventStrip, LooksCard } from "@/components/V20";
+import { setPvLocal, usePv } from "@/lib/pvclient";
+import { pvClean, type Pv } from "@/lib/pvtypes";
+import { IdleGuard, PrefsCard, QuickBar } from "@/components/Prefs";
+import { TipPageBanner } from "@/components/V26";
+import { ExchangePage, PendingPage, LowBalCard, setXl } from "@/components/V27";
+import { InvoicesCard, TipPageCard, LearnCard, RecoveryCard, KycCard, ScheduleCard, ThemeSchedule } from "@/components/V26";
+import { ComboCard, LifeCard, LimitsCard } from "@/components/V25";
+import { MerchantCard } from "@/components/V24";
+import { GoalCard, BioCard, DrawCard } from "@/components/V23";
+import { V22Settings, PollsCard, FeedbackAsk } from "@/components/V22";
+import { AccountTools } from "@/components/V21";
+import { BrandLinks, AppPopup } from "@/components/Brand";
 import { ClaimSheet } from "@/components/SendExtra";
 import { MissionsCard, TodoCard, FeedCard, AwayPopup, CosmeticsPage } from "@/components/Today";
 import { AdBanner, AdsPage } from "@/components/Ads";
@@ -36,12 +48,15 @@ interface Me {
   withdrawals: { id: string; amount: number; method: string; status: string; created_at: number }[];
   announcement: { text: string; kind: "info" | "warn" | "success" } | null;
   price?: number | null;
+  xl?: { cur: string; rate: number } | null;
   unread?: number;
   showIntro?: boolean;
   terms?: { version: number; text: string; url: string } | null;
   gq?: { title: string; target: number; bonus: number; n: number; done: boolean } | null;
   ev?: { mult: number } | null;
   whatsnew?: { version: string; text: string } | null;
+  pv?: Pv;
+  brand?: { name: string; logo: string; coin: string; contact: { label: string; url: string } | null; nav: { id: string; name: string; hide: boolean }[]; pages: { id: string; title: string; body: string }[]; popup: { id: string; title: string; text: string; image: string; link: string; btn: string } | null };
   cur?: "tfuel" | "usdt" | null;
   ret?: any;
   dm?: any;
@@ -100,6 +115,10 @@ export default function Home() {
   const [payId, setPayId] = useState<string | null>(null);
   const [claimTok, setClaimTok] = useState<string | null>(null);
   const [reqId, setReqId] = useState<string | null>(null);
+  const [tipCode, setTipCode] = useState<string | null>(null);
+  const [merCode, setMerCode] = useState<string | null>(null);
+  const [pre, setPre] = useState<any>(null);
+  const [tipInfo, setTipInfo] = useState<any>(null);
 
   const balance = useRef(0);
   const energy = useRef(0);
@@ -124,7 +143,10 @@ export default function Home() {
   const load = useCallback(async () => {
     try {
       const d = await api<Me>("me");
+      setXl(d.xl);
       setMe(d);
+      if (d.pv) setPvLocal(pvClean(d.pv));
+      if (d.brand?.logo && !LOGO_SOURCES.includes(d.brand.logo)) LOGO_SOURCES.unshift(d.brand.logo);
       setLoadErr("");
       // new notification arrived (reward, deposit, transfer…) → small popup
       const un = d.unread || 0;
@@ -155,7 +177,7 @@ export default function Home() {
     }
     w.ready();
     w.expand();
-    try { const sp = String(w.initDataUnsafe?.start_param || ""); if (/^pay_[\w-]{1,64}$/.test(sp)) setPayId(sp.slice(4)); else if (/^claim_[A-Za-z0-9]{20}$/.test(sp)) setClaimTok(sp.slice(6)); else if (/^req_[A-Za-z0-9]{6,20}$/.test(sp)) setReqId(sp.slice(4)); } catch {}
+    try { const sp = String(w.initDataUnsafe?.start_param || ""); if (/^pay_[\w-]{1,64}$/.test(sp)) setPayId(sp.slice(4)); else if (/^claim_[A-Za-z0-9]{20}$/.test(sp)) setClaimTok(sp.slice(6)); else if (/^req_[A-Za-z0-9]{6,20}$/.test(sp)) setReqId(sp.slice(4)); else if (/^tip_[A-Za-z0-9]{10}$/.test(sp)) setTipCode(sp.slice(4)); else if (/^mer_[A-Za-z0-9]{10}$/.test(sp)) { setTipCode(sp.slice(4)); setMerCode(sp.slice(4)); } else if (/^inv_[a-z0-9]{8}$/.test(sp)) { api<any>("v26", { action: "invPub", id: sp.slice(4) }).then((r) => { setPre({ name: r.name, title: r.title, amt: r.amt, asset: r.asset, note: r.note }); setTipCode(r.code); }).catch((e) => say(errText(e))); } else if (/^tipp_[A-Za-z0-9]{10}$/.test(sp)) { api<any>("v26", { action: "tippPub", code: sp.slice(5) }).then((r) => { setTipInfo(r); setPre({ name: r.name, note: r.note }); setTipCode(r.code); }).catch((e) => say(errText(e))); } } catch {}
     try {
       w.setHeaderColor?.("#f4f6fb");
       w.setBackgroundColor?.("#f4f6fb");
@@ -277,13 +299,15 @@ export default function Home() {
   const cpt = me.cfg.coinsPerTfuel || 1000;
   const T = (n: number) => fmtTf(n, cpt);
 
-  const items: [Tab, string, string][] = [
+  const baseItems: [Tab, string, string][] = [
     ["tap", "Tap", "tap"],
     ["tasks", "Tasks", "tasks"],
     ["boost", "Boost", "zap"],
-    ["tfuel", "TFUEL", "trend"],
+    ["tfuel", me.brand?.coin || "TFUEL", "trend"],
     ["profile", "Profile", "user"],
   ];
+  const navCfg = me.brand?.nav || [];
+  const items: [Tab, string, string][] = (navCfg.length ? navCfg.map((n) => { const b = baseItems.find((x) => x[0] === n.id); return b && !n.hide ? ([b[0], n.name || b[1], b[2]] as [Tab, string, string]) : null; }).filter(Boolean) as [Tab, string, string][] : baseItems);
 
   const taskIds = me.tasks.filter((x) => !x.done).map((x) => x.id);
   const dots: Partial<Record<Tab, boolean>> = {
@@ -301,7 +325,7 @@ export default function Home() {
       <div className="topbar">
         <div className="brand">
           <Logo size={28} />
-          {BRAND}
+          {me.brand?.name || BRAND}
         </div>
         <div className="gap">
           <Bell unread={me.unread || 0} onRead={() => setMe((m) => (m ? { ...m, unread: 0 } : m))} />
@@ -389,12 +413,20 @@ export default function Home() {
 
       <InAppAds />
       {claimTok && <ClaimSheet token={claimTok} say={say} reload={load} onClose={() => setClaimTok(null)} />}
+      {tipCode && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 80, background: "var(--bg, #f4f6fb)", overflowY: "auto", padding: 16 }}>
+          <SendPage say={say} cpt={cpt} reload={load} initCode={tipCode} merchant={merCode || undefined} prefill={pre || undefined} top={<TipPageBanner info={tipInfo} />} onBack={() => { setTipCode(null); setMerCode(null); setPre(null); setTipInfo(null); }} />
+        </div>
+      )}
       {reqId && (
         <div style={{ position: "fixed", inset: 0, zIndex: 80, background: "var(--bg, #f4f6fb)", overflowY: "auto", padding: 16 }}>
           <SendPage say={say} cpt={cpt} reload={load} reqId={reqId} onBack={() => setReqId(null)} />
         </div>
       )}
       {payId && <PaySheet id={payId} cpt={cpt} say={say} reload={load} onClose={() => setPayId(null)} />}
+      <IdleGuard onHide={() => setHide(true)} />
+      <ThemeSchedule />
+      <AppPopup popup={me.brand?.popup || null} />
       {!me.terms && !me.showIntro && me.whatsnew && <WhatsNew w={me.whatsnew} onDone={() => setMe((m) => (m ? { ...m, whatsnew: null } : m))} />}
       {me.terms && <TermsGate terms={me.terms} onDone={() => setMe((m) => (m ? { ...m, terms: null } : m))} />}
       {!me.terms && !me.showIntro && me.cur === null && !payId && <CurrencyPick onDone={(c) => setMe((m) => (m ? { ...m, cur: c } : m))} />}
@@ -531,6 +563,11 @@ function Tasks({ me, cpt, say, reload }: { me: Me; cpt: number; say: Say; reload
   return (
     <>
       <EventStrip ev={me.ev} gq={me.gq} />
+      <PollsCard say={say} />
+      <DrawCard say={say} />
+      <LearnCard say={say} reload={reload} cpt={cpt} />
+      <ComboCard say={say} reload={reload} cpt={cpt} />
+      <FeedbackAsk say={say} />
       <DailyCard cpt={cpt} say={say} reload={reload} />
       <SpinCard cpt={cpt} say={say} reload={reload} />
       <AdBonus cpt={cpt} say={say} reload={reload} />
@@ -664,7 +701,7 @@ function Tasks({ me, cpt, say, reload }: { me: Me; cpt: number; say: Say; reload
 }
 
 /** Profile: balance in TFUEL + USDT value, shortcuts, optional legacy payout methods, history */
-type Page = null | "rewards" | "send" | "deposit" | "deposits" | "withdraw" | "payouts" | "assets" | "history" | "settings" | "other" | "shops" | "support" | "invite" | "clan" | "rigs" | "puzzle" | "mini" | "vip" | "collect" | "report" | "cosmetics" | "ads" | "perks";
+type Page = null | "rewards" | "send" | "deposit" | "deposits" | "withdraw" | "payouts" | "assets" | "history" | "settings" | "other" | "shops" | "support" | "invite" | "clan" | "rigs" | "puzzle" | "mini" | "vip" | "collect" | "report" | "cosmetics" | "ads" | "perks" | "exchange" | "pending";
 
 function Profile({ initPage, me, cpt, balance, go, say, reload, onCur }: { initPage?: Page; me: Me; cpt: number; balance: number; go: (t: Tab, sub?: string) => void; say: Say; reload: () => void; onCur: (c: "tfuel" | "usdt") => void }) {
   const [page, setPage] = useState<Page>(initPage || null);
@@ -688,6 +725,8 @@ function Profile({ initPage, me, cpt, balance, go, say, reload, onCur }: { initP
 
   if (page === "rewards") return <RewardsPage say={say} onBack={back} cpt={cpt} reload={refresh} />;
   if (page === "perks") return <PerksPage eng={me.eng} say={say} onBack={back} cpt={cpt} reload={refresh} />;
+  if (page === "exchange") return <ExchangePage say={say} onBack={back} price={me.price || 0} reload={refresh} />;
+  if (page === "pending") return <PendingPage say={say} onBack={back} />;
   if (page === "ads") return <AdsPage say={say} onBack={back} reload={refresh} />;
   if (page === "cosmetics") return <CosmeticsPage say={say} onBack={back} cpt={cpt} reload={refresh} />;
   if (page === "send") return <SendPage say={say} onBack={back} cpt={cpt} reload={refresh} />;
@@ -705,7 +744,7 @@ function Profile({ initPage, me, cpt, balance, go, say, reload, onCur }: { initP
   if (page === "collect") return <CollectPage say={say} onBack={back} cpt={cpt} reload={refresh} />;
   if (page === "report") return <ReportPage say={say} onBack={back} cpt={cpt} reload={refresh} />;
   if (page === "support") return <SupportPage say={say} onBack={back} faq={me.faq || []} />;
-  if (page === "settings") return <SettingsPage say={say} onBack={back} userId={me.user.id} onCur={onCur} />;
+  if (page === "settings") return <SettingsPage say={say} onBack={back} userId={me.user.id} onCur={onCur} brand={me.brand} cpt={cpt} />;
   if (page === "other") return (<><PageHead title="Other payout methods" onBack={back} /><LegacyWithdraw me={me} cpt={cpt} balance={balance} say={say} reload={refresh} /></>);
   if (page === "assets") return (<><PageHead title="Portfolio & assets" onBack={back} />{w ? <><AssetsPage w={w} balance={balance} cpt={cpt} go={go} /><PlCard pl={w.pl} />{me.cfg.games?.autoconv && <AutoConvertCard say={say} />}<MoveAlertCard say={say} /></> : <SkelList />}</>);
   if (page === "history") return (<><PageHead title="Transaction history" onBack={back} />{w ? <div className="card"><ActivityList first={w.activity} cpt={cpt} /></div> : <SkelList />}</>);
@@ -745,6 +784,8 @@ function Profile({ initPage, me, cpt, balance, go, say, reload, onCur }: { initP
         )}
       </div>
 
+      <GoalCard say={say} balance={balance} cpt={cpt} />
+      <QuickBar go={(k) => { if (k === "send") nav(me.cfg.send ? "send" : "withdraw"); else if (k === "deposit" || k === "withdraw" || k === "history" || k === "shops") nav(k as any); else go("boost"); }} />
       <div className="grid3b">
         <button className="btn" onClick={() => nav("deposit")}>Deposit</button>
         <button className="btn sec" onClick={() => nav("withdraw")}>Withdraw</button>
@@ -771,6 +812,8 @@ function Profile({ initPage, me, cpt, balance, go, say, reload, onCur }: { initP
       <div className="mhead">Wallet</div>
       <div className="menu">
         <Row icon="wallet" t="Portfolio & assets" s="Balances, value and where your TFUEL came from" onClick={() => nav("assets")} />
+        {me.xl && <Row icon="wallet" t="Exchange" s="Buy or sell USDT for local money, with a calculator" onClick={() => nav("exchange")} />}
+        <Row icon="clock" t="Pending items" s="What is waiting, and why" onClick={() => nav("pending")} />
         <Row icon="clock" t="Transaction history" s="Everything that moved in your wallet" onClick={() => nav("history")} />
         {me.cfg.send && <Row icon="send" t="Send TFUEL" s="Send to a friend with their transfer code" onClick={() => nav("send")} />}
         <Row icon="download" t="Deposit history" s="Your USDT deposits and their status" onClick={() => nav("deposits")} />
@@ -855,12 +898,12 @@ function LegacyWithdraw({ me, cpt, balance, say, reload }: { me: Me; cpt: number
 }
 
 /** Settings page: everything in labelled sections */
-function SettingsPage({ say, onBack, userId, onCur }: { say: Say; onBack: () => void; userId: string; onCur: (c: "tfuel" | "usdt") => void }) {
+function SettingsPage({ say, onBack, userId, onCur, brand, cpt }: { say: Say; onBack: () => void; userId: string; onCur: (c: "tfuel" | "usdt") => void; brand?: Me["brand"]; cpt?: number }) {
   return (
     <>
       <PageHead title="Settings" onBack={onBack} />
       <SettingsPanel say={say} onCur={onCur} notify={<NotifyToggle />} account={
-        <><InviteCard say={say} /><LooksCard say={say} /><div className="row" style={{ marginTop: 14 }}>
+        <><InviteCard say={say} /><LooksCard say={say} part="rcpt" /><PrefsCard say={say} /><BioCard say={say} /><TipPageCard say={say} /><InvoicesCard say={say} cpt={cpt ?? 1000} /><KycCard say={say} /><LowBalCard say={say} /><RecoveryCard say={say} /><ScheduleCard /><LifeCard say={say} /><LimitsCard say={say} /><MerchantCard say={say} cpt={cpt ?? 1000} /><V22Settings say={say} /><AccountTools say={say} /><BrandLinks pages={brand?.pages || []} contact={brand?.contact || null} /><div className="row" style={{ marginTop: 14 }}>
           <div><div className="title">Your ID</div><div className="sub num">{userId}</div></div>
           <CopyBtn text={userId} />
         </div></>

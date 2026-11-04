@@ -56,6 +56,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const quest = await runGroupQuest().catch((e) => logErr("cron:quest", e));
     const events = await runEvents().catch((e) => logErr("cron:events", e));
     const tclose = await runTicketClose().catch((e) => logErr("cron:tclose", e));
+    const weekly = await (await import("@/lib/plus")).sendWeeklySummary().catch((e) => logErr("cron:weekly", e));
+    const digest = await (await import("@/lib/v21")).runAdminDigest().catch((e) => logErr("cron:digest", e));
+    const draw = await (await import("@/lib/v23")).runDraw().catch((e) => logErr("cron:draw", e));
+    const v25 = { bday: await (await import("@/lib/v25")).runBirthdays().catch((e) => logErr("cron:bday", e)), cash: await (await import("@/lib/v25")).runCashback().catch((e) => logErr("cron:cash", e)), week: await (await import("@/lib/v25")).runWeeklyAdmin().catch((e) => logErr("cron:weekly_admin", e)) };
+    const smart = await (await import("@/lib/v26")).runSmartAlerts().catch((e) => logErr("cron:smart", e));
+    const v27 = { exp: await (await import("@/lib/v27")).xExpire().catch((e) => logErr("cron:xexp", e)), low: await (await import("@/lib/v27")).runLowBal().catch((e) => logErr("cron:lowbal", e)) };
     await errTrim().catch(() => {});
     const adminJobs = await runAdminJobs(s).catch((e) => logErr("cron:adminJobs", e));
     await db().ref("stats/cron_at").set(Date.now()).catch(() => {});

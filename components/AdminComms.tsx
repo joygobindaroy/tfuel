@@ -100,6 +100,8 @@ export default function CommsPage({ call }: { call: Call }) {
   const [url, setUrl] = useState("");
   const [kind, setKind] = useState("all");
   const [adays, setAdays] = useState("7");
+  const [minBal, setMinBal] = useState("0");
+  const [sample, setSample] = useState<string[]>([]);
   const [tag, setTag] = useState("");
   const [country, setCountry] = useState("");
   const [at, setAt] = useState("");
@@ -116,7 +118,7 @@ export default function CommsPage({ call }: { call: Call }) {
   const [editTpl, setEditTpl] = useState(false);
   const replyRef = useRef<HTMLTextAreaElement>(null);
 
-  const aud = useCallback(() => ({ kind, days: Number(adays) || 7, tag: tag.trim(), country: country.trim().toUpperCase() }), [kind, adays, tag, country]);
+  const aud = useCallback(() => ({ kind, days: Number(adays) || 7, tag: tag.trim(), country: country.trim().toUpperCase(), min: Number(minBal) || 0 }), [kind, adays, tag, country, minBal]);
 
   const loadMain = useCallback(async () => { const r = await call({ action: "commsData" }); if (r) setD(r); }, [call]);
   const loadTickets = useCallback(async () => { const r = await call<any>({ action: "commsTickets" }); if (r) setTickets(r.items || []); }, [call]);
@@ -138,10 +140,10 @@ export default function CommsPage({ call }: { call: Call }) {
     let dead = false;
     const t = setTimeout(async () => {
       const r = await call<any>({ action: "broadcastCount", aud: aud() });
-      if (!dead && r) setCount(r.count);
+      if (!dead && r) { setCount(r.count); setSample(r.sample || []); }
     }, 500);
     return () => { dead = true; clearTimeout(t); };
-  }, [kind, adays, tag, country, call, aud]);
+  }, [kind, adays, tag, country, minBal, call, aud]);
 
   if (!d) return <div className="empty">Loading…</div>;
 
@@ -199,11 +201,12 @@ export default function CommsPage({ call }: { call: Call }) {
           <div>
             <label>Audience</label>
             <select value={kind} onChange={(e) => setKind(e.target.value)}>
-              <option value="all">All users</option><option value="active">Active in last N days</option><option value="tag">Users with a tag</option><option value="country">Country</option>
+              <option value="all">All users</option><option value="active">Active in last N days</option><option value="tag">Users with a tag</option><option value="country">Country</option><option value="inactive">Not seen for N days</option><option value="new">Joined in last N days</option><option value="rich">Balance at least X coins</option><option value="wd_no_dep">Withdrew in last N days, never deposited</option><option value="dep_no_wd">Deposited in last N days, never withdrew</option><option value="never_wd">Has balance, never withdrew</option>
             </select>
           </div>
           <div>
-            {kind === "active" && (<><label>Days</label><input inputMode="numeric" value={adays} onChange={(e) => setAdays(e.target.value)} /></>)}
+            {kind === "rich" && (<><label>Minimum balance (coins)</label><input inputMode="numeric" value={minBal} onChange={(e) => setMinBal(e.target.value)} /></>)}
+            {(kind === "active" || kind === "inactive" || kind === "new" || kind === "wd_no_dep" || kind === "dep_no_wd") && (<><label>Days</label><input inputMode="numeric" value={adays} onChange={(e) => setAdays(e.target.value)} /></>)}
             {kind === "tag" && (<><label>Tag</label><input value={tag} onChange={(e) => setTag(e.target.value)} placeholder="VIP" /></>)}
             {kind === "country" && (<><label>Country code</label><input maxLength={2} value={country} onChange={(e) => setCountry(e.target.value)} placeholder="BD" /></>)}
             {kind === "all" && (<><label>&nbsp;</label><div className="sub" style={{ padding: "11px 0" }}>Everyone who opened the app</div></>)}
@@ -211,7 +214,7 @@ export default function CommsPage({ call }: { call: Call }) {
         </div>
         <div className="grid2" style={{ marginTop: 6 }}>
           <div><label>Send later (optional)</label><input type="datetime-local" value={at} onChange={(e) => setAt(e.target.value)} /></div>
-          <div><label>Recipients</label><div style={{ padding: "11px 0" }}><span className="pill info">{count === null ? "…" : count.toLocaleString("en-US")}</span></div></div>
+          <div><label>Recipients</label><div style={{ padding: "11px 0" }}><span className="pill info">{count === null ? "…" : count.toLocaleString("en-US")}</span>{sample.length > 0 && <div className="xs muted" style={{ marginTop: 4 }}>e.g. {sample.join(", ")}</div>}</div></div>
         </div>
         <div style={{ marginTop: 10 }}>
           <button className="btn" disabled={text.trim().length < 3 || count === 0} onClick={send}>{toMs(at) > Date.now() ? "Schedule broadcast" : "Send broadcast"}</button>
@@ -304,7 +307,7 @@ export default function CommsPage({ call }: { call: Call }) {
                 {shown.map((t) => (
                   <tr key={t.id} className="click" onClick={() => openTicket(t.id)}>
                     <td>{t.subject}</td><td>{t.name || t.uid}</td>
-                    <td><span className={`pill ${t.status === "open" ? "warn" : "ok"}`}>{t.status}</span></td>
+                    <td><span className={`pill ${t.status === "open" ? "warn" : "ok"}`}>{t.status}</span>{t.late && <span className="pill err" style={{ marginLeft: 4 }}>late</span>}</td>
                     <td onClick={(e) => e.stopPropagation()}>
                       <select value={t.tag} style={{ padding: "5px 8px", width: "auto" }} onChange={(e) => setTicketTag(t.id, e.target.value)}>
                         <option value="">—</option>{TAGS.map((x) => <option key={x} value={x}>{x}</option>)}

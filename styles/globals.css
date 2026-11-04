@@ -328,3 +328,9 @@ body.hide-bal .balv { filter: blur(9px); user-select: none; }
 .stepper .s.bad i { background: var(--err); border-color: var(--err); }
 .stepper .ln { flex: 0 0 14px; height: 2px; background: var(--line); margin-bottom: 14px; }
 .stepper .ln.done { background: var(--ok); }
+
+/* personal preferences (Settings → Preferences) */
+html.noanim *, html.noanim *::before, html.noanim *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+html.fs-s body { zoom: 0.93; }
+html.fs-l body { zoom: 1.14; }
+.lockscr { position: fixed; inset: 0; z-index: 9999; background: var(--bg, #fff); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 24px; }

@@ -1,4 +1,5 @@
 import { ImageResponse } from "next/og";
+import { loadBr } from "@/lib/brandimg";
 import { rcptJsx, rcptHeight, rcptStyleOk, type RcptData } from "@/lib/rcptkit";
 import { qrDataUrl } from "@/lib/qrsvg";
 
@@ -12,16 +13,28 @@ async function sig(s: string) {
   return hex(await crypto.subtle.sign("HMAC", key, enc.encode(s))).slice(0, 20);
 }
 const dec = (d: string) => { const b = d.replace(/-/g, "+").replace(/_/g, "/"); return JSON.parse(decodeURIComponent(escape(atob(b + "=".repeat((4 - (b.length % 4)) % 4))))); };
-const t8 = (t: number) => (t ? new Date(t).toISOString().replace("T", " ").slice(0, 16) + " UTC" : "");
+let ZONE = { z: 0, p: 0 };
+const t8 = (t: number) => {
+  if (!t) return "";
+  const d = new Date(t + ZONE.z * 60000);
+  const Y = d.getUTCFullYear(), M = String(d.getUTCMonth() + 1).padStart(2, "0"), D = String(d.getUTCDate()).padStart(2, "0");
+  let h = d.getUTCHours(); const m = String(d.getUTCMinutes()).padStart(2, "0");
+  let tm = `${String(h).padStart(2, "0")}:${m}`;
+  if (ZONE.p) { const ap = h >= 12 ? "PM" : "AM"; h = h % 12 || 12; tm = `${h}:${m} ${ap}`; }
+  const zz = ZONE.z ? `UTC${ZONE.z >= 0 ? "+" : "-"}${String(Math.floor(Math.abs(ZONE.z) / 60)).padStart(2, "0")}:${String(Math.abs(ZONE.z) % 60).padStart(2, "0")}` : "UTC";
+  return `${Y}-${M}-${D} ${tm} ${zz}`;
+};
 
 /** Receipt as a PNG in one of five looks (y=b|d|e|f|g). Only receipts signed by the server are drawn. */
 export default async function handler(req: Request) {
+  await loadBr(req.url);
   const u = new URL(req.url);
   const q = u.searchParams;
   const d = q.get("d") || "";
   if (!d || d.length > 1800 || (await sig("i|" + d)) !== q.get("s")) return new Response("forbidden", { status: 403 });
   let r: any;
   try { r = dec(d); } catch { return new Response("bad request", { status: 400 }); }
+  ZONE = { z: Number(r.z) || 0, p: Number(r.p) ? 1 : 0 };
   const kind: "t" | "w" | "d" = r.v === "wd" ? "w" : r.v === "dep" ? "d" : "t";
   const out = kind === "w" ? true : kind === "d" ? false : r.v === "out";
   let state: "ok" | "wait" | "bad" = "ok", status = "Completed";

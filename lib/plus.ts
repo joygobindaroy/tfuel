@@ -163,6 +163,7 @@ export async function questView(uid: string) {
 }
 
 /* ───────── Gentle reminders (cron) ───────── */
+const muted = async (uid: string) => !!(await db().ref(`user_prefs/${uid}/mute/remind`).get()).val();
 export async function runNudges(): Promise<number> {
   const c = await getCfg2();
   if (!c.plus.nudges) return 0;
@@ -174,6 +175,7 @@ export async function runNudges(): Promise<number> {
       if (r.st !== "open" || r.exp < now || now - r.at < 86400000 || r.reminded) continue;
       const claim = await db().ref(`pay_requests/${id}/reminded`).transaction((x: boolean | null) => (x ? undefined : true));
       if (!claim.committed) continue;
+      if (await muted(r.to)) continue;
       await notify(r.to, `⏰ Your payment request of ${amtStr(r.asset, r.amount, (await import("./settings").then((m) => m.getSettings())).coins_per_tfuel)} is still unpaid. Share the link again from Send → Request.`).catch(() => {});
       n++;
     }
@@ -182,6 +184,7 @@ export async function runNudges(): Promise<number> {
       if (r.st !== "open" || r.exp < now || now - r.at < 86400000 || r.reminded) continue;
       const claim = await db().ref(`claim_links/${id}/reminded`).transaction((x: boolean | null) => (x ? undefined : true));
       if (!claim.committed) continue;
+      if (await muted(r.from)) continue;
       await notify(r.from, `⏰ Your money link of ${amtStr(r.asset, r.amount, (await import("./settings").then((m) => m.getSettings())).coins_per_tfuel)} has not been opened yet. It returns to you automatically when it expires, or cancel it any time in Send → History.`).catch(() => {});
       n++;
     }
@@ -206,6 +209,26 @@ export async function sendStatements(): Promise<number> {
     if (!Object.values(rows).some((r: any) => r.at >= a && r.at < b && r.st !== "cancelled")) continue;
     await notify(uid, `📄 Your ${month} transfer statement is ready.`, false, [[{ text: "📄 Open / print statement", url: stmtUrl(uid, month) }]]).catch(() => {});
     n++;
+  }
+  return n;
+}
+
+/** Weekly e-mail summary for people who switched it on in Preferences (once per 7 days, verified e-mail only). */
+export async function sendWeeklySummary(): Promise<number> {
+  const g = await db().ref("stats/weekly_sent").transaction((x: number | null) => (x && Date.now() - x < 6.5 * 864e5 ? undefined : Date.now()));
+  if (!g.committed) return 0;
+  const users = Object.keys(((await db().ref("weekly_users").get()).val() || {}) as Record<string, true>);
+  const since = Date.now() - 7 * 864e5;
+  const { mailUser } = await import("./emailcode");
+  let n = 0;
+  for (const uid of users.slice(0, 500)) {
+    try {
+      const rows = Object.values(((await db().ref(`user_xfers/${uid}`).get()).val() || {}) as Record<string, any>).filter((r: any) => r.at >= since && r.st !== "cancelled");
+      const out = rows.filter((r: any) => r.dir === "out").length, inn = rows.filter((r: any) => r.dir === "in").length;
+      const bal = (await db().ref(`users/${uid}/balance`).get()).val() || 0;
+      await mailUser(uid, "[TFUEL] Your week in review", { title: "Your week in review", intro: "Here is a short summary of the last 7 days.", rows: [["Transfers sent", String(out)], ["Transfers received", String(inn)], ["Balance now", `${bal}`]] } as any);
+      n++;
+    } catch {}
   }
   return n;
 }

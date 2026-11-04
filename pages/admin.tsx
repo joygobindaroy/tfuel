@@ -12,8 +12,10 @@ import InsightsPage from "@/components/AdminInsights";
 import CommsPage from "@/components/AdminComms";
 import ControlsPage from "@/components/AdminControls";
 import GrowthPage from "@/components/AdminGrowth";
+import AdminV27 from "@/components/AdminV27";
+import AdminV22 from "@/components/AdminV22";
 
-type Tab = "shops" | "support" | "rewards" | "dashboard" | "users" | "sites" | "tasks" | "withdrawals" | "usdt" | "market" | "fraud" | "settings" | "channel" | "logs" | "engage" | "health" | "ops" | "insights" | "comms" | "controls" | "growth";
+type Tab = "shops" | "support" | "rewards" | "dashboard" | "users" | "sites" | "tasks" | "withdrawals" | "usdt" | "market" | "fraud" | "settings" | "channel" | "logs" | "engage" | "health" | "ops" | "insights" | "comms" | "controls" | "growth" | "feedback" | "exchange";
 const NAV: [Tab, string, IconName][] = [
   ["dashboard", "Dashboard", "grid"],
   ["users", "Users", "users"],
@@ -24,6 +26,8 @@ const NAV: [Tab, string, IconName][] = [
   ["insights", "Insights", "trend"],
   ["comms", "Communication", "megaphone"],
   ["growth", "Growth & Games", "zap"],
+  ["feedback", "Feedback & reports", "megaphone"],
+  ["exchange", "Exchange", "wallet"],
   ["controls", "Controls", "settings"],
   ["rewards", "Rewards & Plans", "gift"],
   ["usdt", "USDT desk", "download"],
@@ -177,6 +181,8 @@ export default function Admin() {
           {tab === "comms" && <CommsPage call={call} />}
           {tab === "controls" && <ControlsPage call={call} />}
           {tab === "growth" && <GrowthPage call={call} />}
+          {tab === "feedback" && <AdminV22 call={call} />}
+          {tab === "exchange" && <AdminV27 call={call} />}
           {tab === "sites" && <Sites call={call} />}
           {tab === "tasks" && <Tasks call={call} />}
           {tab === "withdrawals" && <Withdrawals call={call} />}

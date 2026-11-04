@@ -66,7 +66,7 @@ export default route(async (req, res) => {
     daily: { enabled: s.daily_enabled, claimedToday, streak, rewards: s.daily_rewards, nextIndex: nextIdx },
     referral: {
       enabled: s.referral_enabled,
-      link: s.referral_link ? `${s.referral_link}?startapp=${await getRefCode(user.id).catch(() => "ref_" + user.id)}` : "",
+      link: s.referral_link ? `${s.referral_link}?startapp=${(await db().ref(`user_prefs/${user.id}/alias`).get()).val() ? "c_" + (await db().ref(`user_prefs/${user.id}/alias`).get()).val() : await getRefCode(user.id).catch(() => "ref_" + user.id)}` : "",
       poster: await (async () => { try { const { cardUrl } = await import("@/lib/cardsig"); const { appBase } = await import("@/lib/mailtpl"); const c = await getRefCode(user.id); return cardUrl(appBase(), c, String(u.name || "").slice(0, 20)).replace("/api/card?", "/poster?"); } catch { return ""; } })(),
       referrerBonus: s.referrer_bonus,
       inviteeBonus: s.invitee_bonus,

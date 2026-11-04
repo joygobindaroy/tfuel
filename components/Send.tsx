@@ -1,3 +1,5 @@
+import { NoteChips } from "@/components/V22";
+import { usePv, getPvNow } from "@/lib/pvclient";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, errText, fmtTf, tg } from "@/lib/client";
 import { CopyBtn, AmtInput, Cta, SkelCard, confetti } from "@/components/Ui";
@@ -5,6 +7,7 @@ import { PageHead } from "@/components/Cashier";
 import { useAccount, PinField } from "@/components/Settings";
 import Icon from "@/components/Icons";
 import { useMainButton } from "@/components/V20";
+import { AmtChips } from "@/components/V27";
 import { RequestTab, HistoryTab, ToolsTab, ReceiptActions, Contacts, shareLink, SaveContact, type Asset } from "@/components/SendExtra";
 
 type Say = (t: string, ok?: boolean) => void;
@@ -14,12 +17,13 @@ interface Tx { id: string; txid: string; at: number; amount: number; fee: number
 interface LinkOut { url: string; exp: number; amount: number; fee: number; asset: Asset }
 
 /** Send money: TFUEL or USDT → a person by unique ID, a money link anyone can claim, a payment request, history. Always: PIN + emailed code + confirm sheet + transaction hash. */
-export function SendPage({ say, onBack, cpt, reload, top, reqId, fixedAsset }: { say: Say; onBack: () => void; cpt: number; reload: () => void; top?: React.ReactNode; reqId?: string; fixedAsset?: Asset }) {
+export function SendPage({ say, onBack, cpt, reload, top, reqId, fixedAsset, initCode, merchant, prefill }: { say: Say; onBack: () => void; cpt: number; reload: () => void; top?: React.ReactNode; reqId?: string; fixedAsset?: Asset; initCode?: string; merchant?: string; prefill?: { name?: string; title?: string; amt?: number; asset?: Asset; note?: string } }) {
   const [info, setInfo] = useState<Info | null>(null);
   const { a: acct } = useAccount();
   const [tab, setTab] = useState<"send" | "request" | "history" | "tools">("send");
   const qrFile = useRef<HTMLInputElement>(null);
-  const [asset, setAsset] = useState<Asset>(fixedAsset || "tfuel");
+  const pvp = usePv();
+  const [asset, setAsset] = useState<Asset>(fixedAsset || (pvp.da === "usdt" ? "usdt" : "tfuel"));
   useEffect(() => { if (fixedAsset) { setAsset(fixedAsset); setAmt(""); } }, [fixedAsset]);
   const [mode, setMode] = useState<"person" | "link" | "sched">("person");
   const [pass, setPass] = useState("");
@@ -29,13 +33,27 @@ export function SendPage({ say, onBack, cpt, reload, top, reqId, fixedAsset }: {
   const [rc, setRc] = useState<{ page: string; img: string } | null>(null);
   const [sch, setSch] = useState<any>(null);
   const [pr, setPr] = useState<any>(null); // payment request being paid
-  const [code, setCode] = useState("");
+  const [code, setCode] = useState(initCode || "");
   const [who, setWho] = useState("");
+  const [bio, setBio] = useState("");
+  const [shop, setShop] = useState("");
+  useEffect(() => {
+    if (!prefill) return;
+    if (prefill.name) setShop(prefill.title ? `${prefill.name} — ${prefill.title}` : prefill.name);
+    if (prefill.asset) setAsset(prefill.asset);
+    if (prefill.amt) setAmt(String(prefill.amt));
+    if (prefill.note) setNote(prefill.note);
+  }, [prefill]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!merchant) return;
+    api<any>("v24", { action: "pub", code: merchant }).then((r) => { setShop(r.name); setAsset(r.asset); if (r.amt) setAmt(String(r.amt)); }).catch((e) => say(errText(e)));
+  }, [merchant]); // eslint-disable-line react-hooks/exhaustive-deps
   const [first, setFirst] = useState(false);
   const [looking, setLooking] = useState(false);
   const [lookErr, setLookErr] = useState("");
   const [amt, setAmt] = useState("");
-  const [note, setNote] = useState("");
+  const [note, setNote] = useState(() => (reqId ? "" : getPvNow().rn));
+  const [dbl, setDbl] = useState(false);
   const [pin, setPin] = useState("");
   const [stage, setStage] = useState<"" | "confirm" | "code" | "done">("");
   const [otp, setOtp] = useState("");
@@ -65,7 +83,7 @@ export function SendPage({ say, onBack, cpt, reload, top, reqId, fixedAsset }: {
     if (mode !== "person" || pr || !/^[A-Za-z0-9]{10}$/.test(c)) return;
     let live = true;
     setLooking(true);
-    api<any>("send", { action: "lookup", code: c }).then((r) => { if (live) { setWho(r.name); setFirst(!!r.first); } }).catch((e) => live && setLookErr(errText(e))).finally(() => live && setLooking(false));
+    api<any>("send", { action: "lookup", code: c }).then((r) => { if (live) { setWho(r.name); setBio(r.bio || ""); setFirst(!!r.first); } }).catch((e) => live && setLookErr(errText(e))).finally(() => live && setLooking(false));
     return () => { live = false; };
   }, [c, mode, pr]);
 
@@ -117,10 +135,11 @@ export function SendPage({ say, onBack, cpt, reload, top, reqId, fixedAsset }: {
   const holdsHere = !!info?.hold && !!ai && ((usdt ? info.hold.usdt : info.hold.tfuel) > 0) && n * unit >= (usdt ? info.hold.usdt : info.hold.tfuel);
   const showTabs = !top && !reqId && info && (info.links.request || true);
 
+  const bigAmt = mode !== "link" && !paying && ((usdt ? pvp.cf_u : pvp.cf_t) > 0) && n >= (usdt ? pvp.cf_u : pvp.cf_t);
   const mbCfg = (() => {
     if (tab !== "send") return null;
     if (stage === "") return { t: mode === "link" ? "Review & create link" : mode === "sched" ? "Review & schedule" : "Review & send", on: !busy && valid, fn: () => { setErr(""); setStage("confirm"); } };
-    if (stage === "confirm") return { t: "Confirm", on: !busy, fn: () => prepare() };
+    if (stage === "confirm") return { t: "Confirm", on: !busy && (!bigAmt || dbl), fn: () => prepare() };
     if (stage === "code") return { t: mode === "link" ? "Create link" : "Send now", on: !busy && otp.length === 6, fn: () => doSend(otp) };
     return null;
   })();
@@ -141,7 +160,7 @@ export function SendPage({ say, onBack, cpt, reload, top, reqId, fixedAsset }: {
         </div>
       )}
       {info && tab === "request" && showTabs && <RequestTab info={info} cpt={cpt} say={say} />}
-      {info && tab === "history" && showTabs && <HistoryTab cpt={cpt} say={say} onCancelled={() => { load(); reload(); }} />}
+      {info && tab === "history" && showTabs && <HistoryTab cpt={cpt} say={say} onCancelled={() => { load(); reload(); }} onRepeat={(x) => { setTab("send"); setMode("person"); setCode(x.pc); setAsset(x.a); setAmt(String(x.a === "usdt" ? x.amt / 1e6 : x.amt / cpt)); setNote(x.n || ""); window.scrollTo({ top: 0 }); }} />}
       {info && tab === "tools" && showTabs && <ToolsTab cpt={cpt} say={say} safeUntil={info.safe_until || 0} onSafe={load} />}
       {info && (tab === "send" || !showTabs) && (
         <>
@@ -156,6 +175,7 @@ export function SendPage({ say, onBack, cpt, reload, top, reqId, fixedAsset }: {
           )}
           {reqId && !pr && <SkelCard rows={2} />}
           {pr && pr.st !== "open" && <div className="banner warn"><Icon name="alert" size={18} /><span>This request was already paid, cancelled or expired.</span></div>}
+          {shop && <div className="banner"><Icon name="info" size={18} /><span>Paying <b>{shop}</b>. Check the amount, then continue.</span></div>}
           {pr && pr.mine && <div className="banner warn"><Icon name="alert" size={18} /><span>This is your own request. Share the link with the person who should pay.</span></div>}
           {info.enabled && (!reqId || paying) && (
             <div className="card">
@@ -202,7 +222,7 @@ export function SendPage({ say, onBack, cpt, reload, top, reqId, fixedAsset }: {
                   {who && (
                     <div className="gap" style={{ marginTop: 8, background: "var(--soft)", borderRadius: 12, padding: "8px 12px", alignItems: "center" }}>
                       <span className="ico gold" style={{ width: 34, height: 34, flexShrink: 0 }}><Icon name="user" size={16} /></span>
-                      <div style={{ flex: 1, minWidth: 0 }}><div className="title" style={{ fontSize: 15 }}>{who}</div><div className="xs muted">You are sending to this person</div></div>
+                      <div style={{ flex: 1, minWidth: 0 }}><div className="title" style={{ fontSize: 15 }}>{who}</div><div className="xs muted">{bio || "You are sending to this person"}</div></div>
                       <Icon name="check" size={18} />
                     </div>
                   )}
@@ -235,6 +255,7 @@ export function SendPage({ say, onBack, cpt, reload, top, reqId, fixedAsset }: {
                     <AmtInput placeholder={`Min ${T(min)}`} value={amt} onChange={setAmt} max={usdt ? 2 : 3} />
                     <button className="btn sec sm" style={{ position: "absolute", right: 6, top: 6 }} onClick={() => { const m = Math.floor((bal / (1 + pct / 100)) * unit) / unit; setAmt(String(Math.max(0, usdt ? Math.floor(m * 100) / 100 : m))); }}>Max</button>
                   </div>
+                  <AmtChips asset={usdt ? "usdt" : "tfuel"} cpt={cpt} onPick={(x) => setAmt(String(x))} />
                   <div className="chips" style={{ marginTop: 6 }}>{(usdt ? [1, 5, 10, 50] : [10, 50, 100, 500]).map((v) => <button key={v} className="chip" onClick={() => setAmt(String(v))}>{v}</button>)}</div>
                 </>
               )}
@@ -243,6 +264,7 @@ export function SendPage({ say, onBack, cpt, reload, top, reqId, fixedAsset }: {
                 <>
                   <label>Note (optional)</label>
                   <input maxLength={60} placeholder="e.g. Thanks!" value={note} onChange={(e) => setNote(e.target.value)} />
+                  <NoteChips onPick={setNote} />
                 </>
               )}
               <PinField acc={acct} value={pin} onChange={setPin} say={say} purpose="send" />
@@ -272,10 +294,11 @@ export function SendPage({ say, onBack, cpt, reload, top, reqId, fixedAsset }: {
                   {rows.map(([k, v]) => <div className="sumrow" key={k}><span className="muted">{k}</span><b className="num" style={{ wordBreak: "break-all", textAlign: "right", marginLeft: 12 }}>{v}</b></div>)}
                 </div>
                 <div className="banner warn" style={{ marginTop: 0 }}><Icon name="alert" size={18} /><span>{mode === "link" ? "Anyone who opens the link can claim this money. Share it only with the person you mean." : "Check the name and ID. This can't be undone."}</span></div>
+                {bigAmt && <label className="row" style={{ gap: 8, margin: "8px 0", alignItems: "center" }}><input type="checkbox" checked={dbl} onChange={(e) => setDbl(e.target.checked)} style={{ width: 20, height: 20 }} /><span className="sm">I double-checked the name, ID and amount.</span></label>}
                 {err && <div className="banner err"><Icon name="alert" size={18} /><span>{err}</span></div>}
                 <div className="grid2" style={{ marginTop: 12 }}>
                   <button className="btn sec" disabled={busy} onClick={close}>Cancel</button>
-                  <button className="btn" disabled={busy} onClick={prepare}>{busy ? "Please wait…" : "Confirm"}</button>
+                  <button className="btn" disabled={busy || (bigAmt && !dbl)} onClick={prepare}>{busy ? "Please wait…" : "Confirm"}</button>
                 </div>
               </>
             )}

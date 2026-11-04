@@ -452,6 +452,251 @@ export default function GrowthPage({ call }: { call: Call }) {
         </>
       ))}
 
+      <div className="mhead">Brand & look</div>
+      {S("brand", "Brand, cards, menu, pages, popup", "Name, logo, colours and texts used across the app, cards, receipts and bot images. Images refresh within a minute.", (v, set) => {
+        const nav: any[] = v.nav && v.nav.length ? v.nav : [{ id: "tap", name: "Tap", hide: false }, { id: "tasks", name: "Tasks", hide: false }, { id: "boost", name: "Boost", hide: false }, { id: "tfuel", name: "TFUEL", hide: false }, { id: "profile", name: "Profile", hide: false }];
+        const mv = (i: number, d: number) => { const a = [...nav]; const j = i + d; if (j < 0 || j >= a.length) return; [a[i], a[j]] = [a[j], a[i]]; set({ nav: a }); };
+        const upn = (i: number, p: any) => set({ nav: nav.map((x, j) => (j === i ? { ...x, ...p } : x)) });
+        const pages: any[] = v.pages || [];
+        const upp = (i: number, p: any) => set({ pages: pages.map((x, j) => (j === i ? { ...x, ...p } : x)) });
+        const pop = v.popup || {};
+        const loc = (t: number) => { if (!t) return ""; const d = new Date(t - new Date(t).getTimezoneOffset() * 60000); return d.toISOString().slice(0, 16); };
+        const unloc = (x: string) => (x ? new Date(x).getTime() : 0);
+        return (
+          <>
+            <div className="grid2">
+              <L t="App name (empty = default)"><input value={v.name || ""} onChange={(e) => set({ name: e.target.value })} /></L>
+              <L t="Logo image (https link)"><input value={v.logo || ""} onChange={(e) => set({ logo: e.target.value })} placeholder="https://…/logo.png" /></L>
+              <L t="Brand colour (cards, receipts)"><input type="color" value={v.accent || "#f5a623"} onChange={(e) => set({ accent: e.target.value })} style={{ height: 40 }} /></L>
+              <L t="Short brand label on cards (max 12)"><input value={v.label || ""} onChange={(e) => set({ label: e.target.value })} /></L>
+              <L t="Invite card headline (2 lines OK)"><textarea rows={2} value={v.head || ""} onChange={(e) => set({ head: e.target.value })} /></L>
+              <L t="Receipt footer text"><input value={v.foot || ""} onChange={(e) => set({ foot: e.target.value })} placeholder="Electronic receipt issued by …" /></L>
+              <L t="Default card style (new users)"><select value={v.def_card || "1"} onChange={(e) => set({ def_card: e.target.value })}><option value="1">1 Dark Fintech</option><option value="3">3 Neon Cyber</option><option value="4">4 Gold Premium</option><option value="7">7 Member Card</option></select></L>
+              <L t="Default receipt style (new users)"><select value={v.def_rcpt || "b"} onChange={(e) => set({ def_rcpt: e.target.value })}><option value="b">Banking</option><option value="d">Invoice</option><option value="e">Certificate</option><option value="f">Timeline</option><option value="g">Explorer</option></select></L>
+              <L t="Coin name in menu (empty = TFUEL)"><input value={v.coin_name || ""} onChange={(e) => set({ coin_name: e.target.value })} /></L>
+            </div>
+            <div className="title" style={{ marginTop: 12, fontSize: 14 }}>Bottom menu</div>
+            {nav.map((n, i) => (
+              <div key={n.id} className="row" style={{ gap: 6, marginTop: 6 }}>
+                <input value={n.name} maxLength={10} onChange={(e) => upn(i, { name: e.target.value })} style={{ flex: 1 }} />
+                <button className="btn sec sm" onClick={() => mv(i, -1)}>↑</button><button className="btn sec sm" onClick={() => mv(i, 1)}>↓</button>
+                {n.id !== "tap" && n.id !== "profile" ? <Sw on={!n.hide} set={(x) => upn(i, { hide: !x })} /> : <span className="xs muted">always</span>}
+              </div>
+            ))}
+            <button className="btn sec sm" style={{ marginTop: 6 }} onClick={() => set({ nav })}>Use these menu settings</button>
+            <div className="title" style={{ marginTop: 12, fontSize: 14 }}>Contact button</div>
+            <div className="grid2">
+              <L t="Button text"><input value={v.contact_label || ""} onChange={(e) => set({ contact_label: e.target.value })} /></L>
+              <L t="Link (https, empty = hidden)"><input value={v.contact_url || ""} onChange={(e) => set({ contact_url: e.target.value })} placeholder="https://t.me/yoursupport" /></L>
+            </div>
+            <div className="title" style={{ marginTop: 12, fontSize: 14 }}>Pages (About, Rules, Help…)</div>
+            {pages.map((p, i) => (
+              <div key={p.id} className="card" style={{ background: "var(--soft)", boxShadow: "none", marginTop: 8 }}>
+                <L t="Title"><input value={p.title} onChange={(e) => upp(i, { title: e.target.value })} /></L>
+                <L t="Text"><textarea rows={5} value={p.body} onChange={(e) => upp(i, { body: e.target.value })} /></L>
+                <button className="btn danger sm" onClick={() => set({ pages: pages.filter((_, j) => j !== i) })}>Remove</button>
+              </div>
+            ))}
+            {pages.length < 8 && <button className="btn sec sm" style={{ marginTop: 8 }} onClick={() => set({ pages: [...pages, { id: "p" + Date.now().toString(36), title: "About", body: "" }] })}>+ Add page</button>}
+            <div className="title" style={{ marginTop: 12, fontSize: 14 }}>Pop-up when the app opens</div>
+            <Row t="Show pop-up" h="Each person sees it once. Change the pop-up ID to show it again."><Sw on={!!pop.on} set={(x) => set({ popup: { ...pop, on: x } })} /></Row>
+            <div className="grid2">
+              <L t="Title"><input value={pop.title || ""} onChange={(e) => set({ popup: { ...pop, title: e.target.value } })} /></L>
+              <L t="Pop-up ID"><input value={pop.id || ""} onChange={(e) => set({ popup: { ...pop, id: e.target.value } })} /></L>
+              <L t="Picture (https)"><input value={pop.image || ""} onChange={(e) => set({ popup: { ...pop, image: e.target.value } })} /></L>
+              <L t="Link (https)"><input value={pop.link || ""} onChange={(e) => set({ popup: { ...pop, link: e.target.value } })} /></L>
+              <L t="Button text"><input value={pop.btn || ""} onChange={(e) => set({ popup: { ...pop, btn: e.target.value } })} /></L>
+              <L t="Shows from"><input type="datetime-local" value={loc(pop.from)} onChange={(e) => set({ popup: { ...pop, from: unloc(e.target.value) } })} /></L>
+              <L t="Shows until"><input type="datetime-local" value={loc(pop.to)} onChange={(e) => set({ popup: { ...pop, to: unloc(e.target.value) } })} /></L>
+            </div>
+            <L t="Text"><textarea rows={3} value={pop.text || ""} onChange={(e) => set({ popup: { ...pop, text: e.target.value } })} /></L>
+            <div className="title" style={{ marginTop: 12, fontSize: 14 }}>More pop-ups (scheduled)</div>
+            <div className="xs muted">The first one that is on and inside its time window is shown.</div>
+            {(v.popups || []).map((q: any, i: number) => {
+              const upq = (p: any) => set({ popups: (v.popups || []).map((x: any, j: number) => (j === i ? { ...x, ...p } : x)) });
+              return (
+                <div key={i} className="card" style={{ background: "var(--soft)", boxShadow: "none", marginTop: 8 }}>
+                  <div className="row"><b>{q.title || "Pop-up"}</b><Sw on={!!q.on} set={(x) => upq({ on: x })} /></div>
+                  <div className="grid2">
+                    <L t="Title"><input value={q.title || ""} onChange={(e) => upq({ title: e.target.value })} /></L>
+                    <L t="ID (change to show again)"><input value={q.id || ""} onChange={(e) => upq({ id: e.target.value })} /></L>
+                    <L t="Picture (https)"><input value={q.image || ""} onChange={(e) => upq({ image: e.target.value })} /></L>
+                    <L t="Link (https)"><input value={q.link || ""} onChange={(e) => upq({ link: e.target.value })} /></L>
+                    <L t="From"><input type="datetime-local" value={loc(q.from)} onChange={(e) => upq({ from: unloc(e.target.value) })} /></L>
+                    <L t="Until"><input type="datetime-local" value={loc(q.to)} onChange={(e) => upq({ to: unloc(e.target.value) })} /></L>
+                  </div>
+                  <L t="Text"><textarea rows={2} value={q.text || ""} onChange={(e) => upq({ text: e.target.value })} /></L>
+                  <button className="btn danger sm" onClick={() => set({ popups: (v.popups || []).filter((_: any, j: number) => j !== i) })}>Remove</button>
+                </div>
+              );
+            })}
+            {(v.popups || []).length < 6 && <button className="btn sec sm" style={{ marginTop: 8 }} onClick={() => set({ popups: [...(v.popups || []), { on: true, id: "pp" + Date.now().toString(36), title: "New pop-up", text: "", image: "", link: "", btn: "Open", from: Date.now(), to: Date.now() + 7 * 864e5 }] })}>+ Add pop-up</button>}
+          </>
+        );
+      })}
+      {S("xchg", "Exchange (buy / sell USDT)", "Users buy or sell USDT for local money. You are the only other side: you set the rates and payment methods, check payments yourself, and mark orders done in Admin › Exchange. Nothing is ever credited automatically.", (v, set) => {
+        const ms: any[] = v.methods || [];
+        const um = (i: number, p: any) => set({ methods: ms.map((x, j) => (j === i ? { ...x, ...p } : x)) });
+        return (
+          <>
+            <Row t="Exchange on" h="Shows the Exchange page. Off by default."><Sw on={!!v.on} set={(x) => set({ on: x })} /></Row>
+            <Row t="Buying allowed"><Sw on={v.buy_on !== false} set={(x) => set({ buy_on: x })} /></Row>
+            <Row t="Selling allowed"><Sw on={v.sell_on !== false} set={(x) => set({ sell_on: x })} /></Row>
+            <Row t="Show ≈ local value next to USDT" h="Display only."><Sw on={v.show_local !== false} set={(x) => set({ show_local: x })} /></Row>
+            <div className="grid2">
+              <L t="Currency code"><input value={v.cur ?? "BDT"} onChange={(e) => set({ cur: e.target.value })} /></L>
+              <L t="Price lock (minutes)"><input inputMode="numeric" value={v.lock_min ?? 15} onChange={(e) => set({ lock_min: e.target.value })} /></L>
+              <L t="Users BUY 1 USDT at"><input inputMode="decimal" value={v.rate_buy ?? 0} onChange={(e) => set({ rate_buy: e.target.value })} /></L>
+              <L t="Users SELL 1 USDT at"><input inputMode="decimal" value={v.rate_sell ?? 0} onChange={(e) => set({ rate_sell: e.target.value })} /></L>
+              <L t="New accounts wait (hours)"><input inputMode="numeric" value={v.new_user_hours ?? 24} onChange={(e) => set({ new_user_hours: e.target.value })} /></L>
+              <L t="Daily limit per user (USDT, 0 = none)"><input inputMode="decimal" value={v.daily_max_usdt ?? 0} onChange={(e) => set({ daily_max_usdt: e.target.value })} /></L>
+              <L t="Trusted badge after N clean orders"><input inputMode="numeric" value={v.trusted_after ?? 5} onChange={(e) => set({ trusted_after: e.target.value })} /></L>
+            </div>
+            <L t="Note shown to users"><input maxLength={400} value={v.terms ?? ""} onChange={(e) => set({ terms: e.target.value })} /></L>
+            <div className="title" style={{ marginTop: 12, fontSize: 14 }}>Payment methods</div>
+            {ms.map((m, i) => (
+              <div key={m.id} className="card" style={{ background: "var(--soft)", boxShadow: "none", marginTop: 8 }}>
+                <div className="grid2">
+                  <L t="Name (e.g. bKash)"><input value={m.name} onChange={(e) => um(i, { name: e.target.value })} /></L>
+                  <L t="Used for"><select value={m.kind} onChange={(e) => um(i, { kind: e.target.value })}><option value="both">Buy and sell</option><option value="buy">Buy only</option><option value="sell">Sell only</option></select></L>
+                  <L t="Min (USDT)"><input inputMode="decimal" value={m.min} onChange={(e) => um(i, { min: e.target.value })} /></L>
+                  <L t="Max (USDT)"><input inputMode="decimal" value={m.max} onChange={(e) => um(i, { max: e.target.value })} /></L>
+                  <L t="Fee %"><input inputMode="decimal" value={m.fee_pct} onChange={(e) => um(i, { fee_pct: e.target.value })} /></L>
+                </div>
+                <L t="Where the user pays you (shown only when buying)"><textarea rows={2} value={m.details} onChange={(e) => um(i, { details: e.target.value })} /></L>
+                <button className="btn danger sm" onClick={() => set({ methods: ms.filter((_, j) => j !== i) })}>Remove</button>
+              </div>
+            ))}
+            {ms.length < 12 && <button className="btn sec sm" style={{ marginTop: 8 }} onClick={() => set({ methods: [...ms, { id: "m" + Date.now().toString(36), name: "", details: "", kind: "both", min: 1, max: 1000, fee_pct: 0 }] })}>+ Add payment method</button>}
+          </>
+        );
+      })}
+      {S("v27", "Alerts & support speed", "Small switches added in v27.", (v, set) => (
+        <>
+          <Row t="Low balance alerts" h="Lets users ask for a bot message when a balance gets low."><Sw on={v.lowbal !== false} set={(x) => set({ lowbal: x })} /></Row>
+          <L t="Mark a ticket 'late' after (hours without an answer)"><input inputMode="numeric" value={v.sla_h ?? 24} onChange={(e) => set({ sla_h: e.target.value })} /></L>
+        </>
+      ))}
+      {S("v26", "Lessons & identity check", "Short lessons (Tasks tab) with an optional reward, and the identity check for big USDT withdrawals.", (v, set) => {
+        const ls: any[] = v.lessons || [];
+        const ul = (i: number, p: any) => set({ lessons: ls.map((x, j) => (j === i ? { ...x, ...p } : x)) });
+        return (
+          <>
+            <Row t="Identity check for big USDT withdrawals" h="People above the amount send a private link to their ID; you approve it in Feedback & reports."><Sw on={!!v.kyc?.on} set={(x) => set({ kyc: { ...v.kyc, on: x } })} /></Row>
+            <L t="Needed from (USDT)"><input inputMode="decimal" value={v.kyc?.usd ?? 500} onChange={(e) => set({ kyc: { ...v.kyc, usd: e.target.value } })} /></L>
+            <div className="title" style={{ marginTop: 12, fontSize: 14 }}>Lessons</div>
+            {ls.map((l, i) => (
+              <div key={l.id} className="card" style={{ background: "var(--soft)", boxShadow: "none", marginTop: 8 }}>
+                <div className="grid2"><L t="Title"><input value={l.title} onChange={(e) => ul(i, { title: e.target.value })} /></L><L t="Reward (coins, 0 = none)"><input inputMode="numeric" value={l.reward} onChange={(e) => ul(i, { reward: e.target.value })} /></L></div>
+                <L t="Text"><textarea rows={5} value={l.body} onChange={(e) => ul(i, { body: e.target.value })} /></L>
+                <button className="btn danger sm" onClick={() => set({ lessons: ls.filter((_, j) => j !== i) })}>Remove</button>
+              </div>
+            ))}
+            {ls.length < 20 && <button className="btn sec sm" style={{ marginTop: 8 }} onClick={() => set({ lessons: [...ls, { id: "l" + Date.now().toString(36), title: "", body: "", reward: 0 }] })}>+ Add lesson</button>}
+          </>
+        );
+      })}
+      {S("v25", "Combo, birthday, cashback, auto-replies, public page", "Small engagement and support switches.", (v, set) => {
+        const kw: any[] = v.kw || [];
+        const uk = (i: number, p: any) => set({ kw: kw.map((x, j) => (j === i ? { ...x, ...p } : x)) });
+        return (
+          <>
+            <Row t="Daily combo" h="Daily reward + spin + a mini game on the same day gives a bonus."><Sw on={!!v.combo?.on} set={(x) => set({ combo: { ...v.combo, on: x } })} /></Row>
+            <L t="Combo bonus (coins)"><input inputMode="numeric" value={v.combo?.bonus ?? 0} onChange={(e) => set({ combo: { ...v.combo, bonus: e.target.value } })} /></L>
+            <Row t="Birthday gift" h="Paid once a year on the date the user saved (UTC)."><Sw on={!!v.birthday?.on} set={(x) => set({ birthday: { ...v.birthday, on: x } })} /></Row>
+            <L t="Birthday gift (coins)"><input inputMode="numeric" value={v.birthday?.bonus ?? 0} onChange={(e) => set({ birthday: { ...v.birthday, bonus: e.target.value } })} /></L>
+            <Row t="Monthly cashback on send fees" h="On the 1st–3rd, TFUEL send fees of last month are partly refunded."><Sw on={!!v.cashback?.on} set={(x) => set({ cashback: { ...v.cashback, on: x } })} /></Row>
+            <div className="grid2">
+              <L t="Refund % of fees"><input inputMode="decimal" value={v.cashback?.pct ?? 0} onChange={(e) => set({ cashback: { ...v.cashback, pct: e.target.value } })} /></L>
+              <L t="Only if fees paid ≥ (coins)"><input inputMode="numeric" value={v.cashback?.min_fee ?? 0} onChange={(e) => set({ cashback: { ...v.cashback, min_fee: e.target.value } })} /></L>
+            </div>
+            <Row t="Public numbers page (/stats)" h="Shows users, active today, joined and paid out in 30 days."><Sw on={!!v.stats_public} set={(x) => set({ stats_public: x })} /></Row>
+            <div className="title" style={{ marginTop: 12, fontSize: 14 }}>Bot auto-replies by keyword</div>
+            <div className="xs muted">If a message contains any of the words, the bot answers with your text first.</div>
+            {kw.map((k, i) => (
+              <div key={i} className="card" style={{ background: "var(--soft)", boxShadow: "none", marginTop: 8 }}>
+                <L t="Words (comma separated)"><input value={k.words} onChange={(e) => uk(i, { words: e.target.value })} placeholder="pin, password" /></L>
+                <L t="Reply"><textarea rows={2} value={k.reply} onChange={(e) => uk(i, { reply: e.target.value })} /></L>
+                <button className="btn danger sm" onClick={() => set({ kw: kw.filter((_, j) => j !== i) })}>Remove</button>
+              </div>
+            ))}
+            {kw.length < 30 && <button className="btn sec sm" style={{ marginTop: 8 }} onClick={() => set({ kw: [...kw, { words: "", reply: "" }] })}>+ Add rule</button>}
+          </>
+        );
+      })}
+      {S("v24", "Merchant QR", "Lets users accept payments with a permanent QR and see their sales.", (v, set) => (
+        <Row t="Merchant QR on" h="Normal send fees apply; there is no extra merchant fee."><Sw on={v.merchant !== false} set={(x) => set({ merchant: x })} /></Row>
+      ))}
+      {S("v23", "Free lucky draw & API key", "One winner per round, paid automatically. Everyone can join free: 1 ticket for joining plus tickets for each friend who joins during the round.", (v, set) => {
+        const dr = v.draw || {};
+        const up = (p: any) => set({ draw: { ...dr, ...p } });
+        const loc = (t: number) => { if (!t) return ""; const d = new Date(t - new Date(t).getTimezoneOffset() * 60000); return d.toISOString().slice(0, 16); };
+        return (
+          <>
+            <Row t="Draw on"><Sw on={!!dr.on} set={(x) => up({ on: x })} /></Row>
+            <div className="grid2">
+              <L t="Title"><input value={dr.title || ""} onChange={(e) => up({ title: e.target.value })} /></L>
+              <L t="Prize (coins)"><input inputMode="numeric" value={dr.prize ?? 0} onChange={(e) => up({ prize: e.target.value })} /></L>
+              <L t="Round ends"><input type="datetime-local" value={loc(dr.end)} onChange={(e) => up({ end: e.target.value ? new Date(e.target.value).getTime() : 0 })} /></L>
+              <L t="Repeat every N days (0 = once)"><input inputMode="numeric" value={dr.every_days ?? 0} onChange={(e) => up({ every_days: e.target.value })} /></L>
+              <L t="Tickets per friend who joins"><input inputMode="numeric" value={dr.per_friend ?? 1} onChange={(e) => up({ per_friend: e.target.value })} /></L>
+            </div>
+            {dr.winner && <div className="xs muted" style={{ marginTop: 6 }}>Last winner: {dr.winner.name} · {dr.winner.prize} coins · {new Date(dr.winner.at).toLocaleDateString()}</div>}
+            <div className="title" style={{ marginTop: 14, fontSize: 14 }}>Read-only API key</div>
+            <div className="xs muted">For outside tools: GET /api/ext with header x-api-key. Returns user count, new today and pending withdrawals. Making a new key stops the old one.</div>
+            <button className="btn sec sm" style={{ marginTop: 6 }} onClick={async () => { if (!confirm("Make a new key? The old key stops working.")) return; const r: any = await call({ action: "v22ApiKey" }); if (r?.key) window.prompt("Copy this key now. It is shown only once.", r.key); }}>Make new API key</button>
+          </>
+        );
+      })}
+      {S("v22", "Help center, polls, feedback", "Questions people can search in Settings → Help center, polls/surveys on the Tasks tab, and the rating prompt.", (v, set) => {
+        const help: any[] = v.help || [], polls: any[] = v.polls || [];
+        const uh = (i: number, p: any) => set({ help: help.map((x, j) => (j === i ? { ...x, ...p } : x)) });
+        const up = (i: number, p: any) => set({ polls: polls.map((x, j) => (j === i ? { ...x, ...p } : x)) });
+        const loc = (t: number) => { if (!t) return ""; const d = new Date(t - new Date(t).getTimezoneOffset() * 60000); return d.toISOString().slice(0, 16); };
+        return (
+          <>
+            <Row t="Ask people to rate the app" h="Shown once a month after 3 days of use."><Sw on={v.feedback !== false} set={(x) => set({ feedback: x })} /></Row>
+            <div className="title" style={{ marginTop: 12, fontSize: 14 }}>Help center</div>
+            {help.map((h, i) => (
+              <div key={h.id} className="card" style={{ background: "var(--soft)", boxShadow: "none", marginTop: 8 }}>
+                <L t="Question"><input value={h.q} onChange={(e) => uh(i, { q: e.target.value })} /></L>
+                <L t="Answer"><textarea rows={3} value={h.a} onChange={(e) => uh(i, { a: e.target.value })} /></L>
+                <button className="btn danger sm" onClick={() => set({ help: help.filter((_, j) => j !== i) })}>Remove</button>
+              </div>
+            ))}
+            <button className="btn sec sm" style={{ marginTop: 8 }} onClick={() => set({ help: [...help, { id: "h" + Date.now().toString(36), q: "", a: "" }] })}>+ Add question</button>
+            <div className="title" style={{ marginTop: 14, fontSize: 14 }}>Polls & surveys</div>
+            {polls.map((p, i) => (
+              <div key={p.id} className="card" style={{ background: "var(--soft)", boxShadow: "none", marginTop: 8 }}>
+                <div className="row"><b>{p.title || "Poll"}</b><Sw on={!!p.on} set={(x) => up(i, { on: x })} /></div>
+                <div className="grid2">
+                  <L t="Title"><input value={p.title} onChange={(e) => up(i, { title: e.target.value })} /></L>
+                  <L t="Ends (optional)"><input type="datetime-local" value={loc(p.end)} onChange={(e) => up(i, { end: e.target.value ? new Date(e.target.value).getTime() : 0 })} /></L>
+                </div>
+                {(p.qs || []).map((q: any, qi: number) => (
+                  <div key={qi} style={{ marginTop: 8 }}>
+                    <L t={`Question ${qi + 1}`}><input value={q.q} onChange={(e) => up(i, { qs: p.qs.map((x: any, k: number) => (k === qi ? { ...x, q: e.target.value } : x)) })} /></L>
+                    <L t="Options (one per line, 2–8)"><textarea rows={3} value={(q.opts || []).join("\n")} onChange={(e) => up(i, { qs: p.qs.map((x: any, k: number) => (k === qi ? { ...x, opts: e.target.value.split("\n") } : x)) })} /></L>
+                  </div>
+                ))}
+                <div className="gap" style={{ marginTop: 6 }}>
+                  <button className="btn sec sm" onClick={() => up(i, { qs: [...(p.qs || []), { q: "", opts: ["Yes", "No"] }] })}>+ Question</button>
+                  <button className="btn danger sm" onClick={() => set({ polls: polls.filter((_, j) => j !== i) })}>Remove poll</button>
+                </div>
+              </div>
+            ))}
+            {polls.length < 10 && <button className="btn sec sm" style={{ marginTop: 8 }} onClick={() => set({ polls: [...polls, { id: "q" + Date.now().toString(36), title: "Quick poll", on: false, end: 0, qs: [{ q: "", opts: ["Yes", "No"] }] }] })}>+ Add poll</button>}
+          </>
+        );
+      })}
+      {S("v21", "Digest & invite switches", "Daily admin digest, invite tree and friends board switches.", (v, set) => (
+        <>
+          <Row t="Daily admin digest" h="One bot message a day to the main admin: who changed what."><Sw on={!!v.digest} set={(x) => set({ digest: x })} /></Row>
+          <Row t="Invite tree" h="Shows people their 2 invite levels."><Sw on={!!v.tree} set={(x) => set({ tree: x })} /></Row>
+          <Row t="Friends-only leaderboard"><Sw on={!!v.friends_board} set={(x) => set({ friends_board: x })} /></Row>
+        </>
+      ))}
+
       <div className="mhead">Events & goals</div>
       {S("v20", "Bonus events, community goal, safety", "×2 reward events, a daily community goal, and a few safety / support switches.", (v, set) => {
         const ev: any[] = v.events || [];

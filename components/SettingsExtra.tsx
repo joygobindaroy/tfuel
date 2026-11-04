@@ -54,7 +54,7 @@ export function LanguageCard() {
     <div className="card">
       <div className="title">Language</div>
       <div className="seg" style={{ marginTop: 8, marginBottom: 0 }}>
-        {([["en", "English"], ["bn", "বাংলা"]] as const).map(([v, l]) => <button key={v} className={cur === v ? "on" : ""} onClick={() => { if (v !== cur) setLang(v); }}>{l}</button>)}
+        {([["en", "English"], ["bn", "বাংলা"], ["hi", "हिन्दी"]] as const).map(([v, l]) => <button key={v} className={cur === v ? "on" : ""} onClick={() => { if (v !== cur) setLang(v); }}>{l}</button>)}
       </div>
       <div className="xs muted" style={{ marginTop: 6 }}>Main screens are translated; some texts may stay in English.</div>
     </div>

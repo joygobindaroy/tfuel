@@ -1,4 +1,5 @@
 import { ImageResponse } from "next/og";
+import { loadBr } from "@/lib/brandimg";
 import { cardJsx, cardStyleOk, CARD_W, CARD_H } from "@/lib/cardkit";
 import { qrDataUrl } from "@/lib/qrsvg";
 
@@ -14,8 +15,9 @@ const out = (el: React.ReactElement) => new ImageResponse(el, { width: CARD_W, h
 
 /** "My earnings" share card: /api/earn?a=<amount text>&p=<period>&n=<name>&s=<sig>&v=<style> */
 export default async function handler(req: Request) {
+  await loadBr(req.url);
   const q = new URL(req.url).searchParams;
-  const a = (q.get("a") || "").slice(0, 24), pr = (q.get("p") || "").slice(0, 20), n = (q.get("n") || "").slice(0, 24);
-  if (!a || (await sign(`earn|${a}|${pr}|${n}`)) !== q.get("s")) return new Response("forbidden", { status: 403 });
-  return out(cardJsx(cardStyleOk(q.get("v")), { kicker: pr, h1: "I earned", big: a, foot: n, tag: "EARNINGS" }));
+  const a = (q.get("a") || "").slice(0, 24), pr = (q.get("p") || "").slice(0, 20), n = (q.get("n") || "").slice(0, 24), h = (q.get("h") || "").slice(0, 20);
+  if (!a || (await sign(`earn|${a}|${pr}|${n}${h ? "|" + h : ""}`)) !== q.get("s")) return new Response("forbidden", { status: 403 });
+  return out(cardJsx(cardStyleOk(q.get("v")), { kicker: pr, h1: h || "I earned", big: a, foot: n, tag: "EARNINGS" }));
 }

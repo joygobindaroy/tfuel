@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, errText, fmtTf } from "@/lib/client";
+import { api, errText, fmtTf, saveImage, shareImage } from "@/lib/client";
 import { CopyBtn, AmtInput, SkelList, confetti } from "@/components/Ui";
 import Icon from "@/components/Icons";
 
@@ -24,14 +24,15 @@ export function ReceiptActions({ txid, rc, say }: { txid: string; rc?: { page: s
     setBusy(k);
     try {
       if (k === "bot") { await api("send", { action: "receipt_bot", txid }); say("Receipt sent to your bot chat", true); }
-      else { const l: any = await links(); openUrl(k === "page" ? l.page : l.img); }
+      else { const l: any = await links(); if (k === "page") openUrl(l.page); else { await saveImage(l.img, `receipt-${txid.slice(0, 12)}.png`); say("Saving the receipt picture…", true); } }
     } catch (e) { say(errText(e)); } finally { setBusy(""); }
   };
   return (
-    <div className="grid2" style={{ marginTop: 8, gridTemplateColumns: "1fr 1fr 1fr" }}>
+    <div className="grid2" style={{ marginTop: 8, gridTemplateColumns: "1fr 1fr" }}>
       <button className="btn sec sm" disabled={!!busy} onClick={() => run("page")}><Icon name="receipt" size={14} /> Open / print</button>
       <button className="btn sec sm" disabled={!!busy} onClick={() => run("img")}><Icon name="download" size={14} /> Image</button>
       <button className="btn sec sm" disabled={!!busy} onClick={() => run("bot")}><Icon name="bot" size={14} /> To bot</button>
+      <button className="btn sec sm" disabled={!!busy} onClick={async () => { setBusy("share"); try { const l: any = await links(); await shareImage(l.img, `receipt-${txid.slice(0, 12)}.png`, "My payment receipt"); } catch (e) { say(errText(e)); } finally { setBusy(""); } }}><Icon name="send" size={14} /> Share image</button>
     </div>
   );
 }
@@ -41,11 +42,16 @@ export function Contacts({ onPick, say }: { onPick: (code: string, last?: { a: A
   const [items, setItems] = useState<{ code: string; name: string; label: string; last?: { a: Asset; v: number } }[]>([]);
   const [edit, setEdit] = useState(false);
   const [recent, setRecent] = useState<{ code: string; name: string }[]>([]);
+  const [find, setFind] = useState("");
   useEffect(() => { api<any>("send", { action: "contacts" }).then((r) => setItems(r.items)).catch(() => {}); api<any>("send", { action: "recent" }).then((r) => setRecent(r.items)).catch(() => {}); }, []);
-  const rec = recent.filter((r) => !items.some((c) => c.code === r.code));
-  if (!items.length && !rec.length) return null;
+  const fl = find.trim().toLowerCase();
+  const hit = (n: string, c: string) => !fl || n.toLowerCase().includes(fl) || c.toLowerCase().includes(fl);
+  const rec = recent.filter((r) => !items.some((c) => c.code === r.code)).filter((r) => hit(r.name, r.code));
+  const all = items;
+  if (!all.length && !recent.length) return null;
   return (
     <div style={{ marginTop: 8 }}>
+      {all.length + recent.length > 5 && <input placeholder="Search people" value={find} onChange={(e) => setFind(e.target.value)} style={{ marginBottom: 6 }} />}
       {rec.length > 0 && (
         <>
           <div className="xs muted" style={{ marginBottom: 4 }}>Recent</div>
@@ -55,7 +61,7 @@ export function Contacts({ onPick, say }: { onPick: (code: string, last?: { a: A
       {items.length > 0 && <>
       <div className="row" style={{ marginBottom: 4 }}><div className="xs muted">Saved people</div><button className="btn ghost sm" onClick={() => setEdit(!edit)}>{edit ? "Done" : "Edit"}</button></div>
       <div className="chips">
-        {items.map((c) => (
+        {items.filter((c) => hit(`${c.label} ${c.name}`, c.code)).map((c) => (
           <span key={c.code} style={{ display: "inline-flex", gap: 4 }}>
             <button className="chip" onClick={() => onPick(c.code, (c as any).last)}>{c.label || c.name}</button>
             {edit && <button className="chip" aria-label="Remove" onClick={async () => { try { const r: any = await api("send", { action: "contact_del", code: c.code }); setItems(r.items); } catch (e) { say(errText(e)); } }}><Icon name="x" size={14} /></button>}
@@ -150,7 +156,7 @@ export function RequestTab({ info, cpt, say }: { info: any; cpt: number; say: Sa
 }
 
 /** All transfers (sent / received / links / held) with search, filters, CSV export, cancel */
-export function HistoryTab({ cpt, say, onCancelled }: { cpt: number; say: Say; onCancelled: () => void }) {
+export function HistoryTab({ cpt, say, onCancelled, onRepeat }: { cpt: number; say: Say; onCancelled: () => void; onRepeat?: (x: any) => void }) {
   const [items, setItems] = useState<any[] | null>(null);
   const [links, setLinks] = useState<any[]>([]);
   const [f, setF] = useState<"all" | "in" | "out">("all");
@@ -244,6 +250,7 @@ export function HistoryTab({ cpt, say, onCancelled }: { cpt: number; say: Say; o
             <div className="gap" style={{ flexDirection: "column", alignItems: "flex-end" }}>
               <CopyBtn text={x.tx} className="btn ghost sm" size={14} />
               {(x.st === "done" || x.st === "claimed") && <button className="btn sec sm" onClick={() => setOpn(opn === x.id ? "" : x.id)}>Receipt</button>}
+              {x.d === "out" && x.pc && onRepeat && (x.st === "done" || x.st === "claimed") && <button className="btn ghost sm" onClick={() => onRepeat(x)}>Send again</button>}
               {x.st === "held" && <button className="btn danger sm" disabled={busy === x.id} onClick={() => cancelHold(x.id)}>Cancel</button>}
             </div>
           </div>

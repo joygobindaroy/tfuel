@@ -35,6 +35,7 @@ export default route(async (req, res) => {
   if (!Number.isFinite(amount) || amount < net.min || amount <= net.fee || amount > 1e6) {
     return void res.status(400).json({ success: false, error: "below_min_usdt", min: Math.max(net.min, net.fee) });
   }
+  await (await import("@/lib/v26")).assertKyc(user.id, amount);
   const amount_u = toU(amount);
   await requireEmailCode(user.id, "withdraw", req.body?.email_code, { address, amount });
 
