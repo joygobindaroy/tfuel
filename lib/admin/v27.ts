@@ -1,7 +1,8 @@
 import type { AdminMod } from "./types";
 import { HttpError } from "../auth";
 import { adminLog } from "../log";
-import { xAdminList, xAdminSet, userSummary } from "../v27";
+import { xAdminList, xAdminSet, userSummary, xc } from "../v27";
+import { xReport, adminTodo } from "../v28";
 
 /** Admin → Exchange (v27): buy/sell queue, one-page user summary */
 const mod: AdminMod = async (action, b, ctx) => {
@@ -14,6 +15,9 @@ const mod: AdminMod = async (action, b, ctx) => {
       await adminLog(ctx.who, "xchg_" + act, { id: b.id });
       return { list: await xAdminList(String(b.view || "open")) };
     }
+    case "v27Report": return { r: await xReport(Number(b.days) || 30) };
+    case "v27Todo": return await adminTodo();
+    case "v27Rates": { const c = await xc(); return { cur: c.cur, rate_buy: c.rate_buy, rate_sell: c.rate_sell, auto: c.auto }; }
     case "v27Summary": {
       const q = String(b.q || "").trim();
       if (!q) throw new HttpError(400, "Enter a user ID or 10-letter code");

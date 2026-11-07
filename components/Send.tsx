@@ -8,6 +8,7 @@ import { useAccount, PinField } from "@/components/Settings";
 import Icon from "@/components/Icons";
 import { useMainButton } from "@/components/V20";
 import { AmtChips } from "@/components/V27";
+import { ShopPicker } from "@/components/V30";
 import { RequestTab, HistoryTab, ToolsTab, ReceiptActions, Contacts, shareLink, SaveContact, type Asset } from "@/components/SendExtra";
 
 type Say = (t: string, ok?: boolean) => void;
@@ -176,6 +177,7 @@ export function SendPage({ say, onBack, cpt, reload, top, reqId, fixedAsset, ini
           {reqId && !pr && <SkelCard rows={2} />}
           {pr && pr.st !== "open" && <div className="banner warn"><Icon name="alert" size={18} /><span>This request was already paid, cancelled or expired.</span></div>}
           {shop && <div className="banner"><Icon name="info" size={18} /><span>Paying <b>{shop}</b>. Check the amount, then continue.</span></div>}
+          {merchant && <ShopPicker merchant={merchant} setAmt={setAmt} setNote={setNote} />}
           {pr && pr.mine && <div className="banner warn"><Icon name="alert" size={18} /><span>This is your own request. Share the link with the person who should pay.</span></div>}
           {info.enabled && (!reqId || paying) && (
             <div className="card">

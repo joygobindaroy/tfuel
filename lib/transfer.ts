@@ -147,8 +147,12 @@ export async function sendAsset(from: { id: string; name: string }, toUid: strin
   const [toName, toCode, fromCode] = await Promise.all([displayName(toUid), getRefCode(toUid).catch(() => ""), getRefCode(from.id).catch(() => "")]);
   import("./plus").then((P) => P.bigSendAlert(from.id, toName, asset, amount, s.coins_per_tfuel)).catch(() => {});
   const holdAt = asset === "usdt" ? toU(c2.xfer.hold.usdt) : c2.xfer.hold.tfuel;
-  const hold = holdAt > 0 && amount >= holdAt;
-  const rel = now + c2.xfer.hold.minutes * 60000;
+  const bigHold = holdAt > 0 && amount >= holdAt;
+  let uw = 0;
+  try { uw = Number((await db().ref(`user_prefs/${from.id}/pv/uw`).get()).val()) || 0; } catch {}
+  const hold = bigHold || uw > 0;
+  const holdMin = Math.max(bigHold ? c2.xfer.hold.minutes : 0, uw);
+  const rel = now + holdMin * 60000;
 
   if (hold) {
     try {
@@ -163,8 +167,8 @@ export async function sendAsset(from: { id: string; name: string }, toUid: strin
       throw new HttpError(500, "send_failed");
     }
     await activity(from.id, "send", { ...(asset === "usdt" ? { usdt_u: -total } : { coins: -total }), note: `Held to ${toName} (${toCode}) · ${txid}` });
-    await notify(toUid, `⏳ ${maskName(from.name)} is sending you ${amtStr(asset, amount, s.coins_per_tfuel)}. It arrives in ${c2.xfer.hold.minutes} min.`);
-    await notify(from.id, `⏳ Your transfer of ${amtStr(asset, amount, s.coins_per_tfuel)} to ${toName} is on hold for ${c2.xfer.hold.minutes} min. You can cancel it in Send → History.`, false, [[{ text: "↩️ Cancel transfer", callback_data: `xc:${id}` }]]);
+    await notify(toUid, `⏳ ${maskName(from.name)} is sending you ${amtStr(asset, amount, s.coins_per_tfuel)}. It arrives in ${holdMin} min.`);
+    await notify(from.id, `⏳ Your transfer of ${amtStr(asset, amount, s.coins_per_tfuel)} to ${toName} is on hold for ${holdMin} min. You can cancel it in Send → History.`, false, [[{ text: "↩️ Cancel transfer", callback_data: `xc:${id}` }]]);
     try { const R = await import("./receipt"); await R.botReceipt(from.id, await R.loadReceipt(txid, from.id), s.coins_per_tfuel); } catch {}
     return { fee, balance, id, txid, at: now, to: { name: toName, code: toCode }, asset, held: true, release_at: rel };
   }
@@ -195,7 +199,7 @@ export async function afterSend(fromId: string, fromName: string, toUid: string,
   await activity(toUid, "receive", { ...b, note: `From ${maskName(fromName)} (${fromCode}) · ${txid}` });
   await notify(toUid, `💸 You received ${amtStr(asset, amount, cpt)} from ${maskName(fromName)}.`);
   import("./plus").then((P) => P.xferStat(asset, amount, fee)).catch(() => {});
-  import("./v24").then((M) => M.merchantSale(toUid, fromName, asset, amount, txid, note)).catch(() => {});
+  import("./v24").then((M) => M.merchantSale(toUid, fromName, asset, amount, txid, note, fromId)).catch(() => {});
   import("./v26").then((M) => M.afterXfer(toUid, fromName, asset, amount, txid, note)).catch(() => {});
   // receipt: link in the email + picture in the bot chat (both sides, automatically)
   const R = await import("./receipt");

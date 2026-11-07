@@ -19,7 +19,9 @@ import { setPvLocal, usePv } from "@/lib/pvclient";
 import { pvClean, type Pv } from "@/lib/pvtypes";
 import { IdleGuard, PrefsCard, QuickBar } from "@/components/Prefs";
 import { TipPageBanner } from "@/components/V26";
-import { ExchangePage, PendingPage, LowBalCard, setXl } from "@/components/V27";
+import { VaultCard, PanicCard } from "@/components/V29";
+import { PacketPage, PacketSheet, CatalogEditor } from "@/components/V30";
+import { ExchangePage, PendingPage, LowBalCard, SpendingCard, setXl } from "@/components/V27";
 import { InvoicesCard, TipPageCard, LearnCard, RecoveryCard, KycCard, ScheduleCard, ThemeSchedule } from "@/components/V26";
 import { ComboCard, LifeCard, LimitsCard } from "@/components/V25";
 import { MerchantCard } from "@/components/V24";
@@ -114,6 +116,7 @@ export default function Home() {
   const [noTg, setNoTg] = useState(false);
   const [payId, setPayId] = useState<string | null>(null);
   const [claimTok, setClaimTok] = useState<string | null>(null);
+  const [rpTok, setRpTok] = useState<string | null>(null);
   const [reqId, setReqId] = useState<string | null>(null);
   const [tipCode, setTipCode] = useState<string | null>(null);
   const [merCode, setMerCode] = useState<string | null>(null);
@@ -177,7 +180,7 @@ export default function Home() {
     }
     w.ready();
     w.expand();
-    try { const sp = String(w.initDataUnsafe?.start_param || ""); if (/^pay_[\w-]{1,64}$/.test(sp)) setPayId(sp.slice(4)); else if (/^claim_[A-Za-z0-9]{20}$/.test(sp)) setClaimTok(sp.slice(6)); else if (/^req_[A-Za-z0-9]{6,20}$/.test(sp)) setReqId(sp.slice(4)); else if (/^tip_[A-Za-z0-9]{10}$/.test(sp)) setTipCode(sp.slice(4)); else if (/^mer_[A-Za-z0-9]{10}$/.test(sp)) { setTipCode(sp.slice(4)); setMerCode(sp.slice(4)); } else if (/^inv_[a-z0-9]{8}$/.test(sp)) { api<any>("v26", { action: "invPub", id: sp.slice(4) }).then((r) => { setPre({ name: r.name, title: r.title, amt: r.amt, asset: r.asset, note: r.note }); setTipCode(r.code); }).catch((e) => say(errText(e))); } else if (/^tipp_[A-Za-z0-9]{10}$/.test(sp)) { api<any>("v26", { action: "tippPub", code: sp.slice(5) }).then((r) => { setTipInfo(r); setPre({ name: r.name, note: r.note }); setTipCode(r.code); }).catch((e) => say(errText(e))); } } catch {}
+    try { const sp = String(w.initDataUnsafe?.start_param || ""); if (/^pay_[\w-]{1,64}$/.test(sp)) setPayId(sp.slice(4)); else if (/^claim_[A-Za-z0-9]{20}$/.test(sp)) setClaimTok(sp.slice(6)); else if (/^rp_[A-Za-z0-9]{10,24}$/.test(sp)) setRpTok(sp.slice(3)); else if (/^req_[A-Za-z0-9]{6,20}$/.test(sp)) setReqId(sp.slice(4)); else if (/^tip_[A-Za-z0-9]{10}$/.test(sp)) setTipCode(sp.slice(4)); else if (/^mer_[A-Za-z0-9]{10}$/.test(sp)) { setTipCode(sp.slice(4)); setMerCode(sp.slice(4)); } else if (/^inv_[a-z0-9]{8}$/.test(sp)) { api<any>("v26", { action: "invPub", id: sp.slice(4) }).then((r) => { setPre({ name: r.name, title: r.title, amt: r.amt, asset: r.asset, note: r.note }); setTipCode(r.code); }).catch((e) => say(errText(e))); } else if (/^tipp_[A-Za-z0-9]{10}$/.test(sp)) { api<any>("v26", { action: "tippPub", code: sp.slice(5) }).then((r) => { setTipInfo(r); setPre({ name: r.name, note: r.note }); setTipCode(r.code); }).catch((e) => say(errText(e))); } } catch {}
     try {
       w.setHeaderColor?.("#f4f6fb");
       w.setBackgroundColor?.("#f4f6fb");
@@ -412,6 +415,7 @@ export default function Home() {
       {tab === "profile" && <Profile initPage={deep && !["tasks", "boost", "trade"].includes(deep) ? (deep as Page) : null} me={me} cpt={cpt} balance={bal} go={go} say={say} reload={load} onCur={(c) => setMe((m) => (m ? { ...m, cur: c } : m))} />}
 
       <InAppAds />
+      {rpTok && <PacketSheet tok={rpTok} say={say} cpt={cpt ?? 1000} reload={load} onClose={() => setRpTok(null)} />}
       {claimTok && <ClaimSheet token={claimTok} say={say} reload={load} onClose={() => setClaimTok(null)} />}
       {tipCode && (
         <div style={{ position: "fixed", inset: 0, zIndex: 80, background: "var(--bg, #f4f6fb)", overflowY: "auto", padding: 16 }}>
@@ -701,7 +705,7 @@ function Tasks({ me, cpt, say, reload }: { me: Me; cpt: number; say: Say; reload
 }
 
 /** Profile: balance in TFUEL + USDT value, shortcuts, optional legacy payout methods, history */
-type Page = null | "rewards" | "send" | "deposit" | "deposits" | "withdraw" | "payouts" | "assets" | "history" | "settings" | "other" | "shops" | "support" | "invite" | "clan" | "rigs" | "puzzle" | "mini" | "vip" | "collect" | "report" | "cosmetics" | "ads" | "perks" | "exchange" | "pending";
+type Page = null | "rewards" | "send" | "deposit" | "deposits" | "withdraw" | "payouts" | "assets" | "history" | "settings" | "other" | "shops" | "support" | "invite" | "clan" | "rigs" | "puzzle" | "mini" | "vip" | "collect" | "report" | "cosmetics" | "ads" | "perks" | "exchange" | "pending" | "packet";
 
 function Profile({ initPage, me, cpt, balance, go, say, reload, onCur }: { initPage?: Page; me: Me; cpt: number; balance: number; go: (t: Tab, sub?: string) => void; say: Say; reload: () => void; onCur: (c: "tfuel" | "usdt") => void }) {
   const [page, setPage] = useState<Page>(initPage || null);
@@ -726,6 +730,7 @@ function Profile({ initPage, me, cpt, balance, go, say, reload, onCur }: { initP
   if (page === "rewards") return <RewardsPage say={say} onBack={back} cpt={cpt} reload={refresh} />;
   if (page === "perks") return <PerksPage eng={me.eng} say={say} onBack={back} cpt={cpt} reload={refresh} />;
   if (page === "exchange") return <ExchangePage say={say} onBack={back} price={me.price || 0} reload={refresh} />;
+  if (page === "packet") return <PacketPage say={say} onBack={back} cpt={cpt ?? 1000} reload={refresh} />;
   if (page === "pending") return <PendingPage say={say} onBack={back} />;
   if (page === "ads") return <AdsPage say={say} onBack={back} reload={refresh} />;
   if (page === "cosmetics") return <CosmeticsPage say={say} onBack={back} cpt={cpt} reload={refresh} />;
@@ -744,7 +749,7 @@ function Profile({ initPage, me, cpt, balance, go, say, reload, onCur }: { initP
   if (page === "collect") return <CollectPage say={say} onBack={back} cpt={cpt} reload={refresh} />;
   if (page === "report") return <ReportPage say={say} onBack={back} cpt={cpt} reload={refresh} />;
   if (page === "support") return <SupportPage say={say} onBack={back} faq={me.faq || []} />;
-  if (page === "settings") return <SettingsPage say={say} onBack={back} userId={me.user.id} onCur={onCur} brand={me.brand} cpt={cpt} />;
+  if (page === "settings") return <SettingsPage say={say} onBack={back} userId={me.user.id} onCur={onCur} brand={me.brand} cpt={cpt} reload={refresh} />;
   if (page === "other") return (<><PageHead title="Other payout methods" onBack={back} /><LegacyWithdraw me={me} cpt={cpt} balance={balance} say={say} reload={refresh} /></>);
   if (page === "assets") return (<><PageHead title="Portfolio & assets" onBack={back} />{w ? <><AssetsPage w={w} balance={balance} cpt={cpt} go={go} /><PlCard pl={w.pl} />{me.cfg.games?.autoconv && <AutoConvertCard say={say} />}<MoveAlertCard say={say} /></> : <SkelList />}</>);
   if (page === "history") return (<><PageHead title="Transaction history" onBack={back} />{w ? <div className="card"><ActivityList first={w.activity} cpt={cpt} /></div> : <SkelList />}</>);
@@ -813,6 +818,7 @@ function Profile({ initPage, me, cpt, balance, go, say, reload, onCur }: { initP
       <div className="menu">
         <Row icon="wallet" t="Portfolio & assets" s="Balances, value and where your TFUEL came from" onClick={() => nav("assets")} />
         {me.xl && <Row icon="wallet" t="Exchange" s="Buy or sell USDT for local money, with a calculator" onClick={() => nav("exchange")} />}
+        <Row icon="gift" t="Red packet" s="Share one amount with several friends" onClick={() => nav("packet")} />
         <Row icon="clock" t="Pending items" s="What is waiting, and why" onClick={() => nav("pending")} />
         <Row icon="clock" t="Transaction history" s="Everything that moved in your wallet" onClick={() => nav("history")} />
         {me.cfg.send && <Row icon="send" t="Send TFUEL" s="Send to a friend with their transfer code" onClick={() => nav("send")} />}
@@ -898,12 +904,12 @@ function LegacyWithdraw({ me, cpt, balance, say, reload }: { me: Me; cpt: number
 }
 
 /** Settings page: everything in labelled sections */
-function SettingsPage({ say, onBack, userId, onCur, brand, cpt }: { say: Say; onBack: () => void; userId: string; onCur: (c: "tfuel" | "usdt") => void; brand?: Me["brand"]; cpt?: number }) {
+function SettingsPage({ say, onBack, userId, onCur, brand, cpt, reload }: { say: Say; onBack: () => void; userId: string; onCur: (c: "tfuel" | "usdt") => void; brand?: Me["brand"]; cpt?: number; reload: () => void }) {
   return (
     <>
       <PageHead title="Settings" onBack={onBack} />
       <SettingsPanel say={say} onCur={onCur} notify={<NotifyToggle />} account={
-        <><InviteCard say={say} /><LooksCard say={say} part="rcpt" /><PrefsCard say={say} /><BioCard say={say} /><TipPageCard say={say} /><InvoicesCard say={say} cpt={cpt ?? 1000} /><KycCard say={say} /><LowBalCard say={say} /><RecoveryCard say={say} /><ScheduleCard /><LifeCard say={say} /><LimitsCard say={say} /><MerchantCard say={say} cpt={cpt ?? 1000} /><V22Settings say={say} /><AccountTools say={say} /><BrandLinks pages={brand?.pages || []} contact={brand?.contact || null} /><div className="row" style={{ marginTop: 14 }}>
+        <><InviteCard say={say} /><LooksCard say={say} part="rcpt" /><PrefsCard say={say} /><BioCard say={say} /><TipPageCard say={say} /><InvoicesCard say={say} cpt={cpt ?? 1000} /><KycCard say={say} /><SpendingCard cpt={cpt ?? 1000} /><VaultCard say={say} reload={reload} /><LowBalCard say={say} /><RecoveryCard say={say} /><PanicCard say={say} reload={reload} /><ScheduleCard /><LifeCard say={say} /><LimitsCard say={say} /><MerchantCard say={say} cpt={cpt ?? 1000} /><CatalogEditor say={say} /><V22Settings say={say} /><AccountTools say={say} /><BrandLinks pages={brand?.pages || []} contact={brand?.contact || null} /><div className="row" style={{ marginTop: 14 }}>
           <div><div className="title">Your ID</div><div className="sub num">{userId}</div></div>
           <CopyBtn text={userId} />
         </div></>

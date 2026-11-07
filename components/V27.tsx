@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api, errText, shareImage, loadShareFile } from "@/lib/client";
-import { AmtInput } from "@/components/Ui";
+import { AmtInput, CopyBtn } from "@/components/Ui";
 import { PageHead } from "@/components/Cashier";
 import { xCalc, xUsdtFor } from "@/lib/xcalc";
 import Icon from "@/components/Icons";
@@ -59,17 +59,21 @@ export function PendingPage({ say, onBack }: { say: Say; onBack: () => void }) {
 
 export function LowBalCard({ say }: { say: Say }) {
   const [l, setL] = useState<any>(null);
-  const [t, setT] = useState(""), [u, setU] = useState("");
-  useEffect(() => { api<any>("v27", { action: "low" }).then((r) => { setL(r.low); setT(r.low.t ? String(r.low.t) : ""); setU(r.low.u ? String(r.low.u) : ""); }).catch(() => {}); }, []);
+  const [t, setT] = useState(""), [u, setU] = useState(""), [ht, setHt] = useState(""), [hu, setHu] = useState("");
+  useEffect(() => { api<any>("v27", { action: "low" }).then((r) => { setL(r.low); setT(r.low.t ? String(r.low.t) : ""); setU(r.low.u ? String(r.low.u) : ""); setHt(r.low.ht ? String(r.low.ht) : ""); setHu(r.low.hu ? String(r.low.hu) : ""); }).catch(() => {}); }, []);
   if (!l) return null;
-  const save = async (on: boolean) => { try { const r = await api<any>("v27", { action: "lowSet", on, t: Number(t) || 0, u: Number(u) || 0 }); setL(r.low); say(on ? "Alert saved" : "Alert off", true); } catch (e) { say(errText(e)); } };
+  const save = async (on: boolean) => { try { const r = await api<any>("v27", { action: "lowSet", on, t: Number(t) || 0, u: Number(u) || 0, ht: Number(ht) || 0, hu: Number(hu) || 0 }); setL(r.low); say(on ? "Alert saved" : "Alert off", true); } catch (e) { say(errText(e)); } };
   return (
     <div className="card">
-      <div className="row"><div className="title">Low balance alert</div><span className={`pill ${l.on ? "ok" : ""}`}>{l.on ? "On" : "Off"}</span></div>
-      <div className="sub">Get a bot message (at most once a day) when a balance falls below your number.</div>
+      <div className="row"><div className="title">Balance alerts</div><span className={`pill ${l.on ? "ok" : ""}`}>{l.on ? "On" : "Off"}</span></div>
+      <div className="sub">Get a bot message (at most once a day) when a balance falls below — or rises above — your number.</div>
       <div className="grid2" style={{ marginTop: 8 }}>
         <input inputMode="decimal" placeholder="TFUEL below" value={t} onChange={(e) => setT(e.target.value.replace(/[^\d.]/g, ""))} />
         <input inputMode="decimal" placeholder="USDT below" value={u} onChange={(e) => setU(e.target.value.replace(/[^\d.]/g, ""))} />
+      </div>
+      <div className="grid2" style={{ marginTop: 8 }}>
+        <input inputMode="decimal" placeholder="TFUEL above (withdraw reminder)" value={ht} onChange={(e) => setHt(e.target.value.replace(/[^\d.]/g, ""))} />
+        <input inputMode="decimal" placeholder="USDT above" value={hu} onChange={(e) => setHu(e.target.value.replace(/[^\d.]/g, ""))} />
       </div>
       <div className="gap" style={{ marginTop: 8 }}>
         <button className="btn sm" onClick={() => save(true)}>Save & turn on</button>
@@ -89,7 +93,7 @@ const Left = ({ at }: { at: number }) => {
 /** Exchange: calculator, buy, sell, my orders */
 export function ExchangePage({ say, onBack, price, reload }: { say: Say; onBack: () => void; price: number; reload: () => void }) {
   const [v, setV] = useState<any>(null);
-  const [tab, setTab] = useState<"calc" | "buy" | "sell" | "orders">("calc");
+  const [tab, setTab] = useState<"calc" | "buy" | "sell" | "orders" | "top">("calc");
   const load = () => api<any>("v27", { action: "view" }).then(setV).catch((e) => say(errText(e)));
   useEffect(() => { load(); }, []); // eslint-disable-line
   const c = v?.cfg;
@@ -107,10 +111,12 @@ export function ExchangePage({ say, onBack, price, reload }: { say: Say; onBack:
             {v.daily_left !== null && <div className="xs muted">You can still exchange up to {money(v.daily_left)} USDT today.</div>}
           </div>
           <div className="chips" style={{ margin: "8px 0" }}>
-            {([["calc", "Calculator"], ["buy", "Buy"], ["sell", "Sell"], ["orders", `My orders${v.orders.length ? ` (${v.orders.length})` : ""}`]] as const).map(([k, t]) => <button key={k} className={`chip ${tab === k ? "on" : ""}`} onClick={() => setTab(k)}>{t}</button>)}
+            {([["calc", "Calculator"], ["buy", "Buy"], ["sell", "Sell"], ["orders", `My orders${v.orders.length ? ` (${v.orders.length})` : ""}`], ["top", "Top traders"]] as const).map(([k, t]) => <button key={k} className={`chip ${tab === k ? "on" : ""}`} onClick={() => setTab(k)}>{t}</button>)}
           </div>
-          {tab === "calc" && <Calc c={c} price={price} />}
-          {(tab === "buy" || tab === "sell") && <Trade key={tab} kind={tab} c={c} say={say} done={() => { setTab("orders"); load(); reload(); }} />}
+          {c.hours?.text && <div className={`banner ${c.hours.open ? "info" : "warn"}`}><Icon name="clock" size={18} /><span>{c.hours.open ? "" : "Closed right now. "}{c.hours.text}</span></div>}
+          {tab === "calc" && <Calc c={c} price={price} say={say} />}
+          {(tab === "buy" || tab === "sell") && <Trade key={tab} kind={tab} c={c} accts={v.accts || {}} say={say} done={() => { setTab("orders"); load(); reload(); }} />}
+          {tab === "top" && <TopTab />}
           {tab === "orders" && <Orders v={v} say={say} reload={() => { load(); reload(); }} />}
           {c.terms && <div className="xs muted" style={{ marginTop: 8 }}>{c.terms}</div>}
         </>
@@ -119,7 +125,7 @@ export function ExchangePage({ say, onBack, price, reload }: { say: Say; onBack:
   );
 }
 
-function Calc({ c, price }: { c: any; price: number }) {
+function Calc({ c, price, say }: { c: any; price: number; say: Say }) {
   const [kind, setKind] = useState<"buy" | "sell">("buy");
   const ms = c.methods.filter((m: any) => m.kind === "both" || m.kind === kind);
   const [mid, setMid] = useState("");
@@ -145,15 +151,48 @@ function Calc({ c, price }: { c: any; price: number }) {
           {price > 0 && u > 0 && <div className="sumrow"><span className="muted">Same value in TFUEL</span><b className="num">≈ {money(u / price)} TFUEL</b></div>}
         </div>
       ) : <div className="sub">The rate is not set yet.</div>}
+      <RateAlerts kind={kind} cur={c.cur} rate={rate} say={say} />
     </div>
   );
 }
 
-function Trade({ kind, c, say, done }: { kind: "buy" | "sell"; c: any; say: Say; done: () => void }) {
+/** "Tell me when the rate reaches…" */
+function RateAlerts({ kind, cur, rate, say }: { kind: "buy" | "sell"; cur: string; rate: number; say: Say }) {
+  const [list, setList] = useState<any[]>([]);
+  const [t, setT] = useState("");
+  useEffect(() => { api<any>("v30", { action: "alerts" }).then((r) => setList(r.list)).catch(() => {}); }, []);
+  const add = async () => { try { const r = await api<any>("v30", { action: "alertAdd", kind, op: kind === "sell" ? "gte" : "lte", target: Number(t) }); setList(r.list); setT(""); say("Alert saved", true); } catch (e) { say(errText(e)); } };
+  const del = async (id: string) => { try { setList((await api<any>("v30", { action: "alertDel", id })).list); } catch (e) { say(errText(e)); } };
+  return (
+    <div style={{ marginTop: 12 }}>
+      <div className="b">Rate alert</div>
+      <div className="xs muted">{kind === "sell" ? "Get a bot message when you can sell USDT for at least this much." : "Get a bot message when you can buy USDT for at most this much."} Now: {rate > 0 ? `${rate} ${cur}` : "—"}</div>
+      <div className="gap" style={{ marginTop: 6 }}><input style={{ flex: 1 }} inputMode="decimal" placeholder={`${kind === "sell" ? "At least" : "At most"} (${cur})`} value={t} onChange={(e) => setT(e.target.value.replace(/[^\d.]/g, ""))} /><button className="btn sm" disabled={!(Number(t) > 0)} onClick={add}>Add</button></div>
+      {list.map((a) => <div key={a.id} className="row xs" style={{ marginTop: 4 }}><span>{a.kind === "sell" ? "Sell" : "Buy"} {a.op === "gte" ? "≥" : "≤"} {a.target} {cur}</span><button className="btn ghost sm" onClick={() => del(a.id)}>Remove</button></div>)}
+    </div>
+  );
+}
+
+function TopTab() {
+  const [d, setD] = useState<any>(null);
+  useEffect(() => { api<any>("v30", { action: "top" }).then(setD).catch(() => {}); }, []);
+  if (!d) return <div className="card"><div className="sub">Loading…</div></div>;
+  return (
+    <div className="card">
+      <div className="title">Top traders this week</div>
+      <div className="sub">By completed Exchange volume. Names are partly hidden.</div>
+      {d.top.map((r: any) => <div key={r.rank} className="sumrow"><span style={{ fontWeight: r.me ? 700 : 400 }}>#{r.rank} {r.name}{r.me ? " (you)" : ""}</span><b className="num">{money(r.usdt)} USDT</b></div>)}
+      {!d.top.length && <div className="xs muted">No completed orders yet this week.</div>}
+      {d.me && <div className="xs" style={{ marginTop: 6 }}>Your rank: #{d.me.rank} · {money(d.me.usdt)} USDT</div>}
+    </div>
+  );
+}
+
+function Trade({ kind, c, accts, say, done }: { kind: "buy" | "sell"; c: any; accts: Record<string, string>; say: Say; done: () => void }) {
   const ms = c.methods.filter((m: any) => m.kind === "both" || m.kind === kind);
   const [mid, setMid] = useState(ms[0]?.id || "");
   const [usdt, setUsdt] = useState("");
-  const [acct, setAcct] = useState("");
+  const [acct, setAcct] = useState(accts[ms[0]?.id || ""] || "");
   const [q, setQ] = useState<any>(null);
   const [busy, setBusy] = useState(false);
   const on = kind === "buy" ? c.buy_on : c.sell_on;
@@ -165,7 +204,7 @@ function Trade({ kind, c, say, done }: { kind: "buy" | "sell"; c: any; say: Say;
   return (
     <div className="card">
       <label>Payment method</label>
-      <select value={mid} onChange={(e) => { setMid(e.target.value); setQ(null); }}>{ms.map((x: any) => <option key={x.id} value={x.id}>{x.name} · {x.min}–{x.max} USDT · fee {x.fee_pct}%</option>)}</select>
+      <select value={mid} onChange={(e) => { setMid(e.target.value); setQ(null); if (kind === "sell") setAcct(accts[e.target.value] || ""); }}>{ms.map((x: any) => <option key={x.id} value={x.id}>{x.name} · {x.min}–{x.max} USDT · fee {x.fee_pct}%</option>)}</select>
       <label>USDT amount</label>
       <AmtInput value={usdt} onChange={(x) => { setUsdt(x); setQ(null); }} max={2} placeholder={m ? `${m.min} – ${m.max}` : ""} />
       {kind === "sell" && <><label>Where should we pay you? (account / wallet)</label><input maxLength={120} value={acct} onChange={(e) => setAcct(e.target.value)} placeholder="e.g. bKash 01XXXXXXXXX" /></>}
@@ -185,6 +224,7 @@ function Trade({ kind, c, say, done }: { kind: "buy" | "sell"; c: any; say: Say;
 
 function Orders({ v, say, reload }: { v: any; say: Say; reload: () => void }) {
   const [ref, setRef] = useState<Record<string, string>>({});
+  const [qr, setQr] = useState("");
   const act = async (a: string, id: string) => { try { await api<any>("v27", { action: a, id, ref: ref[id] }); reload(); } catch (e) { say(errText(e)); } };
   if (!v.orders.length) return <div className="card"><div className="sub">No orders yet.</div></div>;
   return (
@@ -199,10 +239,16 @@ function Orders({ v, say, reload }: { v: any; say: Say; reload: () => void }) {
           {o.kind === "buy" && o.st === "await" && (
             <div style={{ marginTop: 8 }}>
               <div className="banner info"><Icon name="info" size={18} /><span style={{ whiteSpace: "pre-wrap" }}>Pay <b>{money(o.fiat)} {o.cur}</b> to:{"\n"}{o.pay || "(ask support)"}{"\n"}Time left: <Left at={o.lock_until} /></span></div>
+              <div className="gap" style={{ marginTop: 6 }}>
+                <CopyBtn text={o.pay || ""} label="Copy details" />
+                <button className="btn sec sm" onClick={() => setQr(qr === o.id ? "" : o.id)}>{qr === o.id ? "Hide QR" : "Show QR"}</button>
+              </div>
+              {qr === o.id && o.pay && /* eslint-disable-next-line @next/next/no-img-element */ <img src={`/api/qr?d=${encodeURIComponent(String(o.pay).split(/\s/).find((w: string) => w.length >= 6) || o.pay)}`} alt="QR" width={200} height={200} style={{ display: "block", margin: "8px auto", borderRadius: 12 }} />}
               <input style={{ marginTop: 6 }} maxLength={80} placeholder="Your transaction ID" value={ref[o.id] || ""} onChange={(e) => setRef({ ...ref, [o.id]: e.target.value })} />
               <button className="btn block" style={{ marginTop: 6 }} disabled={(ref[o.id] || "").trim().length < 4} onClick={() => act("proof", o.id)}>I have paid</button>
             </div>
           )}
+          {o.st !== "await" && <button className="btn sec sm" style={{ marginTop: 8, marginRight: 8 }} onClick={async () => { const t = window.prompt("What is the problem? (support will see this order too)"); if (t === null) return; try { await api<any>("v27", { action: "dispute", id: o.id, text: t }); say("Reported. Support will reply in your tickets.", true); reload(); } catch (e) { say(errText(e)); } }}>Report a problem</button>}
           {(o.st === "await" || o.st === "pending") && <button className="btn danger sm" style={{ marginTop: 8 }} onClick={() => act("cancel", o.id)}>Cancel order</button>}
           {o.st === "done" && o.img && (
             <>
@@ -214,5 +260,42 @@ function Orders({ v, say, reload }: { v: any; say: Say; reload: () => void }) {
         </div>
       ))}
     </>
+  );
+}
+
+const NAMES: Record<string, string> = { send: "Sent to people", receive: "Received from people", deposit: "Deposits", withdraw: "Withdrawals", usdt_withdraw: "USDT withdrawals", shop: "Shop", buy: "Buy", sell: "Sell", adjust: "Adjustments", game: "Games", task: "Tasks", daily: "Daily", spin: "Spin", referral: "Referrals" };
+/** Where the money went / came from in the last N days */
+export function SpendingCard({ cpt }: { cpt: number }) {
+  const [d, setD] = useState<any>(null);
+  const [days, setDays] = useState(30);
+  useEffect(() => { setD(null); api<any>("v27", { action: "spend", days }).then(setD).catch(() => {}); }, [days]);
+  const max = d ? Math.max(1, ...d.list.map((x: any) => Math.max(x.tfuel_out, x.tfuel_in))) : 1;
+  return (
+    <div className="card">
+      <div className="row"><div className="title">Money summary</div>
+        <select value={days} onChange={(e) => setDays(Number(e.target.value))} style={{ width: "auto" }}><option value={7}>7 days</option><option value={30}>30 days</option><option value={90}>90 days</option></select></div>
+      {!d && <div className="sub">Loading…</div>}
+      {d && (
+        <>
+          <div className="grid2" style={{ marginTop: 6 }}>
+            <div><div className="xs muted">TFUEL in / out</div><b className="num">+{money(d.total.tfuel_in)} / −{money(d.total.tfuel_out)}</b></div>
+            <div><div className="xs muted">USDT in / out</div><b className="num">+{money(d.total.usdt_in)} / −{money(d.total.usdt_out)}</b></div>
+          </div>
+          {d.list.map((x: any) => (
+            <div key={x.t} style={{ marginTop: 8 }}>
+              <div className="row xs"><span>{NAMES[x.t] || x.t} · {x.n}×</span><span className="num">{x.tfuel_out ? `−${money(x.tfuel_out)} TFUEL ` : ""}{x.tfuel_in ? `+${money(x.tfuel_in)} TFUEL ` : ""}{x.usdt_out ? `−${money(x.usdt_out)} USDT ` : ""}{x.usdt_in ? `+${money(x.usdt_in)} USDT` : ""}</span></div>
+              {(x.tfuel_out > 0 || x.tfuel_in > 0) && <div style={{ height: 6, borderRadius: 3, background: "var(--soft, #eee)", overflow: "hidden" }}><div style={{ width: `${Math.max(4, (Math.max(x.tfuel_out, x.tfuel_in) / max) * 100)}%`, height: "100%", background: x.tfuel_out >= x.tfuel_in ? "#e5484d" : "#30a46c" }} /></div>}
+            </div>
+          ))}
+          {d.tags?.length > 0 && (
+            <div style={{ marginTop: 10 }}>
+              <div className="b">By your tags</div>
+              {d.tags.map((x: any) => <div key={x.tag} className="sumrow"><span>{x.tag} · {x.n}×</span><b className="num">{x.tfuel ? `${x.tfuel > 0 ? "+" : "−"}${money(Math.abs(x.tfuel))} TFUEL ` : ""}{x.usdt ? `${x.usdt > 0 ? "+" : "−"}${money(Math.abs(x.usdt))} USDT` : ""}</b></div>)}
+            </div>
+          )}
+          {!d.list.length && <div className="sub">No activity in this time.</div>}
+        </>
+      )}
+    </div>
   );
 }

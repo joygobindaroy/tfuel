@@ -7,5 +7,6 @@ import controls from "./controls";
 import growth from "./growth";
 import v22 from "./v22";
 import v27 from "./v27";
+import v29 from "./v29";
 
-export const ADMIN_MODS: AdminMod[] = [people, ops, insights, comms, controls, growth, v22, v27];
+export const ADMIN_MODS: AdminMod[] = [people, ops, insights, comms, controls, growth, v22, v27, v29];

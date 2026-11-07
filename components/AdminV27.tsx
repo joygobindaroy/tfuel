@@ -18,9 +18,20 @@ export default function AdminV27({ call }: { call: Call }) {
     const r = await call<any>({ action: "v27OrderSet", id, act, note, view }, "Saved");
     if (r) setList(r.list);
   };
+  const [rep, setRep] = useState<any>(null);
+  const [rd, setRd] = useState("30");
+  const [rt, setRt] = useState<any>(null);
+  useEffect(() => { call<any>({ action: "v27Rates" }).then((r) => r && setRt(r)); }, [call]);
+  const report = async () => { const r = await call<any>({ action: "v27Report", days: Number(rd) || 30 }); if (r) setRep(r.r); };
+  const csv = () => {
+    if (!rep) return;
+    const rows = [["day", "buy_usdt", "sell_usdt", "buy_fiat", "sell_fiat", "orders"], ...rep.by_day.map((d: any) => [d.day, d.buy_usdt, d.sell_usdt, d.buy_fiat, d.sell_fiat, d.n])];
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([rows.map((r) => r.join(",")).join("\n")], { type: "text/csv" })); a.download = "exchange-report.csv"; a.click();
+  };
   const find = async () => { const r = await call<any>({ action: "v27Summary", q: q.trim() }); if (r) setSum(r.s); };
   return (
     <>
+      {rt && <div className="card"><div className="sub" style={{ margin: 0 }}>Rates users see now{rt.auto ? " (automatic)" : ""}: buy <b>{m2(rt.rate_buy)}</b> · sell <b>{m2(rt.rate_sell)}</b> {rt.cur}. Change them in Growth → Exchange.</div></div>}
       <div className="mhead">Exchange orders</div>
       <div className="chips" style={{ margin: "6px 0" }}>{["open", "done", "rejected", "all"].map((s) => <button key={s} className={`chip ${view === s ? "on" : ""}`} onClick={() => setView(s)}>{s}</button>)}</div>
       <div className="card">
@@ -39,6 +50,21 @@ export default function AdminV27({ call }: { call: Call }) {
             </div>
           </div>
         ))}
+      </div>
+      <div className="mhead">Report</div>
+      <div className="card">
+        <div className="gap"><select value={rd} onChange={(e) => setRd(e.target.value)} style={{ width: "auto" }}><option value="7">7 days</option><option value="30">30 days</option><option value="90">90 days</option></select><button className="btn sm" onClick={report}>Show</button>{rep && <button className="btn sec sm" onClick={csv}>CSV</button>}</div>
+        {rep && (
+          <div style={{ marginTop: 10 }}>
+            <div className="sumrow"><span className="muted">Completed orders</span><b>{rep.orders}</b></div>
+            <div className="sumrow"><span className="muted">Bought by users</span><b className="num">{m2(rep.buy_usdt)} USDT · {m2(rep.buy_fiat)} {rep.cur}</b></div>
+            <div className="sumrow"><span className="muted">Sold by users</span><b className="num">{m2(rep.sell_usdt)} USDT · {m2(rep.sell_fiat)} {rep.cur}</b></div>
+            <div className="sumrow"><span className="muted">Fees collected</span><b className="num">{m2(rep.fees)} {rep.cur}</b></div>
+            <div className="sumrow"><span className="muted">Average buy / sell rate</span><b className="num">{m2(rep.avg_buy_rate)} / {m2(rep.avg_sell_rate)}</b></div>
+            <div className="sumrow"><span className="muted">Spread income (estimate)</span><b className="num">{m2(rep.spread_income)} {rep.cur}</b></div>
+            {rep.by_method.map((x: any) => <div key={x.method} className="xs">{x.method}: {x.n} orders · {m2(x.usdt)} USDT</div>)}
+          </div>
+        )}
       </div>
       <div className="mhead">User summary</div>
       <div className="card">

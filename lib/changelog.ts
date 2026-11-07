@@ -1,5 +1,8 @@
 /** Short highlights shown in Admin → Controls → Version (full history is in CHANGELOG.md) */
 export const CHANGELOG_HIGHLIGHTS: { v: string; text: string }[] = [
+  { v: "30.0", text: "Red packets, /tip in Telegram groups, shop items and coupons, exchange open hours, saved payout account, top traders, rate alerts, goal counts vault." },
+  { v: "29.0", text: "Savings vault, panic button with recovery-code unfreeze, emergency contact, balance-above reminder, money summary by tag, referral contest, admin team notes and exchange rate history." },
+  { v: "28.0", text: "Automatic exchange rate with margins, copy and QR for payment details, report a problem on an order, /rate and /orders in the bot, undo window for transfers, merchant refunds, money summary, admin to-do list and exchange report." },
   { v: "27.0", text: "Exchange (calculator, buy and sell requests, price lock, trusted badge), one-tap image sharing to any app, pending items with reasons, low balance alert, search in saved people, last amounts in Send." },
   { v: "26.0", text: "Invoice links, support page with a goal, Learn lessons with rewards, recovery codes, dark mode schedule, identity check for big USDT withdrawals, admin calendar, ledger CSV and smart alerts." },
   { v: "25.0", text: "Daily combo, birthday gift, cashback on send fees, daily limit per contact, send again, tournament history, friends milestone card, custom invite name for creators, scheduled pop-ups, keyword auto-replies, admin activity and money audit, activity heatmap, weekly admin summary, public numbers page." },

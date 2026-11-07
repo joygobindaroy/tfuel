@@ -72,7 +72,7 @@ export function PrefsCard({ say }: { say: Say }) {
   const Sel = ({ k, opts }: { k: keyof Pv; opts: [string, string][] }) => (
     <div className="chips" style={{ marginTop: 6 }}>{opts.map(([v, t]) => <button key={v} type="button" disabled={busy} className={`chip ${String(p[k] ?? "") === v ? "on" : ""}`} onClick={() => set({ [k]: v === "" && k === "tz" ? null : isNaN(Number(v)) || v === "" ? v : Number(v) } as Partial<Pv>)}>{t}</button>)}</div>
   );
-  const Sw = ({ k, t, h }: { k: "ds" | "an" | "wk"; t: string; h?: string }) => (
+  const Sw = ({ k, t, h }: { k: "ds" | "an" | "wk" | "gt"; t: string; h?: string }) => (
     <div className="row" style={{ marginTop: 10 }}><div><div className="b">{t}</div>{h && <div className="xs muted">{h}</div>}</div><button type="button" className={`switch ${p[k] ? "on" : ""}`} aria-label={t} onClick={() => set({ [k]: !p[k] } as Partial<Pv>)} /></div>
   );
   const dev = typeof window !== "undefined" ? -new Date().getTimezoneOffset() : 0;
@@ -94,6 +94,10 @@ export function PrefsCard({ say }: { say: Say }) {
         <div><label>TFUEL (0 = off)</label><input inputMode="numeric" defaultValue={p.cf_t || ""} onBlur={(e) => set({ cf_t: Number(e.target.value) || 0 })} placeholder="e.g. 500" /></div>
         <div><label>USDT (0 = off)</label><input inputMode="decimal" defaultValue={p.cf_u || ""} onBlur={(e) => set({ cf_u: Number(e.target.value) || 0 })} placeholder="e.g. 50" /></div>
       </div>
+      <Sw k="gt" t="Allow /tip in groups" h="Reply to someone in a group with /tip 10 to send them TFUEL. Small amounts only (the admin sets the limit)." />
+      <div className="b" style={{ marginTop: 12 }}>Undo window after sending</div>
+      <Sel k="uw" opts={[["0", "Off (instant)"], ["1", "1 min"], ["5", "5 min"], ["10", "10 min"]]} />
+      <div className="xs muted">When on, every transfer waits this long before the other person gets it. Cancel it from Send › History or the bot message.</div>
       <div className="b" style={{ marginTop: 12 }}>Default note for sends</div>
       <input maxLength={60} defaultValue={p.rn} onBlur={(e) => set({ rn: e.target.value })} placeholder="e.g. Thanks!" style={{ marginTop: 6 }} />
 

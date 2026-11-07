@@ -11,7 +11,7 @@ export function alertTargets(chat: string): string[] {
 }
 
 /** Telegram message to the admin(s). Obeys the alert_* switches, max 8 per kind per minute. Never throws. */
-export async function alertAdmins(kind: AlertKind, text: string, o: { amountUsdt?: number } = {}): Promise<boolean> {
+export async function alertAdmins(kind: AlertKind, text: string, o: { amountUsdt?: number; kb?: any[][] } = {}): Promise<boolean> {
   try {
     const s = await getSettings();
     if (kind === "big_withdraw" && !(s.alert_big_usdt > 0 && (o.amountUsdt || 0) >= s.alert_big_usdt)) return false;
@@ -27,7 +27,7 @@ export async function alertAdmins(kind: AlertKind, text: string, o: { amountUsdt
     const icon = { big_withdraw: "💸", hold: "⏸", ticket: "🎫", error: "⚠️", ad: "📣", security: "🛡", big_deposit: "💰", exchange: "💱" }[kind];
     let ok = false;
     for (const chat of alertTargets(s.alert_chat)) {
-      const r = await tgCall("sendMessage", { chat_id: chat, text: `${icon} ${text}`.slice(0, 900), disable_web_page_preview: "true" });
+      const r = await tgCall("sendMessage", { chat_id: chat, text: `${icon} ${text}`.slice(0, 900), disable_web_page_preview: "true", ...(o.kb ? { reply_markup: JSON.stringify({ inline_keyboard: o.kb }) } : {}) });
       ok = ok || !!r.ok;
     }
     return ok;

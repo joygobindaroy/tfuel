@@ -6,7 +6,7 @@ type Say = (m: string, ok?: boolean) => void;
 
 /** Savings goal: progress bar against the balance (nothing is locked) */
 export function GoalCard({ say, balance, cpt, compact }: { say: Say; balance: number; cpt: number; compact?: boolean }) {
-  const [g, setG] = useState<{ name: string; target: number } | null | undefined>(undefined);
+  const [g, setG] = useState<{ name: string; target: number; vault?: number } | null | undefined>(undefined);
   const [edit, setEdit] = useState(false);
   const [name, setName] = useState("");
   const [amt, setAmt] = useState("");
@@ -15,14 +15,15 @@ export function GoalCard({ say, balance, cpt, compact }: { say: Say; balance: nu
   const save = async (clear?: boolean) => {
     try { const r = await api<any>("v23", { action: "goalSet", name, target: clear ? 0 : Math.round(Number(amt) * cpt) }); setG(r.goal); setEdit(false); say(clear ? "Goal removed" : "Goal saved", true); } catch (e) { say(errText(e)); }
   };
-  const pct = g ? Math.min(100, (balance / g.target) * 100) : 0;
+  const have = balance + (g?.vault || 0);
+  const pct = g ? Math.min(100, (have / g.target) * 100) : 0;
   return (
     <div className="card">
       <div className="row"><div className="title" style={{ fontSize: compact ? 15 : undefined }}>{g ? g.name : "Savings goal"}</div>{!compact && <button className="btn sec sm" onClick={() => { setEdit(!edit); setName(g?.name || ""); setAmt(g ? String(g.target / cpt) : ""); }}>{g ? "Edit" : "Set goal"}</button>}</div>
       {g && (
         <>
           <div style={{ height: 8, borderRadius: 6, background: "var(--soft, #eef0f5)", margin: "10px 0 4px" }}><div style={{ width: `${pct}%`, height: 8, borderRadius: 6, background: "var(--accent, #f5a623)", transition: "width .4s" }} /></div>
-          <div className="xs muted">{fmtTf(Math.min(balance, g.target), cpt)} / {fmtTf(g.target, cpt)} TFUEL · {Math.floor(pct)}%{pct >= 100 ? " — reached!" : ""}</div>
+          <div className="xs muted">{fmtTf(Math.min(have, g.target), cpt)} / {fmtTf(g.target, cpt)} TFUEL · {Math.floor(pct)}%{pct >= 100 ? " — reached!" : ""}{g.vault ? ` · ${fmtTf(g.vault, cpt)} locked in your vault` : ""}</div>
         </>
       )}
       {!g && !edit && <div className="sub">Pick something to save for and watch your balance grow toward it.</div>}

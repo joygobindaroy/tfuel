@@ -294,6 +294,7 @@ export async function qualifyReferral(uid: string) {
     await lbAdd(uid, s.invitee_bonus);
     await lbAdd(refId, paid);
     if (paid) await refBoardAdd(refId);
+    if (paid) import("./v29").then((M) => M.contestHit(refId)).catch(() => {});
     if (paid) { const n = ((await db().ref(`users/${refId}/ref_count`).get()).val() as number) || 0; if ([10, 25, 50, 100, 250, 500].includes(n)) await feedAdd(refId, `invited ${n} friends 🎉`); }
     await activity(uid, "referral", { coins: s.invitee_bonus, note: "Welcome bonus" });
     if (paid) {

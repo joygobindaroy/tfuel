@@ -13,9 +13,10 @@ import CommsPage from "@/components/AdminComms";
 import ControlsPage from "@/components/AdminControls";
 import GrowthPage from "@/components/AdminGrowth";
 import AdminV27 from "@/components/AdminV27";
+import AdminV29 from "@/components/AdminV29";
 import AdminV22 from "@/components/AdminV22";
 
-type Tab = "shops" | "support" | "rewards" | "dashboard" | "users" | "sites" | "tasks" | "withdrawals" | "usdt" | "market" | "fraud" | "settings" | "channel" | "logs" | "engage" | "health" | "ops" | "insights" | "comms" | "controls" | "growth" | "feedback" | "exchange";
+type Tab = "shops" | "support" | "rewards" | "dashboard" | "users" | "sites" | "tasks" | "withdrawals" | "usdt" | "market" | "fraud" | "settings" | "channel" | "logs" | "engage" | "health" | "ops" | "insights" | "comms" | "controls" | "growth" | "feedback" | "exchange" | "team";
 const NAV: [Tab, string, IconName][] = [
   ["dashboard", "Dashboard", "grid"],
   ["users", "Users", "users"],
@@ -28,6 +29,7 @@ const NAV: [Tab, string, IconName][] = [
   ["growth", "Growth & Games", "zap"],
   ["feedback", "Feedback & reports", "megaphone"],
   ["exchange", "Exchange", "wallet"],
+  ["team", "Team & contest", "users"],
   ["controls", "Controls", "settings"],
   ["rewards", "Rewards & Plans", "gift"],
   ["usdt", "USDT desk", "download"],
@@ -183,6 +185,7 @@ export default function Admin() {
           {tab === "growth" && <GrowthPage call={call} />}
           {tab === "feedback" && <AdminV22 call={call} />}
           {tab === "exchange" && <AdminV27 call={call} />}
+          {tab === "team" && <AdminV29 call={call} />}
           {tab === "sites" && <Sites call={call} />}
           {tab === "tasks" && <Tasks call={call} />}
           {tab === "withdrawals" && <Withdrawals call={call} />}
@@ -265,6 +268,19 @@ function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void 
 }
 
 /* ---------------- Dashboard ---------------- */
+function TodoCard({ call, go }: { call: Call; go: (t: Tab) => void }) {
+  const [d, setD] = useState<any>(null);
+  useEffect(() => { call<any>({ action: "v27Todo" }).then((r) => r && setD(r)).catch(() => {}); }, [call]);
+  if (!d) return null;
+  const rows = d.items.filter((x: any) => x.n > 0);
+  return (
+    <div className="card">
+      <div className="row"><div className="title">To do today</div><span className={`pill ${d.total ? "warn" : "ok"}`}>{d.total ? `${d.total} waiting` : "All clear"}</span></div>
+      {rows.map((x: any) => <button key={x.k} className="row" style={{ width: "100%", background: "none", border: 0, padding: "8px 0", textAlign: "left", cursor: "pointer", color: "inherit" }} onClick={() => go(x.tab as Tab)}><span>{x.label}</span><b className="num">{x.n}</b></button>)}
+      {!rows.length && <div className="sub">Nothing is waiting for you.</div>}
+    </div>
+  );
+}
 function Dashboard({ call, go }: { call: Call; go: (t: Tab) => void }) {
   const tf = useTf();
   const [d, setD] = useState<any>(null);
@@ -281,6 +297,7 @@ function Dashboard({ call, go }: { call: Call; go: (t: Tab) => void }) {
           <Icon name="refresh" size={15} /> Refresh
         </button>
       </Head2>
+      <TodoCard call={call} go={go} />
       <TodayCard call={call} go={go} />
       <div className="kpis">
         <div className="kpi"><div className="k"><Icon name="users" size={15} /> Total users</div><div className="v num">{fmt(d.usersTotal)}</div><div className="d">+{fmt(d.joinedToday)} today</div></div>

@@ -1,3 +1,4 @@
+import { ContestCard } from "@/components/V29";
 import { useCallback, useEffect, useState } from "react";
 import { LooksCard } from "@/components/V20";
 import { TreeCard, FriendsBoard } from "@/components/V21";
@@ -290,6 +291,7 @@ function Friends({ g, cpt, say }: { g: G; cpt: number; say: Say }) {
         {r.pending && <div className="banner info"><Icon name="info" size={18} /><span>You joined through an invite. Finish your first task to unlock your welcome bonus.</span></div>}
       </div>
       {r.link && <LooksCard say={say} part="card" />}
+      <ContestCard />
       <TreeCard say={say} cpt={cpt} />
       <MilestoneCard say={say} />
       <AliasCard say={say} />

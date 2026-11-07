@@ -67,9 +67,19 @@ export interface V24 { merchant: boolean }
 export interface V25 { combo: { on: boolean; bonus: number }; birthday: { on: boolean; bonus: number }; cashback: { on: boolean; pct: number; min_fee: number }; kw: { words: string; reply: string }[]; stats_public: boolean }
 export interface V26 { lessons: { id: string; title: string; body: string; reward: number }[]; kyc: { on: boolean; usd: number } }
 export interface XMethod { id: string; name: string; details: string; kind: "buy" | "sell" | "both"; min: number; max: number; fee_pct: number }
-export interface Xchg { on: boolean; buy_on: boolean; sell_on: boolean; cur: string; rate_buy: number; rate_sell: number; show_local: boolean; methods: XMethod[]; new_user_hours: number; daily_max_usdt: number; lock_min: number; trusted_after: number; terms: string }
+export interface Xchg { on: boolean; buy_on: boolean; sell_on: boolean; cur: string; rate_buy: number; rate_sell: number; auto: boolean; fx: number; margin_buy: number; margin_sell: number; show_local: boolean; methods: XMethod[]; new_user_hours: number; hours_on: boolean; hours_from: number; hours_to: number; tz_h: number; daily_max_usdt: number; lock_min: number; trusted_after: number; terms: string }
 export interface V27 { sla_h: number; lowbal: boolean }
+export interface V29 {
+  vault: { on: boolean; min_days: number; max_days: number; min_tfuel: number; max_open: number };
+  contest: { on: boolean; title: string; start: number; end: number; prizes: number[] };
+  first: { on: boolean; tfuel: number };
+  winback: { on: boolean; days: number; tfuel: number; text: string };
+  panic: boolean;
+}
+export interface V30 { packet: { on: boolean; max_n: number; max_hours: number }; tip: { on: boolean; max_tfuel: number; day_max_tfuel: number } }
 export interface Cfg2 {
+  v30: V30;
+  v29: V29;
   xchg: Xchg;
   v27: V27;
   v26: V26;
@@ -126,7 +136,9 @@ const QUIZ: Quiz[] = [
 ];
 
 export const CFG2_DEFAULTS: Cfg2 = {
-  xchg: { on: false, buy_on: true, sell_on: true, cur: "BDT", rate_buy: 0, rate_sell: 0, show_local: true, methods: [], new_user_hours: 24, daily_max_usdt: 500, lock_min: 15, trusted_after: 5, terms: "" },
+  v30: { packet: { on: false, max_n: 30, max_hours: 48 }, tip: { on: false, max_tfuel: 50, day_max_tfuel: 200 } },
+  v29: { vault: { on: false, min_days: 1, max_days: 365, min_tfuel: 10, max_open: 5 }, contest: { on: false, title: "Invite contest", start: 0, end: 0, prizes: [1000, 500, 250] }, first: { on: false, tfuel: 50 }, winback: { on: false, days: 14, tfuel: 20, text: "We miss you! Come back and claim a small gift." }, panic: true },
+  xchg: { on: false, buy_on: true, sell_on: true, cur: "BDT", rate_buy: 0, rate_sell: 0, auto: false, fx: 0, margin_buy: 1, margin_sell: 1, show_local: true, methods: [], new_user_hours: 24, hours_on: false, hours_from: 10, hours_to: 22, tz_h: 6, daily_max_usdt: 500, lock_min: 15, trusted_after: 5, terms: "" },
   v27: { sla_h: 24, lowbal: true },
   v26: { lessons: [], kyc: { on: false, usd: 500 } },
   v25: { combo: { on: false, bonus: 200 }, birthday: { on: false, bonus: 500 }, cashback: { on: false, pct: 20, min_fee: 100 }, kw: [], stats_public: false },
@@ -228,15 +240,26 @@ const parseQuiz = (v: any): Quiz[] => {
 const url = (x: any) => (/^https:\/\/[^\s<>"']{3,300}$/.test(String(x || "").trim()) ? String(x).trim() : "");
 const NAVIDS = ["tap", "tasks", "boost", "tfuel", "profile"] as const;
 export const SECTIONS: { [K in keyof Cfg2]: (v: any, cur: Cfg2[K]) => Cfg2[K] } = {
+  v30: (v) => ({
+    packet: { on: bool(v?.packet?.on), max_n: int(v?.packet?.max_n, 2, 100, 30), max_hours: int(v?.packet?.max_hours, 1, 24 * 14, 48) },
+    tip: { on: bool(v?.tip?.on), max_tfuel: num(v?.tip?.max_tfuel, 0, 1e6, 50), day_max_tfuel: num(v?.tip?.day_max_tfuel, 0, 1e7, 200) },
+  }),
+  v29: (v) => ({
+    vault: { on: bool(v?.vault?.on), min_days: int(v?.vault?.min_days, 1, 3650, 1), max_days: int(v?.vault?.max_days, 1, 3650, 365), min_tfuel: num(v?.vault?.min_tfuel, 0, 1e9, 10), max_open: int(v?.vault?.max_open, 1, 20, 5) },
+    contest: { on: bool(v?.contest?.on), title: str(v?.contest?.title, 60) || "Invite contest", start: Math.max(0, Math.floor(Number(v?.contest?.start) || 0)), end: Math.max(0, Math.floor(Number(v?.contest?.end) || 0)), prizes: (Array.isArray(v?.contest?.prizes) ? v.contest.prizes : []).slice(0, 10).map((x: any) => num(x, 0, 1e9, 0)) },
+    first: { on: bool(v?.first?.on), tfuel: num(v?.first?.tfuel, 0, 1e7, 50) },
+    winback: { on: bool(v?.winback?.on), days: int(v?.winback?.days, 3, 365, 14), tfuel: num(v?.winback?.tfuel, 0, 1e6, 20), text: str(v?.winback?.text, 200) || "We miss you! Come back and claim a small gift." },
+    panic: v?.panic === undefined ? true : bool(v.panic),
+  }),
   xchg: (v) => ({
     on: bool(v?.on), buy_on: v?.buy_on === undefined ? true : bool(v.buy_on), sell_on: v?.sell_on === undefined ? true : bool(v.sell_on),
     cur: (str(v?.cur, 6).toUpperCase().replace(/[^A-Z]/g, "") || "BDT"),
-    rate_buy: num(v?.rate_buy, 0, 1e7, 0), rate_sell: num(v?.rate_sell, 0, 1e7, 0), show_local: v?.show_local === undefined ? true : bool(v.show_local),
+    rate_buy: num(v?.rate_buy, 0, 1e7, 0), rate_sell: num(v?.rate_sell, 0, 1e7, 0), auto: bool(v?.auto), fx: num(v?.fx, 0, 1e7, 0), margin_buy: num(v?.margin_buy, -50, 50, 1), margin_sell: num(v?.margin_sell, -50, 50, 1), show_local: v?.show_local === undefined ? true : bool(v.show_local),
     methods: (Array.isArray(v?.methods) ? v.methods : []).slice(0, 12).map((m: any, i: number) => ({
       id: idOk(m?.id, "m" + (i + 1)), name: str(m?.name, 30), details: String(m?.details ?? "").replace(/[\u0000-\u0008\u000b-\u001f\u007f<>]/g, " ").trim().slice(0, 300),
       kind: m?.kind === "buy" || m?.kind === "sell" ? m.kind : "both", min: num(m?.min, 0, 1e7, 1), max: num(m?.max, 0, 1e7, 1000), fee_pct: num(m?.fee_pct, 0, 50, 0),
     })).filter((m: any) => m.name),
-    new_user_hours: int(v?.new_user_hours, 0, 24 * 90, 24), daily_max_usdt: num(v?.daily_max_usdt, 0, 1e7, 500), lock_min: int(v?.lock_min, 1, 240, 15), trusted_after: int(v?.trusted_after, 1, 1000, 5),
+    new_user_hours: int(v?.new_user_hours, 0, 24 * 90, 24), hours_on: bool(v?.hours_on), hours_from: int(v?.hours_from, 0, 23, 10), hours_to: int(v?.hours_to, 1, 24, 22), tz_h: int(v?.tz_h, -12, 14, 6), daily_max_usdt: num(v?.daily_max_usdt, 0, 1e7, 500), lock_min: int(v?.lock_min, 1, 240, 15), trusted_after: int(v?.trusted_after, 1, 1000, 5),
     terms: str(v?.terms, 400),
   }),
   v27: (v) => ({ sla_h: int(v?.sla_h, 1, 720, 24), lowbal: v?.lowbal === undefined ? true : bool(v.lowbal) }),

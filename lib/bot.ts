@@ -33,6 +33,8 @@ export const BOT_COMMANDS = [
   { command: "tasks", description: "Tasks you can do" },
   { command: "top", description: "Leaderboard" },
   { command: "price", description: "TFUEL price" },
+  { command: "rate", description: "Exchange rates (buy / sell USDT)" },
+  { command: "orders", description: "My exchange orders" },
   { command: "today", description: "Today: price & top earners" },
   { command: "clan", description: "My clan & raid boss" },
   { command: "invite", description: "Invite friends" },
@@ -83,12 +85,19 @@ export async function handleBot(u: any): Promise<boolean> {
 
   if (u.message?.text) {
     const chatType = u.message.chat?.type;
-    const m = /^\/(start|profile|tasks|invite|help|menu|balance|wallet|daily|top|price|clan|settings|spin|missions|mystats|withdrawals|deposit|support|card|stats|pending|today|cancel)(?:@\w+)?(?:\s+(\S+))?/i.exec(u.message.text);
+    const m = /^\/(start|profile|tasks|invite|help|menu|balance|wallet|daily|top|price|clan|settings|spin|missions|mystats|withdrawals|deposit|support|card|stats|pending|today|cancel|rate|orders)(?:@\w+)?(?:\s+(\S+))?/i.exec(u.message.text);
     const chat = u.message.chat.id;
 
     // ---- groups: only /top and /price (public info) ----
     if (chatType === "group" || chatType === "supergroup") {
-      if (!s.bot_groups || !m) return false;
+      if (!s.bot_groups) return false;
+      if (/^\/tip(?:@\w+)?(?:\s|$)/i.test(u.message.text) && u.message.reply_to_message?.from) {
+        try { await rateLimit(String(u.message.from?.id), "bottip", 6); } catch { return true; }
+        const r = await (await import("./v30")).groupTip(u.message.from, u.message.reply_to_message.from, u.message.text).catch(() => "");
+        if (r) await tgCall("sendMessage", { chat_id: chat, text: r, parse_mode: "HTML", reply_to_message_id: u.message.message_id, disable_web_page_preview: "true" });
+        return true;
+      }
+      if (!m) return false;
       const cmd = m[1].toLowerCase();
       if (cmd !== "top" && cmd !== "price" && cmd !== "today") return false;
       try { await rateLimit(String(chat), "botgrp", 8); } catch { return true; }
@@ -142,6 +151,8 @@ export async function handleBot(u: any): Promise<boolean> {
     else if (cmd === "daily") await send(chat, await dailyView(uid, s));
     else if (cmd === "top") await send(chat, await leaderboardView(uid, s, "d"));
     else if (cmd === "price") await send(chat, await priceView(s));
+    else if (cmd === "rate") await send(chat, { text: await (await import("./v28")).rateText(), kb: [[openBtn(s, "💱 Open Exchange")]] });
+    else if (cmd === "orders") await send(chat, { text: await (await import("./v28")).ordersText(uid), kb: [[openBtn(s, "💱 Open Exchange")]] });
     else if (cmd === "clan") await send(chat, await clanBotView(uid, s));
     else if (cmd === "spin") await send(chat, await spinBotView(uid, s));
     else if (cmd === "missions") await send(chat, await missionsBotView(uid, s));
@@ -201,6 +212,7 @@ export async function handleBot(u: any): Promise<boolean> {
       view = v;
     }
     else if (d === "cd") { await tgCall("answerCallbackQuery", { callback_query_id: q.id }); await sendCard(chat, uid, s, q.from?.first_name); return true; }
+    else if (/^x[pdrDRv]:/.test(d) && isAdmin(uid)) { const [k, id] = d.split(":"); view = await (await import("./v30")).xoBot(uid, k === "xp" ? "xp" : k === "xd" ? "xd" : k === "xr" ? "xr" : k === "xD" ? "xD" : k === "xR" ? "xR" : "xv", id); }
     else if (d === "ast" && isAdmin(uid)) view = await adminStatsView(s);
     else if (d === "apl" && isAdmin(uid)) view = await adminPendingView(s);
     else if (/^a[pr]2?:/.test(d) && isAdmin(uid)) { const [k, id] = d.split(":"); view = await adminSettle(uid, k, id, s); }

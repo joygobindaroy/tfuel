@@ -534,6 +534,54 @@ export default function GrowthPage({ call }: { call: Call }) {
           </>
         );
       })}
+      {S("v30", "Red packets & group tips", "Red packet: one amount shared by N friends. Group tips: users reply /tip 10 in a Telegram group (each user must switch it on in Settings; the bot must be allowed in groups).", (v, set) => {
+        const up = (k: string, p: any) => set({ [k]: { ...(v[k] || {}), ...p } });
+        return (
+          <>
+            <Row t="Red packets on"><Sw on={!!v.packet?.on} set={(x) => up("packet", { on: x })} /></Row>
+            <div className="grid2">
+              <L t="Max people per packet"><input inputMode="numeric" value={v.packet?.max_n ?? 30} onChange={(e) => up("packet", { max_n: e.target.value })} /></L>
+              <L t="Max open hours"><input inputMode="numeric" value={v.packet?.max_hours ?? 48} onChange={(e) => up("packet", { max_hours: e.target.value })} /></L>
+            </div>
+            <Row t="Group /tip on"><Sw on={!!v.tip?.on} set={(x) => up("tip", { on: x })} /></Row>
+            <div className="grid2">
+              <L t="Max per tip (TFUEL)"><input inputMode="decimal" value={v.tip?.max_tfuel ?? 50} onChange={(e) => up("tip", { max_tfuel: e.target.value })} /></L>
+              <L t="Max tips per user per day (TFUEL)"><input inputMode="decimal" value={v.tip?.day_max_tfuel ?? 200} onChange={(e) => up("tip", { day_max_tfuel: e.target.value })} /></L>
+            </div>
+          </>
+        );
+      })}
+      {S("v29", "Vault, contest, bonuses & panic", "Savings vault, referral contest, first exchange bonus, win-back gift and the user panic button. All off by default except the panic button.", (v, set) => {
+        const lo = (t: number) => (t ? new Date(t - new Date(t).getTimezoneOffset() * 60000).toISOString().slice(0, 16) : "");
+        const up = (k: string, p: any) => set({ [k]: { ...(v[k] || {}), ...p } });
+        return (
+          <>
+            <Row t="Savings vault" h="Users lock their own money until a date. No interest."><Sw on={!!v.vault?.on} set={(x) => up("vault", { on: x })} /></Row>
+            <div className="grid2">
+              <L t="Vault min days"><input inputMode="numeric" value={v.vault?.min_days ?? 1} onChange={(e) => up("vault", { min_days: e.target.value })} /></L>
+              <L t="Vault max days"><input inputMode="numeric" value={v.vault?.max_days ?? 365} onChange={(e) => up("vault", { max_days: e.target.value })} /></L>
+              <L t="Min TFUEL per vault"><input inputMode="decimal" value={v.vault?.min_tfuel ?? 10} onChange={(e) => up("vault", { min_tfuel: e.target.value })} /></L>
+              <L t="Locked vaults per user"><input inputMode="numeric" value={v.vault?.max_open ?? 5} onChange={(e) => up("vault", { max_open: e.target.value })} /></L>
+            </div>
+            <Row t="Referral contest" h="Most friends invited between the two dates wins. Pay the prizes from Admin → Team & contest after it ends."><Sw on={!!v.contest?.on} set={(x) => up("contest", { on: x })} /></Row>
+            <div className="grid2">
+              <L t="Contest title"><input maxLength={60} value={v.contest?.title ?? ""} onChange={(e) => up("contest", { title: e.target.value })} /></L>
+              <L t="Prizes in TFUEL for #1, #2, #3… (comma)"><input value={(v.contest?.prizes || []).join(",")} onChange={(e) => up("contest", { prizes: e.target.value.split(",").map((x) => Number(x.trim()) || 0).filter((x) => x >= 0).slice(0, 10) })} /></L>
+              <L t="Start"><input type="datetime-local" value={lo(v.contest?.start || 0)} onChange={(e) => up("contest", { start: e.target.value ? new Date(e.target.value).getTime() : 0 })} /></L>
+              <L t="End"><input type="datetime-local" value={lo(v.contest?.end || 0)} onChange={(e) => up("contest", { end: e.target.value ? new Date(e.target.value).getTime() : 0 })} /></L>
+            </div>
+            <Row t="First exchange order bonus" h="Once per user, after their first completed Exchange order."><Sw on={!!v.first?.on} set={(x) => up("first", { on: x })} /></Row>
+            <L t="Bonus (TFUEL)"><input inputMode="decimal" value={v.first?.tfuel ?? 50} onChange={(e) => up("first", { tfuel: e.target.value })} /></L>
+            <Row t="Win-back gift" h="Users who have not opened the app for N days get one message and a small gift (once per 60 days, up to 150 a day, skips users who muted offers)."><Sw on={!!v.winback?.on} set={(x) => up("winback", { on: x })} /></Row>
+            <div className="grid2">
+              <L t="Days away"><input inputMode="numeric" value={v.winback?.days ?? 14} onChange={(e) => up("winback", { days: e.target.value })} /></L>
+              <L t="Gift (TFUEL, 0 = message only)"><input inputMode="decimal" value={v.winback?.tfuel ?? 20} onChange={(e) => up("winback", { tfuel: e.target.value })} /></L>
+            </div>
+            <L t="Win-back message"><input maxLength={200} value={v.winback?.text ?? ""} onChange={(e) => up("winback", { text: e.target.value })} /></L>
+            <Row t="Panic button (user can freeze own account)"><Sw on={v.panic !== false} set={(x) => set({ panic: x })} /></Row>
+          </>
+        );
+      })}
       {S("xchg", "Exchange (buy / sell USDT)", "Users buy or sell USDT for local money. You are the only other side: you set the rates and payment methods, check payments yourself, and mark orders done in Admin › Exchange. Nothing is ever credited automatically.", (v, set) => {
         const ms: any[] = v.methods || [];
         const um = (i: number, p: any) => set({ methods: ms.map((x, j) => (j === i ? { ...x, ...p } : x)) });
@@ -543,15 +591,31 @@ export default function GrowthPage({ call }: { call: Call }) {
             <Row t="Buying allowed"><Sw on={v.buy_on !== false} set={(x) => set({ buy_on: x })} /></Row>
             <Row t="Selling allowed"><Sw on={v.sell_on !== false} set={(x) => set({ sell_on: x })} /></Row>
             <Row t="Show ≈ local value next to USDT" h="Display only."><Sw on={v.show_local !== false} set={(x) => set({ show_local: x })} /></Row>
+            <Row t="Automatic rate" h="Takes today's market USD rate for your currency (free public source, refreshed hourly) and adds your margins. If the source can't be reached, the base rate below is used."><Sw on={!!v.auto} set={(x) => set({ auto: x })} /></Row>
+            {v.auto && (
+              <div className="grid2">
+                <L t="Base rate if the source fails"><input inputMode="decimal" value={v.fx ?? 0} onChange={(e) => set({ fx: e.target.value })} /></L>
+                <L t="Buy margin % (users pay more)"><input inputMode="decimal" value={v.margin_buy ?? 1} onChange={(e) => set({ margin_buy: e.target.value })} /></L>
+                <L t="Sell margin % (users get less)"><input inputMode="decimal" value={v.margin_sell ?? 1} onChange={(e) => set({ margin_sell: e.target.value })} /></L>
+              </div>
+            )}
             <div className="grid2">
               <L t="Currency code"><input value={v.cur ?? "BDT"} onChange={(e) => set({ cur: e.target.value })} /></L>
               <L t="Price lock (minutes)"><input inputMode="numeric" value={v.lock_min ?? 15} onChange={(e) => set({ lock_min: e.target.value })} /></L>
-              <L t="Users BUY 1 USDT at"><input inputMode="decimal" value={v.rate_buy ?? 0} onChange={(e) => set({ rate_buy: e.target.value })} /></L>
-              <L t="Users SELL 1 USDT at"><input inputMode="decimal" value={v.rate_sell ?? 0} onChange={(e) => set({ rate_sell: e.target.value })} /></L>
+              {!v.auto && <L t="Users BUY 1 USDT at"><input inputMode="decimal" value={v.rate_buy ?? 0} onChange={(e) => set({ rate_buy: e.target.value })} /></L>}
+              {!v.auto && <L t="Users SELL 1 USDT at"><input inputMode="decimal" value={v.rate_sell ?? 0} onChange={(e) => set({ rate_sell: e.target.value })} /></L>}
               <L t="New accounts wait (hours)"><input inputMode="numeric" value={v.new_user_hours ?? 24} onChange={(e) => set({ new_user_hours: e.target.value })} /></L>
               <L t="Daily limit per user (USDT, 0 = none)"><input inputMode="decimal" value={v.daily_max_usdt ?? 0} onChange={(e) => set({ daily_max_usdt: e.target.value })} /></L>
               <L t="Trusted badge after N clean orders"><input inputMode="numeric" value={v.trusted_after ?? 5} onChange={(e) => set({ trusted_after: e.target.value })} /></L>
             </div>
+            <Row t="Open hours only" h="Outside these hours users can see rates but can't place orders."><Sw on={!!v.hours_on} set={(x) => set({ hours_on: x })} /></Row>
+            {v.hours_on && (
+              <div className="grid2">
+                <L t="Opens (hour 0–23)"><input inputMode="numeric" value={v.hours_from ?? 10} onChange={(e) => set({ hours_from: e.target.value })} /></L>
+                <L t="Closes (hour 1–24)"><input inputMode="numeric" value={v.hours_to ?? 22} onChange={(e) => set({ hours_to: e.target.value })} /></L>
+                <L t="Your time zone (UTC+, e.g. 6)"><input inputMode="numeric" value={v.tz_h ?? 6} onChange={(e) => set({ tz_h: e.target.value })} /></L>
+              </div>
+            )}
             <L t="Note shown to users"><input maxLength={400} value={v.terms ?? ""} onChange={(e) => set({ terms: e.target.value })} /></L>
             <div className="title" style={{ marginTop: 12, fontSize: 14 }}>Payment methods</div>
             {ms.map((m, i) => (

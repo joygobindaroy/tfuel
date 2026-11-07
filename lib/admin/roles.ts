@@ -4,11 +4,12 @@ import type { AdminRole } from "./types";
  * Central role gate. super = everything. Others only the actions below (anything not listed is super-only → safe default).
  * Patterns are matched against body.action.
  */
-const COMMON = [/^whoami$/, /^stats$/, /^getSettings$/];
+const COMMON = [/^whoami$/, /^stats$/, /^getSettings$/, /^v27Todo$/, /^v29Notes?$|^v29Note(Add|Done|Del)$|^v29Contest$|^v29Rates$/];
 const SUPPORT: RegExp[] = [...COMMON, /^support/, /^userNotes?$|^userNote|^userTag|^userDetail|^userSearch|^users$|^user$|^userFull|^userView/, /^ticket|^reply|^template|^supportTpl/];
 const FINANCE: RegExp[] = [
   ...COMMON,
   /^v27/,
+  /^v29Rates$/,
   /^(withdrawals|usdtWithdrawals|deposits|trades|payWithdrawal|rejectWithdrawal|approveDeposit|rejectDeposit|payUsdt|rejectUsdt|adjustUsdt|releaseHold|binanceStatus|binanceRecheck|marketStatus)$/,
   /^(ops|money|liab|queue|recon|pnl|finance|payout|bulkPay|bulkReject|withdraw)/i,
   /^user$|^users$|^userDetail|^userView|^userFull/,
@@ -23,6 +24,6 @@ export function roleAllows(role: AdminRole, action: string): boolean {
 /** Tabs each role sees in the admin shell */
 export const ROLE_TABS: Record<AdminRole, string[] | "all"> = {
   super: "all",
-  finance: ["dashboard", "withdrawals", "ops", "usdt", "users", "insights", "exchange"],
-  support: ["dashboard", "users", "support", "comms"],
+  finance: ["dashboard", "withdrawals", "ops", "usdt", "users", "insights", "exchange", "team"],
+  support: ["dashboard", "users", "support", "comms", "team"],
 };

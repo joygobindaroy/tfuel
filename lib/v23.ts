@@ -12,7 +12,12 @@ const val = async (p: string) => (await db().ref(p).get()).val();
 const clean = (v: any, n: number) => String(v ?? "").replace(/[\u0000-\u001f\u007f<>]/g, " ").trim().slice(0, n);
 
 /* ── savings goal (a progress marker, the money stays spendable) ── */
-export async function goalGet(uid: string): Promise<{ name: string; target: number } | null> { const g = await val(`user_prefs/${uid}/goal`); return g && g.target > 0 ? { name: String(g.name || "My goal"), target: Number(g.target) } : null; }
+export async function goalGet(uid: string): Promise<{ name: string; target: number; vault: number } | null> {
+  const g = await val(`user_prefs/${uid}/goal`);
+  if (!(g && g.target > 0)) return null;
+  const vs = Object.values(((await val(`vaults/${uid}`)) || {}) as Record<string, any>) as any[]; // money locked in the savings vault still counts toward the goal
+  return { name: String(g.name || "My goal"), target: Number(g.target), vault: vs.filter((v) => v.st === "locked" && v.asset === "tfuel").reduce((a, v) => a + (v.amt || 0), 0) };
+}
 export async function goalSet(uid: string, name: any, target: any) {
   const t = Math.floor(Number(target));
   if (!(t >= 1) && Number(target) !== 0) throw new HttpError(400, "Enter a target amount.");

@@ -47,7 +47,20 @@ export function MerchantCard({ say, cpt }: { say: Say; cpt: number }) {
           <div className="b">Sales</div>
           <div className="xs muted">Today: {d.sales.today.n} · {fmtTf(d.sales.today.tfuel, cpt)} TFUEL · {(d.sales.today.usdt / 1e6).toFixed(2)} USDT</div>
           <div className="xs muted">All time: {d.sales.all.n} · {fmtTf(d.sales.all.tfuel, cpt)} TFUEL · {(d.sales.all.usdt / 1e6).toFixed(2)} USDT</div>
-          {d.sales.list.map((s: any, i: number) => <div key={i} className="row xs" style={{ marginTop: 6 }}><span>{s.who} · {new Date(s.at).toLocaleString()}{s.n ? ` · ${s.n}` : ""}</span><b className="num">{s.a === "usdt" ? (s.amt / 1e6).toFixed(2) + " USDT" : fmtTf(s.amt, cpt) + " TFUEL"}</b></div>)}
+          {d.sales.list.map((s: any, i: number) => (
+            <div key={s.id || i} className="row xs" style={{ marginTop: 6 }}>
+              <span>{s.who} · {new Date(s.at).toLocaleString()}{s.n ? ` · ${s.n}` : ""}{s.rf ? " · refunded" : ""}{s.cpn ? ` · coupon ${s.cpn}` : ""}</span>
+              <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <b className="num">{s.a === "usdt" ? (s.amt / 1e6).toFixed(2) + " USDT" : fmtTf(s.amt, cpt) + " TFUEL"}</b>
+                {s.refundable && <button className="btn sec sm" onClick={async () => {
+                  if (!window.confirm("Send this payment back to the customer? A normal send fee applies to you.")) return;
+                  const pin = window.prompt("Enter your PIN to confirm (leave empty if you have no PIN)");
+                  if (pin === null) return;
+                  try { await api<any>("v27", { action: "refund", id: s.id, pin }); say("Refunded", true); const r = await api<any>("v24", { action: "me" }); fill(r); } catch (e) { say(errText(e)); }
+                }}>Refund</button>}
+              </span>
+            </div>
+          ))}
         </div>
       )}
       {qr && d.link && <QrSheet link={d.link} onClose={() => setQr(false)} />}

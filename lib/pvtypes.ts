@@ -3,6 +3,8 @@ export interface Pv {
   rx: "all" | "contacts" | "none"; // who may send me money
   rq: "all" | "contacts" | "none"; // whose payment requests I may pay
   sn: "nick" | "name" | "id"; // how I appear to the people I send to
+  gt: boolean; // allow /tip from groups
+  uw: number; // undo window in minutes after sending (0 = off)
   cf_t: number; cf_u: number; // ask once more for sends of this size (TFUEL / USDT), 0 = off
   ah: number; // auto-hide balance after N seconds idle, 0 = off
   to: number; // lock the app after N minutes idle, 0 = off
@@ -16,7 +18,7 @@ export interface Pv {
   rn: string; // default note for sends
 }
 export const QA_KEYS = ["send", "deposit", "withdraw", "daily", "spin", "history", "invite", "shops"];
-export const PV_DEFAULT: Pv = { rx: "all", rq: "all", sn: "nick", cf_t: 0, cf_u: 0, ah: 0, to: 0, ds: false, an: false, fs: "m", tf: "24", tz: null, da: "", qa: [], wk: false, rn: "" };
+export const PV_DEFAULT: Pv = { rx: "all", rq: "all", sn: "nick", gt: false, uw: 0, cf_t: 0, cf_u: 0, ah: 0, to: 0, ds: false, an: false, fs: "m", tf: "24", tz: null, da: "", qa: [], wk: false, rn: "" };
 
 const pick = <T extends string>(v: any, ok: readonly T[], d: T): T => (ok.includes(v) ? v : d);
 const nn = (v: any, hi: number) => { const n = Number(v); return Number.isFinite(n) ? Math.min(hi, Math.max(0, n)) : 0; };
@@ -26,6 +28,8 @@ export function pvClean(v: any, cur: Pv = PV_DEFAULT): Pv {
     rx: pick(g("rx"), ["all", "contacts", "none"] as const, "all"),
     rq: pick(g("rq"), ["all", "contacts", "none"] as const, "all"),
     sn: pick(g("sn"), ["nick", "name", "id"] as const, "nick"),
+    gt: g("gt") === true,
+    uw: [0, 1, 5, 10].includes(Number(g("uw"))) ? Number(g("uw")) : 0,
     cf_t: Math.floor(nn(g("cf_t"), 1e13)), cf_u: Math.round(nn(g("cf_u"), 1e7) * 100) / 100,
     ah: [0, 15, 30, 60, 120].includes(Number(g("ah"))) ? Number(g("ah")) : 0,
     to: [0, 1, 5, 15, 30].includes(Number(g("to"))) ? Number(g("to")) : 0,

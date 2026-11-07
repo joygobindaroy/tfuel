@@ -11,9 +11,32 @@ import { activity } from "./wallet";
 import { alertAdmins } from "./adminalert";
 import { assertCanMoveMoney } from "./freeze";
 import { xCalc } from "./xcalc";
+import { xOpen, xTopAdd, xoKb } from "./v30";
 import { U } from "./market";
 import { appBase } from "./mailtpl";
 
+/** USD → local money from a free public source (cached 1 h); falls back to the rate typed by the admin */
+let FXC: { cur: string; r: number; at: number } | null = null;
+async function fxFetch(cur: string): Promise<number> {
+  if (FXC && FXC.cur === cur && Date.now() - FXC.at < 3600000) return FXC.r;
+  try {
+    const r = await fetch("https://open.er-api.com/v6/latest/USD", { signal: AbortSignal.timeout(2500) });
+    const j: any = await r.json();
+    const v = Number(j?.rates?.[cur]);
+    if (v > 0) { FXC = { cur, r: v, at: Date.now() }; return v; }
+  } catch {}
+  return FXC && FXC.cur === cur ? FXC.r : 0;
+}
+/** Exchange settings with the rates already worked out (auto = market rate ± margin) */
+export async function xc(): Promise<Xchg> {
+  const c = { ...(await getCfg2()).xchg };
+  if (c.auto) {
+    const base = (await fxFetch(c.cur)) || c.fx;
+    if (base > 0) { c.rate_buy = Math.round(base * (1 + c.margin_buy / 100) * 100) / 100; c.rate_sell = Math.round(base * (1 - c.margin_sell / 100) * 100) / 100; }
+    else { c.rate_buy = 0; c.rate_sell = 0; }
+  }
+  return c;
+}
 const val = async (p: string) => (await db().ref(p).get()).val();
 const clean = (v: any, n: number) => String(v ?? "").replace(/[\u0000-\u001f\u007f<>]/g, " ").trim().slice(0, n);
 const key = () => sha256("card:" + (process.env.BOT_TOKEN || "dev"));
@@ -36,12 +59,12 @@ const pubCfg = (c: Xchg) => ({
 });
 /** approximate local value shown next to USDT balances (display only) */
 export async function xLocal() {
-  const c = (await getCfg2()).xchg;
+  const c = await xc();
   const rate = c.rate_sell > 0 ? c.rate_sell : c.rate_buy;
   return c.on ? { cur: c.cur, rate: c.show_local && rate > 0 ? rate : 0 } : null;
 }
 export async function xStats(uid: string) {
-  const c = (await getCfg2()).xchg;
+  const c = await xc();
   const s = ((await val(`xchg_stats/${uid}`)) || {}) as any;
   const done = Number(s.done) || 0, rej = Number(s.rej) || 0;
   return { done, rej, trusted: done >= c.trusted_after && rej === 0 };
@@ -61,13 +84,14 @@ export function xrcptUrl(id: string, o: XOrder, trusted = false) {
   return `${appBase()}/api/xrcpt?d=${d}&s=${sig("x|" + d)}`;
 }
 export async function xView(uid: string) {
-  const c = (await getCfg2()).xchg;
+  const c = await xc();
   const rows = ((await val(`user_xorders/${uid}`)) || {}) as Record<string, any>;
   const ids = Object.keys(rows).sort().reverse().slice(0, 15);
   const stats = await xStats(uid);
   const orders = (await Promise.all(ids.map(async (id) => { const o = (await val(`xorders/${id}`)) as XOrder | null; return o ? orderView(id, o, c, true, stats.trusted) : null; }))).filter(Boolean);
   const dayU = Number(await val(`xchg_daily/${uid}/${dayKey()}`)) || 0;
-  return { cfg: pubCfg(c), stats, orders, daily_left: c.daily_max_usdt > 0 ? Math.max(0, r2(c.daily_max_usdt - dayU / U)) : null };
+  const accts = ((await val(`user_prefs/${uid}/xacct`)) || {}) as Record<string, string>;
+  return { cfg: { ...pubCfg(c), hours: xOpen(c) }, accts, stats, orders, daily_left: c.daily_max_usdt > 0 ? Math.max(0, r2(c.daily_max_usdt - dayU / U)) : null };
 }
 
 /* ───────── quote with rate lock ───────── */
@@ -85,9 +109,11 @@ function checkAmt(c: Xchg, m: XMethod, usdt: number) {
 function enabled(c: Xchg, kind: "buy" | "sell") {
   if (!c.on) throw new HttpError(403, "feature_off:Exchange is turned off.");
   if (kind === "buy" ? !c.buy_on : !c.sell_on) throw new HttpError(403, `feature_off:${kind === "buy" ? "Buying" : "Selling"} is paused right now.`);
+  const h = xOpen(c);
+  if (!h.open) throw new HttpError(403, `feature_off:Exchange is closed right now. ${h.text}`);
 }
 export async function xQuote(uid: string, b: any) {
-  const c = (await getCfg2()).xchg;
+  const c = await xc();
   const kind = b?.kind === "sell" ? "sell" : "buy";
   enabled(c, kind);
   const m = methodFor(c, String(b?.method || ""), kind);
@@ -115,7 +141,7 @@ async function tl(id: string, uid: string, s: XSt, extra: Record<string, any> = 
   await db().ref().update({ [`xorders/${id}/tl/${sortableId()}`]: { s: LABEL[s] || s, at: Date.now() }, [`xorders/${id}/st`]: s, [`user_xorders/${uid}/${id}/st`]: s, ...extra });
 }
 export async function xPlace(uid: string, name: string, b: any) {
-  const c = (await getCfg2()).xchg;
+  const c = await xc();
   const q = readToken(uid, String(b?.token || ""));
   enabled(c, q.kind);
   const m = methodFor(c, q.method, q.kind);
@@ -166,15 +192,16 @@ export async function xPlace(uid: string, name: string, b: any) {
     throw e;
   }
   if (q.kind === "sell") {
+    await db().ref(`user_prefs/${uid}/xacct/${m.id}`).set(acct).catch(() => {});
     await activity(uid, "sell", { usdt_u: -q.usdt_u, note: `Exchange sell ${m.name}`.slice(0, 80) });
-    await alertAdmins("exchange", `New SELL request: ${usdt} USDT → ${q.fiat} ${c.cur} (${m.name}) from ${clean(name, 20)}. Open Admin → Exchange.`);
+    await alertAdmins("exchange", `New SELL request: ${usdt} USDT → ${q.fiat} ${c.cur} (${m.name}) from ${clean(name, 20)}. Pay to: ${acct}`, { kb: xoKb(id, "sell") });
   }
   const o2 = (await val(`xorders/${id}`)) as XOrder;
   return orderView(id, o2, c, true);
 }
 /** Buy: the user paid the admin and sends the payment reference */
 export async function xProof(uid: string, id: string, ref: any) {
-  const c = (await getCfg2()).xchg;
+  const c = await xc();
   const o = (await val(`xorders/${id}`)) as XOrder | null;
   if (!o || o.uid !== uid) throw new HttpError(404, "not_found");
   const r = clean(ref, 80);
@@ -185,7 +212,7 @@ export async function xProof(uid: string, id: string, ref: any) {
   const t = await db().ref(`xorders/${id}/st`).transaction((cur: string | null) => (cur === "await" ? "pending" : undefined));
   if (!t.committed) throw new HttpError(409, "This order can't take a payment reference now.");
   await db().ref().update({ [`xorders/${id}/ref`]: r, [`xorders/${id}/tl/${sortableId()}`]: { s: "Payment reference sent", at: Date.now() }, [`user_xorders/${uid}/${id}/st`]: "pending" });
-  await alertAdmins("exchange", `BUY order paid: ${o.usdt_u / U} USDT for ${o.fiat} ${o.cur} (${o.mname}), ref ${r}, ${o.name}. Open Admin → Exchange.`);
+  await alertAdmins("exchange", `BUY order paid: ${o.usdt_u / U} USDT for ${o.fiat} ${o.cur} (${o.mname}), ref ${r}, ${o.name}. Check your account, then confirm.`, { kb: xoKb(id, "buy") });
   return orderView(id, { ...o, st: "pending", ref: r }, c, true);
 }
 /** user cancels: buy before done, sell only before the admin starts paying */
@@ -206,7 +233,7 @@ async function finishBad(id: string, o: XOrder, st: "cancelled" | "rejected" | "
   await notify(o.uid, `💱 Exchange order ${st === "expired" ? "expired" : st}: ${o.kind === "buy" ? "Buy" : "Sell"} ${o.usdt_u / U} USDT. ${msg}${o.kind === "sell" ? " Your USDT is back in your balance." : ""}`).catch(() => {});
 }
 export async function xAdminList(status: string) {
-  const c = (await getCfg2()).xchg;
+  const c = await xc();
   let all: Record<string, XOrder> = {};
   try { all = ((await db().ref("xorders").orderByKey().limitToLast(200).get()).val() || {}) as any; } catch { all = ((await val("xorders")) || {}) as any; }
   const rows = Object.entries(all).filter(([, o]) => (status === "open" ? OPEN.includes(o.st) : status === "all" ? true : o.st === status)).sort((a, b) => (a[0] < b[0] ? 1 : -1)).slice(0, 100);
@@ -243,6 +270,8 @@ export async function xAdminSet(id: string, action: string, note: string, who: s
   if (nt) up[`xorders/${id}/note_admin`] = nt;
   await db().ref().update(up);
   await activity(o.uid, o.kind === "buy" ? "buy" : "sell", { usdt_u: o.kind === "buy" ? o.usdt_u : 0, note: `Exchange ${o.kind} ${o.mname}`.slice(0, 80) });
+  await xTopAdd(o.uid, o.usdt_u).catch(() => {});
+  await import("./v29").then((M) => M.firstOrderBonus(o.uid)).catch(() => {});
   const st = await xStats(o.uid);
   await notify(o.uid, o.kind === "buy"
     ? `✅ Exchange complete: ${o.usdt_u / U} USDT was added to your balance.${st.trusted ? " You are now a Trusted trader ⭐" : ""}`
@@ -304,13 +333,14 @@ export async function recentAmts(uid: string) {
   }
   return out;
 }
-export async function lowGet(uid: string) { const x = ((await val(`user_prefs/${uid}/lowbal`)) || {}) as any; return { on: !!x.on, t: Number(x.t) || 0, u: Number(x.u) || 0 }; }
+export async function lowGet(uid: string) { const x = ((await val(`user_prefs/${uid}/lowbal`)) || {}) as any; return { on: !!x.on, t: Number(x.t) || 0, u: Number(x.u) || 0, ht: Number(x.ht) || 0, hu: Number(x.hu) || 0 }; }
 export async function lowSet(uid: string, b: any) {
   if (!(await getCfg2()).v27.lowbal) throw new HttpError(403, "feature_off:Low balance alerts are off.");
   const on = !!b?.on;
   const t = Math.max(0, Math.min(1e9, Number(b?.t) || 0)), u = Math.max(0, Math.min(1e9, Math.round((Number(b?.u) || 0) * 100) / 100));
-  if (on && !(t > 0 || u > 0)) throw new HttpError(400, "Set an amount to be warned at.");
-  await db().ref().update({ [`user_prefs/${uid}/lowbal`]: { on, t, u, at: (await val(`user_prefs/${uid}/lowbal/at`)) || 0 }, [`lowbal_users/${uid}`]: on ? true : null });
+  const ht = Math.max(0, Math.min(1e9, Number(b?.ht) || 0)), hu = Math.max(0, Math.min(1e9, Math.round((Number(b?.hu) || 0) * 100) / 100));
+  if (on && !(t > 0 || u > 0 || ht > 0 || hu > 0)) throw new HttpError(400, "Set an amount to be warned at.");
+  await db().ref().update({ [`user_prefs/${uid}/lowbal`]: { on, t, u, ht, hu, at: (await val(`user_prefs/${uid}/lowbal/at`)) || 0 }, [`lowbal_users/${uid}`]: on ? true : null });
   return lowGet(uid);
 }
 export async function runLowBal(now = Date.now()) {
@@ -325,8 +355,10 @@ export async function runLowBal(now = Date.now()) {
     const u = ((await val(`users/${uid}`)) || {}) as any;
     const lowT = p.t > 0 && (u.balance || 0) < p.t * cpt && (u.balance || 0) >= 0;
     const lowU = p.u > 0 && (u.usdt_u || 0) < p.u * U;
-    if (!lowT && !lowU) continue;
+    const hiT = p.ht > 0 && (u.balance || 0) >= p.ht * cpt, hiU = p.hu > 0 && (u.usdt_u || 0) >= p.hu * U;
+    if (!lowT && !lowU && !hiT && !hiU) continue;
     await db().ref(`user_prefs/${uid}/lowbal/at`).set(now);
+    if (!lowT && !lowU) { await notify(uid, `💰 Your balance reached ${hiT ? `${p.ht} TFUEL` : ""}${hiT && hiU ? " and " : ""}${hiU ? `${p.hu} USDT` : ""}. You can withdraw it from the app when you want.`).catch(() => {}); n++; continue; }
     await notify(uid, `⚠️ Low balance: ${lowT ? `TFUEL is below ${p.t}` : ""}${lowT && lowU ? " and " : ""}${lowU ? `USDT is below ${p.u}` : ""}. You can change this alert in Settings.`).catch(() => {});
     n++;
   }

@@ -12,7 +12,7 @@ import assert from "node:assert/strict";
   await db().ref("users/1").set({ name: "A", balance: 0 });
   await db().ref("users/2").set({ name: "B", balance: 0 });
   // goal & bio
-  assert.deepEqual(await V.goalSet("1", "<b>Phone", 5000), { name: "b Phone", target: 5000 });
+  assert.deepEqual(await V.goalSet("1", "<b>Phone", 5000), { name: "b Phone", target: 5000, vault: 0 });
   assert.equal(await V.goalSet("1", "x", 0), null);
   await assert.rejects(V.goalSet("1", "x", "abc"));
   assert.equal(await V.bioSet("1", "  hi<script>  "), "hi script");

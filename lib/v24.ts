@@ -31,19 +31,21 @@ export async function merchantPub(code: string) {
   const uid = await resolveRef(code);
   const m = uid ? await merchantGet(uid) : null;
   if (!uid || !m || !m.on || !(await getCfg2()).v24.merchant) throw new HttpError(404, "This shop isn't accepting payments right now.");
-  return { name: m.name, amt: m.amt, asset: m.asset };
+  const cat = await (await import("./v30")).catalogPub(code);
+  return { name: m.name, amt: m.amt, asset: m.asset, items: cat.items, coupons: cat.coupons };
 }
 export async function merchantLink(uid: string) {
   const base = (await getSettings()).referral_link;
   return base ? `${base.replace(/\?.*$/, "")}?startapp=mer_${await getRefCode(uid)}` : "";
 }
 /** Called after every completed transfer: if the receiver is an open merchant, record a sale */
-export async function merchantSale(toUid: string, fromName: string, asset: "tfuel" | "usdt", amount: number, txid: string, note: string) {
+export async function merchantSale(toUid: string, fromName: string, asset: "tfuel" | "usdt", amount: number, txid: string, note: string, fromUid = "") {
   const m = await val(`merchants/${toUid}/on`);
   if (!m) return;
   const day = dayKey();
+  const cpn = await import("./v30").then((M) => M.cpnApplied(toUid, note)).catch(() => "");
   await db().ref().update({
-    [`merchant_sales/${toUid}/${sortableId()}`]: { at: Date.now(), a: asset, amt: amount, who: clean(fromName, 20).replace(/^(.).*$/, (s) => s.slice(0, 1) + "***" + (s.length > 4 ? s.slice(-1) : "")), tx: txid, n: clean(note, 40) },
+    [`merchant_sales/${toUid}/${sortableId()}`]: { at: Date.now(), a: asset, amt: amount, who: clean(fromName, 20).replace(/^(.).*$/, (s) => s.slice(0, 1) + "***" + (s.length > 4 ? s.slice(-1) : "")), tx: txid, n: clean(note, 40), ...(fromUid ? { fu: fromUid } : {}), ...(cpn ? { cpn } : {}) },
     [`merchant_tot/${toUid}/${day}/${asset}`]: ServerValue.increment(amount),
     [`merchant_tot/${toUid}/${day}/n`]: ServerValue.increment(1),
     [`merchant_tot/${toUid}/all/${asset}`]: ServerValue.increment(amount),
@@ -52,8 +54,9 @@ export async function merchantSale(toUid: string, fromName: string, asset: "tfue
 }
 export async function merchantSales(uid: string) {
   let rows: any[] = [];
-  try { rows = Object.values(((await db().ref(`merchant_sales/${uid}`).orderByKey().limitToLast(50).get()).val() || {}) as Record<string, any>); }
-  catch { rows = Object.values(((await val(`merchant_sales/${uid}`)) || {}) as Record<string, any>).slice(-50); }
+  const strip = (o: Record<string, any>) => Object.entries(o).map(([id, x]) => ({ id, ...x, refundable: !!x.fu && !x.rf && Date.now() - x.at < 30 * 864e5, fu: undefined }));
+  try { rows = strip(((await db().ref(`merchant_sales/${uid}`).orderByKey().limitToLast(50).get()).val() || {}) as Record<string, any>); }
+  catch { rows = strip(((await val(`merchant_sales/${uid}`)) || {}) as Record<string, any>); }
   const t = ((await val(`merchant_tot/${uid}`)) || {}) as any;
   const pick = (x: any) => ({ tfuel: Number(x?.tfuel) || 0, usdt: Number(x?.usdt) || 0, n: Number(x?.n) || 0 });
   return { today: pick(t[dayKey()]), all: pick(t.all), list: rows.sort((a, b) => b.at - a.at).slice(0, 30) };

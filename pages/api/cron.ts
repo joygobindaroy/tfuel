@@ -62,6 +62,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const v25 = { bday: await (await import("@/lib/v25")).runBirthdays().catch((e) => logErr("cron:bday", e)), cash: await (await import("@/lib/v25")).runCashback().catch((e) => logErr("cron:cash", e)), week: await (await import("@/lib/v25")).runWeeklyAdmin().catch((e) => logErr("cron:weekly_admin", e)) };
     const smart = await (await import("@/lib/v26")).runSmartAlerts().catch((e) => logErr("cron:smart", e));
     const v27 = { exp: await (await import("@/lib/v27")).xExpire().catch((e) => logErr("cron:xexp", e)), low: await (await import("@/lib/v27")).runLowBal().catch((e) => logErr("cron:lowbal", e)) };
+    const v29 = await import("@/lib/v29");
+    await v29.runVaults().catch((e) => logErr("cron:vaults", e));
+    const v30 = await import("@/lib/v30");
+    await v30.runPackets().catch((e) => logErr("cron:packets", e));
+    await v30.runXAlerts().catch((e) => logErr("cron:xalerts", e));
+    await v29.runWinback().catch((e) => logErr("cron:winback", e));
+    await v29.xRecord().catch((e) => logErr("cron:xrates", e));
     await errTrim().catch(() => {});
     const adminJobs = await runAdminJobs(s).catch((e) => logErr("cron:adminJobs", e));
     await db().ref("stats/cron_at").set(Date.now()).catch(() => {});
