@@ -1,7 +1,7 @@
 import { authenticate, HttpError } from "@/lib/auth";
 import { route, rateLimit } from "@/lib/api";
 import { ensureUser } from "@/lib/user";
-import { merchantGet, merchantSet, merchantPub, merchantLink, merchantSales } from "@/lib/v24";
+import { merchantGet, merchantSet, merchantPub, merchantLink, merchantSales, merchantPosterUrl } from "@/lib/v24";
 
 /** Merchant QR: shop profile, public info for customers, sales list */
 export default route(async (req, res) => {
@@ -11,7 +11,7 @@ export default route(async (req, res) => {
   const a = String(req.body?.action || "");
   const b = req.body || {};
   switch (a) {
-    case "me": return void res.json({ success: true, m: await merchantGet(user.id), link: await merchantLink(user.id), sales: await merchantSales(user.id) });
+    case "me": return void res.json({ success: true, m: await merchantGet(user.id), link: await merchantLink(user.id), poster: await (async () => { const m = await merchantGet(user.id); return m ? merchantPosterUrl(m.name, await merchantLink(user.id)) : ""; })(), sales: await merchantSales(user.id) });
     case "set": { const m = await merchantSet(user.id, b); return void res.json({ success: true, m, link: await merchantLink(user.id), sales: await merchantSales(user.id) }); }
     case "pub": return void res.json({ success: true, ...(await merchantPub(String(b.code || ""))) });
   }

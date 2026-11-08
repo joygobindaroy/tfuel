@@ -6,12 +6,24 @@ import "@/styles/globals.css";
 import { applyTheme, applyAccent } from "@/lib/theme";
 import { startTranslator } from "@/lib/i18n";
 import { BRAND, LOGO_SOURCES } from "@/lib/brand";
+import { normDigits } from "@/lib/client";
 
 export default function App({ Component, pageProps }: AppProps) {
   useEffect(() => {
     applyTheme();
     applyAccent();
     startTranslator();
+    const fix = (e: Event) => {
+      const el = e.target as HTMLInputElement | null;
+      if (!el || (el.tagName !== "INPUT" && el.tagName !== "TEXTAREA")) return;
+      const m = (el.getAttribute("inputmode") || "").toLowerCase();
+      if (m !== "numeric" && m !== "decimal" && m !== "tel") return;
+      const v = el.value, n = normDigits(v);
+      if (n === v) return;
+      const set = Object.getOwnPropertyDescriptor(el.tagName === "INPUT" ? HTMLInputElement.prototype : HTMLTextAreaElement.prototype, "value")?.set;
+      set?.call(el, n);
+    };
+    document.addEventListener("input", fix, true);
     try { if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {}); } catch {}
   }, []);
   return (

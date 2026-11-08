@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Icon from "@/components/Icons";
 import BackupPanel from "@/components/AdminBackup";
+import { copyText } from "@/lib/client";
 
 type Call = <T = any>(body: Record<string, any>, okMsg?: string) => Promise<T | null>;
 const Sw = ({ on, set }: { on: boolean; set: (v: boolean) => void }) => <button type="button" className={`switch ${on ? "on" : ""}`} aria-label="toggle" style={{ flexShrink: 0 }} onClick={() => set(!on)} />;
@@ -238,7 +239,7 @@ export default function GrowthPage({ call }: { call: Call }) {
               <div className="xs muted" style={{ wordBreak: "break-all" }}>{x.link || `?startapp=cmp_${x.tag}`}</div>
             </div>
             <div style={{ display: "flex", gap: 6 }}>
-              <button className="btn sec sm" onClick={() => { try { navigator.clipboard.writeText(x.link || `?startapp=cmp_${x.tag}`); } catch {} }}>Copy</button>
+              <button className="btn sec sm" onClick={() => { copyText(x.link || `?startapp=cmp_${x.tag}`); }}>Copy</button>
               <button className="btn sec sm" onClick={async () => { if (confirm(`Remove campaign ${x.tag}?`)) { await call({ action: "growthCampaignDelete", tag: x.tag }, "Removed"); load(); } }}><Icon name="x" size={14} /></button>
             </div>
           </div>
@@ -534,6 +535,26 @@ export default function GrowthPage({ call }: { call: Call }) {
           </>
         );
       })}
+      {S("v31", "Fee tiers, reminders & digests", "Exchange fee discount by weekly volume, invoice reminders, and the bot messages.", (v, set) => {
+        const ts: any[] = v.tiers?.list || [];
+        const ut = (i: number, p: any) => set({ tiers: { ...v.tiers, list: ts.map((x, j) => (j === i ? { ...x, ...p } : x)) } });
+        return (
+          <>
+            <Row t="Volume fee discounts" h="Uses the bigger of this week's and last week's exchange volume. The discount is a % off the method fee."><Sw on={!!v.tiers?.on} set={(x) => set({ tiers: { ...v.tiers, on: x } })} /></Row>
+            {ts.map((t, i) => (
+              <div key={i} className="grid2">
+                <L t="From volume (USDT)"><input inputMode="decimal" value={t.vol} onChange={(e) => ut(i, { vol: e.target.value })} /></L>
+                <L t="Fee discount %"><input inputMode="decimal" value={t.off} onChange={(e) => ut(i, { off: e.target.value })} /></L>
+                <button className="btn danger sm" onClick={() => set({ tiers: { ...v.tiers, list: ts.filter((_, j) => j !== i) } })}>Remove</button>
+              </div>
+            ))}
+            {ts.length < 6 && <button className="btn sec sm" style={{ margin: "6px 0" }} onClick={() => set({ tiers: { ...v.tiers, list: [...ts, { vol: 1000, off: 10 }] } })}>+ Add tier</button>}
+            <Row t="Invoice reminders" h="The invoice owner gets a bot message 1 day before the due date, when it is overdue, and 3 days later."><Sw on={v.inv_remind !== false} set={(x) => set({ inv_remind: x })} /></Row>
+            <Row t="Weekly digest for users who opted in"><Sw on={v.digest !== false} set={(x) => set({ digest: x })} /></Row>
+            <Row t="Admin morning brief" h="One bot message a day to the admins: exchange numbers and what is waiting."><Sw on={!!v.adm_daily} set={(x) => set({ adm_daily: x })} /></Row>
+          </>
+        );
+      })}
       {S("v30", "Red packets & group tips", "Red packet: one amount shared by N friends. Group tips: users reply /tip 10 in a Telegram group (each user must switch it on in Settings; the bot must be allowed in groups).", (v, set) => {
         const up = (k: string, p: any) => set({ [k]: { ...(v[k] || {}), ...p } });
         return (
@@ -606,6 +627,7 @@ export default function GrowthPage({ call }: { call: Call }) {
               {!v.auto && <L t="Users SELL 1 USDT at"><input inputMode="decimal" value={v.rate_sell ?? 0} onChange={(e) => set({ rate_sell: e.target.value })} /></L>}
               <L t="New accounts wait (hours)"><input inputMode="numeric" value={v.new_user_hours ?? 24} onChange={(e) => set({ new_user_hours: e.target.value })} /></L>
               <L t="Daily limit per user (USDT, 0 = none)"><input inputMode="decimal" value={v.daily_max_usdt ?? 0} onChange={(e) => set({ daily_max_usdt: e.target.value })} /></L>
+              <L t="Trusted daily limit multiplier (1 = same)"><input inputMode="decimal" value={v.trusted_x ?? 1} onChange={(e) => set({ trusted_x: e.target.value })} /></L>
               <L t="Trusted badge after N clean orders"><input inputMode="numeric" value={v.trusted_after ?? 5} onChange={(e) => set({ trusted_after: e.target.value })} /></L>
             </div>
             <Row t="Open hours only" h="Outside these hours users can see rates but can't place orders."><Sw on={!!v.hours_on} set={(x) => set({ hours_on: x })} /></Row>
@@ -627,11 +649,13 @@ export default function GrowthPage({ call }: { call: Call }) {
                   <L t="Max (USDT)"><input inputMode="decimal" value={m.max} onChange={(e) => um(i, { max: e.target.value })} /></L>
                   <L t="Fee %"><input inputMode="decimal" value={m.fee_pct} onChange={(e) => um(i, { fee_pct: e.target.value })} /></L>
                 </div>
+                <Row t="Own opening hours for this method"><Sw on={!!m.h_on} set={(x) => um(i, { h_on: x })} /></Row>
+                {m.h_on && <div className="grid2"><L t="Opens (0–23)"><input inputMode="numeric" value={m.h_from ?? 10} onChange={(e) => um(i, { h_from: e.target.value })} /></L><L t="Closes (1–24)"><input inputMode="numeric" value={m.h_to ?? 22} onChange={(e) => um(i, { h_to: e.target.value })} /></L></div>}
                 <L t="Where the user pays you (shown only when buying)"><textarea rows={2} value={m.details} onChange={(e) => um(i, { details: e.target.value })} /></L>
                 <button className="btn danger sm" onClick={() => set({ methods: ms.filter((_, j) => j !== i) })}>Remove</button>
               </div>
             ))}
-            {ms.length < 12 && <button className="btn sec sm" style={{ marginTop: 8 }} onClick={() => set({ methods: [...ms, { id: "m" + Date.now().toString(36), name: "", details: "", kind: "both", min: 1, max: 1000, fee_pct: 0 }] })}>+ Add payment method</button>}
+            {ms.length < 12 && <button className="btn sec sm" style={{ marginTop: 8 }} onClick={() => set({ methods: [...ms, { id: "m" + Date.now().toString(36), name: "", details: "", kind: "both", min: 1, max: 1000, fee_pct: 0, h_on: false, h_from: 10, h_to: 22 }] })}>+ Add payment method</button>}
           </>
         );
       })}

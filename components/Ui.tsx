@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import Icon, { IconName } from "@/components/Icons";
-import { haptic } from "@/lib/client";
+import { haptic, copyText } from "@/lib/client";
 
 /** কপি বাটন: চাপলে কয়েক সেকেন্ড ✓ দেখায় (toast ছাড়াই) */
 export function CopyBtn({ text, label, size = 14, className = "btn sec sm" }: { text: string; label?: string; size?: number; className?: string }) {
-  const [ok, setOk] = useState(false);
+  const [ok, setOk] = useState<boolean | "fail">(false);
   return (
     <button
       type="button"
@@ -12,12 +12,10 @@ export function CopyBtn({ text, label, size = 14, className = "btn sec sm" }: { 
       aria-label="Copy"
       onClick={(e) => {
         e.stopPropagation();
-        try { navigator.clipboard?.writeText(text); } catch {}
-        setOk(true);
-        setTimeout(() => setOk(false), 1500);
+        copyText(text).then((good) => { setOk(good ? true : "fail"); setTimeout(() => setOk(false), 1800); });
       }}
     >
-      <Icon name={ok ? "check" : "copy"} size={size} />{ok ? "Copied" : label}
+      <Icon name={ok === true ? "check" : ok === "fail" ? "alert" : "copy"} size={size} />{ok === true ? "Copied" : ok === "fail" ? "Copy failed — hold the text to copy" : label}
     </button>
   );
 }

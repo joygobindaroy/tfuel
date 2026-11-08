@@ -21,6 +21,12 @@ export async function displayName(uid: string): Promise<string> {
   if (sn.val() === "id") { const { getRefCode } = await import("./refcode"); const c = await getRefCode(uid).catch(() => ""); if (c) return `ID ${c}`; }
   return String(sn.val() === "name" ? nm.val() || "User" : nick.val() || nm.val() || "User").replace(/[\u0000-\u001f\u007f<>]/g, " ").trim().slice(0, 24) || "User";
 }
+/** Name of whoever RECEIVES a payment: the shop name when the receiver runs an active shop (merchant QR), else the normal display name */
+export async function payName(uid: string): Promise<string> {
+  const m = (await db().ref(`merchants/${uid}`).get()).val() as any;
+  const shop = m && m.on ? String(m.name || "").replace(/[\u0000-\u001f\u007f<>]/g, " ").trim().slice(0, 30) : "";
+  return shop || displayName(uid);
+}
 /** Transaction hash like an exchanger's internal transfer ID: TF + 40 hex */
 export const makeTxid = (id: string, from: string, to: string, amount: number, at: number) => "TF" + sha256(`tx:${id}:${from}:${to}:${amount}:${at}`).slice(0, 40).toUpperCase();
 
@@ -144,7 +150,7 @@ export async function sendAsset(from: { id: string; name: string }, toUid: strin
 
   const id = sortableId();
   const txid = makeTxid(id, from.id, toUid, amount, now);
-  const [toName, toCode, fromCode] = await Promise.all([displayName(toUid), getRefCode(toUid).catch(() => ""), getRefCode(from.id).catch(() => "")]);
+  const [toName, toCode, fromCode] = await Promise.all([payName(toUid), getRefCode(toUid).catch(() => ""), getRefCode(from.id).catch(() => "")]);
   import("./plus").then((P) => P.bigSendAlert(from.id, toName, asset, amount, s.coins_per_tfuel)).catch(() => {});
   const holdAt = asset === "usdt" ? toU(c2.xfer.hold.usdt) : c2.xfer.hold.tfuel;
   const bigHold = holdAt > 0 && amount >= holdAt;

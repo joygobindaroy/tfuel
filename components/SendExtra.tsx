@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, errText, fmtTf, saveImage, shareImage } from "@/lib/client";
 import { CopyBtn, AmtInput, SkelList, confetti } from "@/components/Ui";
 import Icon from "@/components/Icons";
+import { askConfirm, askText, askPin } from "@/components/Dialog";
 
 type Say = (t: string, ok?: boolean) => void;
 export type Asset = "tfuel" | "usdt";
@@ -167,7 +168,7 @@ export function HistoryTab({ cpt, say, onCancelled, onRepeat }: { cpt: number; s
   const [opn, setOpn] = useState("");
   useEffect(() => { api<any>("send", { action: "report", offset: off }).then(setRep).catch(() => {}); }, [off]);
   const dispute = async (id: string) => {
-    const reason = prompt("What is wrong with this transfer? (the support team will look into it)");
+    const reason = await askText("What is wrong with this transfer?", { text: "The support team will look into it.", ok: "Report" });
     if (!reason) return;
     try { await api("send", { action: "dispute", id, reason }); say("Reported. Support will contact you.", true); load(); } catch (e) { say(errText(e)); }
   };
@@ -189,7 +190,7 @@ export function HistoryTab({ cpt, say, onCancelled, onRepeat }: { cpt: number; s
     setTimeout(() => URL.revokeObjectURL(el.href), 4000);
   };
   const cancelHold = async (id: string) => {
-    if (!confirm("Cancel this transfer and get your money back?")) return;
+    if (!(await askConfirm("Cancel this transfer?", { text: "You get your money back.", ok: "Cancel transfer", cancel: "Keep it", danger: true }))) return;
     setBusy(id);
     try { await api("send", { action: "cancel", id }); say("Transfer cancelled", true); load(); onCancelled(); } catch (e) { say(errText(e)); } finally { setBusy(""); }
   };
@@ -204,7 +205,7 @@ export function HistoryTab({ cpt, say, onCancelled, onRepeat }: { cpt: number; s
               <div style={{ minWidth: 0 }}><div className="title" style={{ fontSize: 14 }}>{money(l.asset, l.amount, cpt)}</div><div className="sub">{l.note || "—"} · expires {new Date(l.exp).toLocaleDateString()}</div></div>
               <div className="gap">
                 {l.url && <CopyBtn text={l.url} label="Copy" />}
-                <button className="btn danger sm" disabled={busy === l.id} onClick={async () => { if (!confirm("Cancel this link and refund yourself?")) return; setBusy(l.id); try { await api("send", { action: "link_cancel", id: l.id }); say("Link cancelled — refunded", true); load(); onCancelled(); } catch (e) { say(errText(e)); } finally { setBusy(""); } }}>Cancel</button>
+                <button className="btn danger sm" disabled={busy === l.id} onClick={async () => { if (!(await askConfirm("Cancel this link?", { text: "The money goes back to you.", ok: "Cancel link", cancel: "Keep it", danger: true }))) return; setBusy(l.id); try { await api("send", { action: "link_cancel", id: l.id }); say("Link cancelled — refunded", true); load(); onCancelled(); } catch (e) { say(errText(e)); } finally { setBusy(""); } }}>Cancel</button>
               </div>
             </div>
           ))}
@@ -242,7 +243,7 @@ export function HistoryTab({ cpt, say, onCancelled, onRepeat }: { cpt: number; s
               {opn === x.id && (
                 <>
                   <ReceiptActions txid={x.tx} say={say} />
-                  <button className="btn ghost sm" style={{ marginTop: 4 }} onClick={async () => { const t = prompt("Add a private tag (e.g. rent, pizza)", x.tag || ""); if (t === null) return; try { await api("send", { action: "xtag", id: x.id, tag: t }); say("Saved", true); load(); } catch (e) { say(errText(e)); } }}><Icon name="tag" size={13} /> {x.tag ? "Edit tag" : "Add tag"}</button>
+                  <button className="btn ghost sm" style={{ marginTop: 4 }} onClick={async () => { const t = await askText("Private tag", { text: "Only you see it. For example: rent, pizza.", initial: x.tag || "", maxLength: 20 }); if (t === null) return; try { await api("send", { action: "xtag", id: x.id, tag: t }); say("Saved", true); load(); } catch (e) { say(errText(e)); } }}><Icon name="tag" size={13} /> {x.tag ? "Edit tag" : "Add tag"}</button>
                   <button className="btn ghost sm" style={{ marginTop: 4 }} disabled={!!x.dispute} onClick={() => dispute(x.id)}>{x.dispute ? "Reported" : "Report a problem"}</button>
                 </>
               )}

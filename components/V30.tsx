@@ -3,6 +3,7 @@ import { api, errText, openTgLink } from "@/lib/client";
 import { CopyBtn, confetti } from "@/components/Ui";
 import { PageHead } from "@/components/Cashier";
 import Icon from "@/components/Icons";
+import { askConfirm, askText, askPin } from "@/components/Dialog";
 
 type Say = (m: string, ok?: boolean) => void;
 const fmt = (asset: string, amt: number, cpt: number) => (asset === "usdt" ? `${(amt / 1e6).toFixed(2)} USDT` : `${(amt / cpt).toLocaleString("en-US", { maximumFractionDigits: 2 })} TFUEL`);
@@ -15,12 +16,12 @@ export function PacketPage({ say, onBack, cpt, reload }: { say: Say; onBack: () 
   const [busy, setBusy] = useState(false);
   useEffect(() => { api<any>("v30", { action: "pkList" }).then((r) => setList(r.list)).catch(() => {}); }, []);
   const create = async () => {
-    const pin = window.prompt("Enter your PIN to confirm (leave empty if you have no PIN)");
+    const pin = await askPin("Enter your PIN to confirm");
     if (pin === null) return;
     setBusy(true);
     try { const r = await api<any>("v30", { action: "pkNew", ...f, amount: Number(f.amount), n: Number(f.n), hours: Number(f.hours), pin }); setMade(r.p); setList(r.list); setF({ ...f, amount: "" }); reload(); } catch (e) { say(errText(e)); } finally { setBusy(false); }
   };
-  const close = async (tok: string) => { if (!window.confirm("Close this red packet and get the unopened money back?")) return; try { const r = await api<any>("v30", { action: "pkClose", tok }); setList(r.list); say("Closed", true); reload(); } catch (e) { say(errText(e)); } };
+  const close = async (tok: string) => { if (!(await askConfirm("Close this red packet?", { text: "You get the unopened money back.", ok: "Close it" }))) return; try { const r = await api<any>("v30", { action: "pkClose", tok }); setList(r.list); say("Closed", true); reload(); } catch (e) { say(errText(e)); } };
   const share = (url: string) => openTgLink(`https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent("🧧 I sent a red packet! Open it before it's gone")}`);
   return (
     <>

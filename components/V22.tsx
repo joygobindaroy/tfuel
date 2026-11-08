@@ -183,13 +183,13 @@ export function NoteChips({ onPick }: { onPick: (t: string) => void }) {
 }
 
 /** Invite QR sheet (picture is made on the phone; the site address is not shown) */
-export function QrSheet({ link, onClose }: { link: string; onClose: () => void }) {
+export function QrSheet({ link, onClose, title = "Scan to join" }: { link: string; onClose: () => void; title?: string }) {
   return (
     <div className="sheet-bg" onClick={onClose}>
       <div className="sheet" onClick={(e) => e.stopPropagation()} style={{ textAlign: "center" }}>
-        <div className="title" style={{ fontSize: 18 }}>Scan to join</div>
+        <div className="title" style={{ fontSize: 18 }}>{title}</div>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={`/api/qr?d=${encodeURIComponent(link)}`} alt="Invite QR" width={240} height={240} style={{ margin: "12px auto", borderRadius: 12, display: "block" }} />
+        <img src={`/api/qr?d=${encodeURIComponent(link)}`} alt="QR code" width={240} height={240} style={{ margin: "12px auto", borderRadius: 12, display: "block" }} />
         <button className="btn block" onClick={onClose}>Close</button>
       </div>
     </div>

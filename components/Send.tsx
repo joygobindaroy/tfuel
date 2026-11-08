@@ -5,6 +5,7 @@ import { api, errText, fmtTf, tg } from "@/lib/client";
 import { CopyBtn, AmtInput, Cta, SkelCard, confetti } from "@/components/Ui";
 import { PageHead } from "@/components/Cashier";
 import { useAccount, PinField } from "@/components/Settings";
+import { QuickSend } from "@/components/V31";
 import Icon from "@/components/Icons";
 import { useMainButton } from "@/components/V20";
 import { AmtChips } from "@/components/V27";
@@ -212,6 +213,7 @@ export function SendPage({ say, onBack, cpt, reload, top, reqId, fixedAsset, ini
               )}
               {!paying && (mode === "person" || mode === "sched") && (
                 <>
+                  <QuickSend onPick={setCode} />
                   <label>Receiver&apos;s unique ID</label>
                   <div style={{ display: "flex", gap: 8 }}>
                     <input style={{ flex: 1 }} placeholder="10 letters / numbers" maxLength={10} autoCapitalize="off" autoCorrect="off" value={code} onChange={(e) => setCode(e.target.value.replace(/[^A-Za-z0-9]/g, ""))} />

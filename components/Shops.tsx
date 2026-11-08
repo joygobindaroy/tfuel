@@ -4,6 +4,7 @@ import { api, cachedApi, errText, fmtTf, fmtUsd, openLink, openTgLink, tg } from
 import Icon from "@/components/Icons";
 import Logo from "@/components/Logo";
 import { PageHead, Qr } from "@/components/Cashier";
+import { askConfirm, askText, askPin } from "@/components/Dialog";
 
 type Say = (t: string, ok?: boolean) => void;
 const when = (t: number) => new Date(t).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
@@ -111,7 +112,7 @@ export function ShopsPage({ say, onBack, cpt }: { say: Say; onBack: () => void; 
   const load = useCallback(() => { setFailS(false); cachedApi<any>("shop-user", { action: "list" }, setD).catch((e) => { setFailS(true); say(errText(e)); }); }, [say]);
   useEffect(() => { load(); }, [load]);
   const open = async (s: ShopRow) => {
-    if (!s.connected && !confirm(`Connect ${s.name}?\n\nThe shop will receive your Telegram name and ID so you're signed in automatically. It never sees your balance or PIN.`)) return;
+    if (!s.connected && !(await askConfirm(`Connect ${s.name}?`, { text: "The shop will receive your Telegram name and ID so you're signed in automatically. It never sees your balance or PIN.", ok: "Connect" }))) return;
     setBusy(s.id);
     try {
       const r = await api<any>("shop-user", { action: "launch", shop: s.id, consent: true });
@@ -120,7 +121,7 @@ export function ShopsPage({ say, onBack, cpt }: { say: Say; onBack: () => void; 
     } catch (e: any) { say(errText(e)); } finally { setBusy(""); }
   };
   const off = async (s: ShopRow) => {
-    if (!confirm(`Disconnect ${s.name}? You can reconnect any time.`)) return;
+    if (!(await askConfirm(`Disconnect ${s.name}?`, { text: "You can reconnect any time.", ok: "Disconnect" }))) return;
     setBusy(s.id);
     try { await api("shop-user", { action: "disconnect", shop: s.id }); say("Disconnected", true); load(); } catch (e: any) { say(errText(e)); } finally { setBusy(""); }
   };
@@ -159,7 +160,7 @@ export function ShopsPage({ say, onBack, cpt }: { say: Say; onBack: () => void; 
                   <div className="hist" key={x.id}>
                     <div style={{ minWidth: 0 }}><div className="title num">{fmtUsd(x.usd)} / {x.every} days</div><div className="sub">{x.shop}{x.title ? " · " + x.title : ""} · next {when(x.next)}{x.paused ? " · ⏸ paused" : ""}</div></div>
                     <div className="gap"><button className="btn sec sm" onClick={async () => { try { const r: any = await api("shop-user", { action: x.paused ? "sub_resume" : "sub_pause", id: x.id }); setSubs(r.items); say(x.paused ? "Resumed — next charge in about a day" : "Paused for up to 30 days", true); } catch (e: any) { say(errText(e)); } }}>{x.paused ? "Resume" : "Pause"}</button>
-                    <button className="btn danger sm" onClick={async () => { if (!confirm("Cancel this subscription?")) return; try { const r: any = await api("shop-user", { action: "sub_cancel", id: x.id }); setSubs(r.items); say("Cancelled", true); } catch (e: any) { say(errText(e)); } }}>Cancel</button></div>
+                    <button className="btn danger sm" onClick={async () => { if (!(await askConfirm("Cancel this subscription?", { ok: "Cancel it", cancel: "Keep it", danger: true }))) return; try { const r: any = await api("shop-user", { action: "sub_cancel", id: x.id }); setSubs(r.items); say("Cancelled", true); } catch (e: any) { say(errText(e)); } }}>Cancel</button></div>
                   </div>
                 ))}
               </div>

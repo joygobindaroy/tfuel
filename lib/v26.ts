@@ -20,7 +20,7 @@ const maskN = (n: string) => { const s = clean(n, 20); return s ? s.slice(0, 1) 
 const link = async (param: string) => { const b = (await getSettings()).referral_link; return b ? `${b.replace(/\?.*$/, "")}?startapp=${param}` : ""; };
 
 /* ───────── invoices ───────── */
-export async function invCreate(uid: string, title: any, amt: any, asset: any, days: any) {
+export async function invCreate(uid: string, title: any, amt: any, asset: any, days: any, dueDays: any = 0) {
   const t = clean(title, 60);
   const a = Math.round(Number(amt) * 1e6) / 1e6;
   if (t.length < 2) throw new HttpError(400, "Write what the payment is for.");
@@ -29,14 +29,16 @@ export async function invCreate(uid: string, title: any, amt: any, asset: any, d
   if (open >= 20) throw new HttpError(429, "You have too many open invoices. Cancel some first.");
   const id = crypto.randomBytes(5).toString("hex").slice(0, 8);
   const now = Date.now();
-  const rec = { uid, title: t, amt: a, asset: asset === "usdt" ? "usdt" : "tfuel", st: "open", at: now, exp: now + Math.max(1, Math.min(90, Math.floor(Number(days)) || 14)) * 864e5 };
+  const rec = { uid, title: t, amt: a, asset: asset === "usdt" ? "usdt" : "tfuel", st: "open", at: now, exp: now + Math.max(1, Math.min(90, Math.floor(Number(days)) || 14)) * 864e5 } as any;
+  const dd = Math.floor(Number(dueDays)) || 0;
+  if (dd > 0) rec.due = Math.min(rec.exp, now + Math.min(90, dd) * 864e5);
   await db().ref().update({ [`invoices/${id}`]: rec, [`user_invoices/${uid}/${id}`]: { ...rec } });
   return id;
 }
 export async function invList(uid: string) {
   const m = ((await val(`user_invoices/${uid}`)) || {}) as Record<string, any>;
   const now = Date.now();
-  const rows = await Promise.all(Object.entries(m).map(async ([id, v]) => { const live = (await val(`invoices/${id}`)) || v; return { id, ...live, st: live.st === "open" && live.exp < now ? "expired" : live.st, link: await link(`inv_${id}`) }; }));
+  const rows = await Promise.all(Object.entries(m).map(async ([id, v]) => { const live = (await val(`invoices/${id}`)) || v; return { id, ...live, st: live.st === "open" && live.exp < now ? "expired" : live.st, overdue: live.st === "open" && !!live.due && live.due < now && live.exp >= now, link: await link(`inv_${id}`) }; }));
   return rows.sort((a, b) => b.at - a.at).slice(0, 40);
 }
 export async function invCancel(uid: string, id: string) {

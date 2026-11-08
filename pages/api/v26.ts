@@ -12,7 +12,7 @@ export default route(async (req, res) => {
   const b = req.body || {};
   switch (a) {
     case "invList": return void res.json({ success: true, list: await invList(user.id) });
-    case "invNew": { const id = await invCreate(user.id, b.title, b.amt, b.asset, b.days); return void res.json({ success: true, id, list: await invList(user.id) }); }
+    case "invNew": { const id = await invCreate(user.id, b.title, b.amt, b.asset, b.days, b.due); return void res.json({ success: true, id, list: await invList(user.id) }); }
     case "invCancel": await invCancel(user.id, String(b.id || "")); return void res.json({ success: true, list: await invList(user.id) });
     case "invPub": return void res.json({ success: true, ...(await invPub(String(b.id || ""))) });
     case "tipp": return void res.json({ success: true, t: await tippGet(user.id), link: await tippLink(user.id) });

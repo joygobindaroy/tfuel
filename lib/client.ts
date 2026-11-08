@@ -345,3 +345,21 @@ export async function shareImage(url: string, name: string, text = "", pre?: Fil
   await saveImage(url, name);
   return "saved";
 }
+
+/** Copy text and tell the truth: true only when it really was copied (clipboard API first, old textarea trick second). */
+export async function copyText(text: string): Promise<boolean> {
+  try { if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(text); return true; } } catch { /* try the fallback */ }
+  try {
+    const t = document.createElement("textarea");
+    t.value = text; t.setAttribute("readonly", ""); t.style.cssText = "position:fixed;top:0;left:0;opacity:0";
+    document.body.appendChild(t); t.select(); t.setSelectionRange(0, text.length);
+    const ok = document.execCommand("copy");
+    t.remove();
+    return ok;
+  } catch { return false; }
+}
+const DIG: [number, number][] = [[0x09e6, 0x09ef], [0x0966, 0x096f], [0x0660, 0x0669], [0x06f0, 0x06f9]];
+/** Bangla / Hindi / Arabic digits → 0-9 (a Bangla keyboard types ১২৩ and number boxes would drop them) */
+export function normDigits(s: string): string {
+  return s.replace(/[\u0966-\u096f\u09e6-\u09ef\u0660-\u0669\u06f0-\u06f9]/g, (c) => { const n = c.charCodeAt(0); for (const [a, b] of DIG) if (n >= a && n <= b) return String(n - a); return c; });
+}

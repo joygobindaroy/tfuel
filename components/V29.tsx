@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, errText } from "@/lib/client";
 import Icon from "@/components/Icons";
+import { askConfirm, askText, askPin } from "@/components/Dialog";
 
 type Say = (m: string, ok?: boolean) => void;
 const money = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 2 });
@@ -14,7 +15,7 @@ export function VaultCard({ say, reload }: { say: Say; reload: () => void }) {
   useEffect(() => { api<any>("v29", { action: "vault" }).then((r) => setV(r.v)).catch(() => {}); }, []);
   if (!v || !v.on) return null;
   const lock = async () => {
-    const pin = window.prompt("Enter your PIN to lock this money (leave empty if you have no PIN)");
+    const pin = await askPin("Enter your PIN to lock this money");
     if (pin === null) return;
     setBusy(true);
     try { const r = await api<any>("v29", { action: "vaultLock", ...f, amount: Number(f.amount), days: Number(f.days), pin }); setV(r.v); setF({ ...f, amount: "" }); say("Locked", true); reload(); } catch (e) { say(errText(e)); } finally { setBusy(false); }
@@ -60,7 +61,7 @@ export function PanicCard({ say, reload }: { say: Say; reload: () => void }) {
       {!p.frozen && (
         <>
           <div className="sub">Lost your phone or think someone has access? Freeze your account in one tap. Nothing can leave until you unfreeze it.</div>
-          <button className="btn danger block" style={{ marginTop: 8 }} onClick={() => { if (window.confirm("Freeze your account now? You will need a recovery code (or your emergency contact / support) to unfreeze.")) run({ action: "panicOn" }, "Account frozen"); }}><Icon name="shield" size={15} /> Freeze my account now</button>
+          <button className="btn danger block" style={{ marginTop: 8 }} onClick={async () => { if (await askConfirm("Freeze your account now?", { text: "You will need a recovery code (or your emergency contact / support) to unfreeze.", ok: "Freeze", danger: true })) run({ action: "panicOn" }, "Account frozen"); }}><Icon name="shield" size={15} /> Freeze my account now</button>
         </>
       )}
       {p.frozen && p.self && (
@@ -78,7 +79,7 @@ export function PanicCard({ say, reload }: { say: Say; reload: () => void }) {
       ) : (
         <div className="gap" style={{ marginTop: 4 }}>
           <input style={{ flex: 1 }} placeholder="Their 10-letter ID" value={ec} onChange={(e) => setEc(e.target.value)} />
-          <button className="btn sm" disabled={ec.trim().length < 6} onClick={() => { const pin = window.prompt("Enter your PIN (leave empty if you have no PIN)"); if (pin !== null) run({ action: "emgSet", code: ec.trim(), pin }, "Saved"); }}>Save</button>
+          <button className="btn sm" disabled={ec.trim().length < 6} onClick={async () => { const pin = await askPin("Enter your PIN"); if (pin !== null) run({ action: "emgSet", code: ec.trim(), pin }, "Saved"); }}>Save</button>
         </div>
       )}
       <div className="xs muted">They can only confirm your unfreeze (24 h after you add them). They can't move your money.</div>

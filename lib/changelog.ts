@@ -1,5 +1,9 @@
 /** Short highlights shown in Admin → Controls → Version (full history is in CHANGELOG.md) */
 export const CHANGELOG_HIGHLIGHTS: { v: string; text: string }[] = [
+  { v: "31.3", text: "In-app PIN and confirm boxes, honest Copy button, Bangla digits accepted in number and PIN boxes, invoice QR says Scan to pay." },
+  { v: "31.2", text: "Merchant QR poster in 4 looks with shop name, Save and Share." },
+  { v: "31.1", text: "Paying a shop with its QR now shows the shop name instead of the owner's personal name." },
+  { v: "31.0", text: "Exchange fee tiers and Trusted limits, order chat, per-method hours, invoice due dates and reminders, My purchases, Quick send, My month recap, weekly digest, admin morning brief and orders CSV." },
   { v: "30.0", text: "Red packets, /tip in Telegram groups, shop items and coupons, exchange open hours, saved payout account, top traders, rate alerts, goal counts vault." },
   { v: "29.0", text: "Savings vault, panic button with recovery-code unfreeze, emergency contact, balance-above reminder, money summary by tag, referral contest, admin team notes and exchange rate history." },
   { v: "28.0", text: "Automatic exchange rate with margins, copy and QR for payment details, report a problem on an order, /rate and /orders in the bot, undo window for transfers, merchant refunds, money summary, admin to-do list and exchange report." },

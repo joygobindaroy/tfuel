@@ -7,7 +7,7 @@ import { tgCall } from "./telegram";
 import { appBase } from "./mailtpl";
 import { rcptStyleOf } from "./styles";
 import { getRefCode } from "./refcode";
-import { amtStr, displayName, maskName, Asset } from "./transfer";
+import { amtStr, displayName, payName, maskName, Asset } from "./transfer";
 
 /** Receipts for user-to-user transfers: a signed page (print / save as PDF), a signed PNG, an email button and an automatic bot message. */
 const key = () => crypto.createHash("sha256").update("card:" + (process.env.BOT_TOKEN || "dev")).digest("hex");
@@ -47,7 +47,7 @@ async function loadReceiptRaw(txid: string, uid: string): Promise<RView> {
   if (!t || (t.from !== uid && t.to !== uid)) throw new HttpError(404, "not_found");
   const out = t.from === uid;
   const peer = out ? t.to : t.from;
-  const nm = await displayName(peer);
+  const nm = out ? await payName(peer) : await displayName(peer);
   return { txid: tid, at: t.at, asset: t.asset || "tfuel", amount: t.amount, fee: out ? t.fee : 0, dir: out ? "out" : "in", other: out ? nm : maskName(nm), otherCode: await getRefCode(peer).catch(() => ""), note: String(t.note || ""), held };
 }
 

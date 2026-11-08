@@ -10,12 +10,12 @@ type Say = (m: string, ok?: boolean) => void;
 /** Settings: make a payment link for something (invoice) and see if it was paid */
 export function InvoicesCard({ say, cpt }: { say: Say; cpt: number }) {
   const [list, setList] = useState<any[]>([]);
-  const [f, setF] = useState({ title: "", amt: "", asset: "tfuel", days: "14" });
+  const [f, setF] = useState({ title: "", amt: "", asset: "tfuel", days: "14", due: "" });
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [qr, setQr] = useState("");
   useEffect(() => { api<any>("v26", { action: "invList" }).then((r) => setList(r.list || [])).catch(() => {}); }, []);
-  const make = async () => { setBusy(true); try { const r = await api<any>("v26", { action: "invNew", title: f.title, amt: Number(f.amt), asset: f.asset, days: Number(f.days) }); setList(r.list); setOpen(false); setF({ ...f, title: "", amt: "" }); say("Invoice link ready", true); } catch (e) { say(errText(e)); } finally { setBusy(false); } };
+  const make = async () => { setBusy(true); try { const r = await api<any>("v26", { action: "invNew", title: f.title, amt: Number(f.amt), asset: f.asset, days: Number(f.days), due: Number(f.due) || 0 }); setList(r.list); setOpen(false); setF({ ...f, title: "", amt: "" }); say("Invoice link ready", true); } catch (e) { say(errText(e)); } finally { setBusy(false); } };
   const cancel = async (id: string) => { try { const r = await api<any>("v26", { action: "invCancel", id }); setList(r.list); } catch (e) { say(errText(e)); } };
   const pill = (s: string) => <span className={`pill ${s === "paid" ? "ok" : s === "open" ? "info" : ""}`}>{s}</span>;
   return (
@@ -29,6 +29,8 @@ export function InvoicesCard({ say, cpt }: { say: Say; cpt: number }) {
             <input inputMode="decimal" placeholder="Amount" value={f.amt} onChange={(e) => setF({ ...f, amt: e.target.value })} />
             <select value={f.asset} onChange={(e) => setF({ ...f, asset: e.target.value })}><option value="tfuel">TFUEL</option><option value="usdt">USDT</option></select>
           </div>
+          <label style={{ marginTop: 8 }}>Due in (days, optional — you get reminders)</label>
+          <input inputMode="numeric" value={f.due} onChange={(e) => setF({ ...f, due: e.target.value.replace(/\D/g, "") })} />
           <label style={{ marginTop: 8 }}>Valid for (days)</label>
           <input inputMode="numeric" value={f.days} onChange={(e) => setF({ ...f, days: e.target.value.replace(/\D/g, "") })} />
           <button className="btn block" style={{ marginTop: 8 }} disabled={busy || f.title.trim().length < 2 || !(Number(f.amt) > 0)} onClick={make}>Create link</button>
@@ -36,7 +38,7 @@ export function InvoicesCard({ say, cpt }: { say: Say; cpt: number }) {
       )}
       {list.map((x) => (
         <div key={x.id} style={{ borderTop: "1px solid var(--line, #e5e7eb)", marginTop: 10, paddingTop: 8 }}>
-          <div className="row"><b>{x.title}</b>{pill(x.st)}</div>
+          <div className="row"><b>{x.title}</b>{x.overdue ? <span className="pill">overdue</span> : pill(x.st)}</div>
           <div className="xs muted">{x.asset === "usdt" ? `${x.amt} USDT` : `${x.amt} TFUEL`} · {new Date(x.at).toLocaleDateString()}{x.paid ? ` · paid by ${x.paid.by}` : ""}</div>
           {x.st === "open" && x.link && (
             <div className="gap" style={{ marginTop: 6 }}>
@@ -47,7 +49,7 @@ export function InvoicesCard({ say, cpt }: { say: Say; cpt: number }) {
           )}
         </div>
       ))}
-      {qr && <QrSheet link={qr} onClose={() => setQr("")} />}
+      {qr && <QrSheet link={qr} title="Scan to pay" onClose={() => setQr("")} />}
     </div>
   );
 }

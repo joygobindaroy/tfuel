@@ -14,6 +14,7 @@ import { xCalc } from "./xcalc";
 import { xOpen, xTopAdd, xoKb } from "./v30";
 import { U } from "./market";
 import { appBase } from "./mailtpl";
+import { tierFor, feeAfter, dailyLimit, methodOpen } from "./v31";
 
 /** USD → local money from a free public source (cached 1 h); falls back to the rate typed by the admin */
 let FXC: { cur: string; r: number; at: number } | null = null;
@@ -55,7 +56,7 @@ const LABEL: Record<string, string> = { await: "Waiting for your payment", pendi
 export const methodFor = (c: Xchg, id: string, kind: "buy" | "sell") => c.methods.find((m) => m.id === id && (m.kind === "both" || m.kind === kind));
 const pubCfg = (c: Xchg) => ({
   on: c.on, buy_on: c.buy_on && c.rate_buy > 0, sell_on: c.sell_on && c.rate_sell > 0, cur: c.cur, rate_buy: c.rate_buy, rate_sell: c.rate_sell, lock_min: c.lock_min, terms: c.terms,
-  methods: c.methods.map((m) => ({ id: m.id, name: m.name, kind: m.kind, min: m.min, max: m.max, fee_pct: m.fee_pct })),
+  methods: c.methods.map((m) => { const h = methodOpen(c, m); return { id: m.id, name: m.name, kind: m.kind, min: m.min, max: m.max, fee_pct: m.fee_pct, open: h.open, h_text: h.text }; }),
 });
 /** approximate local value shown next to USDT balances (display only) */
 export async function xLocal() {
@@ -91,20 +92,23 @@ export async function xView(uid: string) {
   const orders = (await Promise.all(ids.map(async (id) => { const o = (await val(`xorders/${id}`)) as XOrder | null; return o ? orderView(id, o, c, true, stats.trusted) : null; }))).filter(Boolean);
   const dayU = Number(await val(`xchg_daily/${uid}/${dayKey()}`)) || 0;
   const accts = ((await val(`user_prefs/${uid}/xacct`)) || {}) as Record<string, string>;
-  return { cfg: { ...pubCfg(c), hours: xOpen(c) }, accts, stats, orders, daily_left: c.daily_max_usdt > 0 ? Math.max(0, r2(c.daily_max_usdt - dayU / U)) : null };
+  const lim = dailyLimit(c, stats.trusted);
+  return { cfg: { ...pubCfg(c), hours: xOpen(c) }, accts, stats, tier: await tierFor(uid), orders, daily_left: lim > 0 ? Math.max(0, r2(lim - dayU / U)) : null, daily_max: lim };
 }
 
 /* ───────── quote with rate lock ───────── */
-function priceFor(c: Xchg, kind: "buy" | "sell", usdt: number, m: XMethod) {
+function priceFor(c: Xchg, kind: "buy" | "sell", usdt: number, m: XMethod, off = 0) {
   const rate = kind === "buy" ? c.rate_buy : c.rate_sell;
   if (!(rate > 0)) throw new HttpError(409, "Exchange rate isn't set yet. Please try later.");
-  const x = xCalc({ kind, usdt, rate, fee_pct: m.fee_pct });
+  const x = xCalc({ kind, usdt, rate, fee_pct: feeAfter(m.fee_pct, off) });
   return { rate, ...x };
 }
 function checkAmt(c: Xchg, m: XMethod, usdt: number) {
   if (!(usdt > 0)) throw new HttpError(400, "Enter an amount.");
   if (usdt < m.min) throw new HttpError(400, `Minimum for ${m.name} is ${m.min} USDT.`);
   if (m.max > 0 && usdt > m.max) throw new HttpError(400, `Maximum for ${m.name} is ${m.max} USDT.`);
+  const mh = methodOpen(c, m);
+  if (!mh.open) throw new HttpError(403, `feature_off:${mh.text} Try another method or come back later.`);
 }
 function enabled(c: Xchg, kind: "buy" | "sell") {
   if (!c.on) throw new HttpError(403, "feature_off:Exchange is turned off.");
@@ -120,10 +124,11 @@ export async function xQuote(uid: string, b: any) {
   if (!m) throw new HttpError(400, "Pick a payment method.");
   const usdt = Math.round(Number(b?.usdt) * 100) / 100;
   checkAmt(c, m, usdt);
-  const p = priceFor(c, kind, usdt, m);
+  const tier = await tierFor(uid);
+  const p = priceFor(c, kind, usdt, m, tier.off);
   const exp = Date.now() + c.lock_min * 60000;
   const payload = [kind, m.id, Math.round(usdt * U), p.rate, p.fiat, p.fee, exp].join(":");
-  return { token: `${payload}:${sig(`xq|${uid}|${payload}`)}`, exp, kind, method: m.id, mname: m.name, usdt, rate: p.rate, fiat: p.fiat, fee_fiat: p.fee, cur: c.cur };
+  return { token: `${payload}:${sig(`xq|${uid}|${payload}`)}`, exp, kind, method: m.id, mname: m.name, usdt, rate: p.rate, fiat: p.fiat, fee_fiat: p.fee, cur: c.cur, off: tier.off };
 }
 function readToken(uid: string, token: string) {
   const a = String(token || "").split(":");
@@ -162,7 +167,8 @@ export async function xPlace(uid: string, name: string, b: any) {
   // daily cap (reserve first, undo on failure)
   const dref = db().ref(`xchg_daily/${uid}/${dayKey()}`);
   let over = false;
-  await dref.transaction((cur: number | null) => { over = false; const n = (cur || 0) + q.usdt_u; if (c.daily_max_usdt > 0 && n > Math.round(c.daily_max_usdt * U)) { over = true; return; } return n; });
+  const lim = dailyLimit(c, (await xStats(uid)).trusted);
+  await dref.transaction((cur: number | null) => { over = false; const n = (cur || 0) + q.usdt_u; if (lim > 0 && n > Math.round(lim * U)) { over = true; return; } return n; });
   if (over) throw new HttpError(429, "Daily Exchange limit reached. Try again tomorrow.");
   const undo = () => dref.transaction((cur: number | null) => Math.max(0, (cur || 0) - q.usdt_u)).catch(() => {});
   const id = sortableId();

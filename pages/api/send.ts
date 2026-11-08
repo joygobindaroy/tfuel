@@ -7,7 +7,7 @@ import { ensureUser, MAX_AUTH_AGE_MONEY } from "@/lib/user";
 import { checkPin } from "@/lib/prefs";
 import { requireEmailCode, getEmail, sendCode, checkCode } from "@/lib/emailcode";
 import { getRefCode } from "@/lib/refcode";
-import { sendAsset, sendQuota, displayName, Asset, feeFor, minFor, cancelHold, amtStr } from "@/lib/transfer";
+import { sendAsset, sendQuota, displayName, payName, Asset, feeFor, minFor, cancelHold, amtStr } from "@/lib/transfer";
 import { assertCanMoveMoney } from "@/lib/freeze";
 import { secLog } from "@/lib/seclog";
 import { reqCtx } from "@/lib/reqctx";
@@ -36,7 +36,7 @@ export default route(async (req, res) => {
     if (typeof uid !== "string" || uid === user.id) throw new HttpError(404, "send_no_user");
     const nm = (await db().ref(`users/${uid}/name`).get()).val();
     if (nm === null) throw new HttpError(404, "send_no_user");
-    return { uid, name: await displayName(uid) };
+    return { uid, name: await payName(uid) };
   };
   const maskEmail = (e: string) => { const [a, d] = e.split("@"); return `${a.slice(0, 2)}•••@${d}`; };
   const unit = (a: Asset) => (a === "usdt" ? 1e6 : cpt);
@@ -189,7 +189,7 @@ export default route(async (req, res) => {
     const t = id ? (await db().ref(`transfers/${id}`).get()).val() : null;
     if (!t || (t.from !== user.id && t.to !== user.id)) throw new HttpError(404, "not_found");
     const mine = t.from === user.id;
-    return void res.json({ success: true, receipt: { txid: tid, at: t.at, asset: t.asset || "tfuel", amount: t.amount, fee: mine ? t.fee : 0, dir: mine ? "out" : "in", other: mine ? await displayName(t.to) : (await displayName(t.from)).replace(/^(.).*(.)$/, "$1•••$2"), note: t.note || "" } });
+    return void res.json({ success: true, receipt: { txid: tid, at: t.at, asset: t.asset || "tfuel", amount: t.amount, fee: mine ? t.fee : 0, dir: mine ? "out" : "in", other: mine ? await payName(t.to) : (await displayName(t.from)).replace(/^(.).*(.)$/, "$1•••$2"), note: t.note || "" } });
   }
 
   if (action === "receipt_link" || action === "receipt_bot") {

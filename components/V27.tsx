@@ -4,6 +4,8 @@ import { AmtInput, CopyBtn } from "@/components/Ui";
 import { PageHead } from "@/components/Cashier";
 import { xCalc, xUsdtFor } from "@/lib/xcalc";
 import Icon from "@/components/Icons";
+import { OrderChat } from "@/components/V31";
+import { askConfirm, askText, askPin } from "@/components/Dialog";
 
 type Say = (m: string, ok?: boolean) => void;
 const money = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 2 });
@@ -108,7 +110,8 @@ export function ExchangePage({ say, onBack, price, reload }: { say: Say; onBack:
             <div className="row"><div><div className="sub" style={{ margin: 0 }}>Buy 1 USDT</div><b className="num">{c.rate_buy > 0 ? `${money(c.rate_buy)} ${c.cur}` : "—"}</b></div><div style={{ textAlign: "right" }}><div className="sub" style={{ margin: 0 }}>Sell 1 USDT</div><b className="num">{c.rate_sell > 0 ? `${money(c.rate_sell)} ${c.cur}` : "—"}</b></div></div>
             {v.stats.trusted && <div className="pill ok" style={{ marginTop: 8, display: "inline-flex", gap: 4 }}><Icon name="star" size={12} /> Trusted trader</div>}
             {!v.stats.trusted && <div className="xs muted" style={{ marginTop: 6 }}>{v.stats.done} completed order{v.stats.done === 1 ? "" : "s"} — keep going to earn the Trusted badge.</div>}
-            {v.daily_left !== null && <div className="xs muted">You can still exchange up to {money(v.daily_left)} USDT today.</div>}
+            {v.daily_left !== null && <div className="xs muted">You can still exchange up to {money(v.daily_left)} USDT today{v.stats.trusted && v.daily_max > 0 ? ` (Trusted limit ${money(v.daily_max)})` : ""}.</div>}
+            {v.tier?.on && <div className="xs muted" style={{ marginTop: 4 }}>{v.tier.off > 0 ? `Fee discount ${v.tier.off}% (volume ${money(v.tier.vol)} USDT). ` : `Volume ${money(v.tier.vol)} USDT. `}{v.tier.next ? `Trade ${money(Math.max(0, v.tier.next.vol - v.tier.vol))} USDT more for ${v.tier.next.off}% off.` : ""}</div>}
           </div>
           <div className="chips" style={{ margin: "8px 0" }}>
             {([["calc", "Calculator"], ["buy", "Buy"], ["sell", "Sell"], ["orders", `My orders${v.orders.length ? ` (${v.orders.length})` : ""}`], ["top", "Top traders"]] as const).map(([k, t]) => <button key={k} className={`chip ${tab === k ? "on" : ""}`} onClick={() => setTab(k)}>{t}</button>)}
@@ -204,7 +207,8 @@ function Trade({ kind, c, accts, say, done }: { kind: "buy" | "sell"; c: any; ac
   return (
     <div className="card">
       <label>Payment method</label>
-      <select value={mid} onChange={(e) => { setMid(e.target.value); setQ(null); if (kind === "sell") setAcct(accts[e.target.value] || ""); }}>{ms.map((x: any) => <option key={x.id} value={x.id}>{x.name} · {x.min}–{x.max} USDT · fee {x.fee_pct}%</option>)}</select>
+      <select value={mid} onChange={(e) => { setMid(e.target.value); setQ(null); if (kind === "sell") setAcct(accts[e.target.value] || ""); }}>{ms.map((x: any) => <option key={x.id} value={x.id}>{x.name} · {x.min}–{x.max} USDT · fee {x.fee_pct}%{x.open === false ? " · closed now" : ""}</option>)}</select>
+      {m?.open === false && <div className="banner warn" style={{ marginTop: 6 }}><Icon name="clock" size={18} /><span>{m.h_text}</span></div>}
       <label>USDT amount</label>
       <AmtInput value={usdt} onChange={(x) => { setUsdt(x); setQ(null); }} max={2} placeholder={m ? `${m.min} – ${m.max}` : ""} />
       {kind === "sell" && <><label>Where should we pay you? (account / wallet)</label><input maxLength={120} value={acct} onChange={(e) => setAcct(e.target.value)} placeholder="e.g. bKash 01XXXXXXXXX" /></>}
@@ -212,7 +216,7 @@ function Trade({ kind, c, accts, say, done }: { kind: "buy" | "sell"; c: any; ac
       {q && (
         <div style={{ marginTop: 10 }}>
           <div className="sumrow"><span className="muted">Rate</span><b className="num">{money(q.rate)} {q.cur}</b></div>
-          <div className="sumrow"><span className="muted">Fee</span><b className="num">{money(q.fee_fiat)} {q.cur}</b></div>
+          <div className="sumrow"><span className="muted">Fee{q.off > 0 ? ` (${q.off}% off)` : ""}</span><b className="num">{money(q.fee_fiat)} {q.cur}</b></div>
           <div className="sumrow"><span className="muted">{kind === "buy" ? "You pay" : "You get"}</span><b className="num">{money(q.fiat)} {q.cur}</b></div>
           <div className="xs muted" style={{ margin: "6px 0" }}>Price locked for <Left at={q.exp} />. {kind === "sell" ? "Your USDT is held when you place the order and returned if it is rejected or cancelled." : "After placing, you get the payment details and a short time to pay."}</div>
           <button className="btn block" disabled={busy || (kind === "sell" && acct.trim().length < 4)} onClick={place}>{kind === "buy" ? "Place buy order" : "Place sell order"}</button>
@@ -248,7 +252,8 @@ function Orders({ v, say, reload }: { v: any; say: Say; reload: () => void }) {
               <button className="btn block" style={{ marginTop: 6 }} disabled={(ref[o.id] || "").trim().length < 4} onClick={() => act("proof", o.id)}>I have paid</button>
             </div>
           )}
-          {o.st !== "await" && <button className="btn sec sm" style={{ marginTop: 8, marginRight: 8 }} onClick={async () => { const t = window.prompt("What is the problem? (support will see this order too)"); if (t === null) return; try { await api<any>("v27", { action: "dispute", id: o.id, text: t }); say("Reported. Support will reply in your tickets.", true); reload(); } catch (e) { say(errText(e)); } }}>Report a problem</button>}
+          <OrderChat id={o.id} say={say} />
+          {o.st !== "await" && <button className="btn sec sm" style={{ marginTop: 8, marginRight: 8 }} onClick={async () => { const t = await askText("What is the problem?", { text: "Support will see this order too.", ok: "Send" }); if (t === null) return; try { await api<any>("v27", { action: "dispute", id: o.id, text: t }); say("Reported. Support will reply in your tickets.", true); reload(); } catch (e) { say(errText(e)); } }}>Report a problem</button>}
           {(o.st === "await" || o.st === "pending") && <button className="btn danger sm" style={{ marginTop: 8 }} onClick={() => act("cancel", o.id)}>Cancel order</button>}
           {o.st === "done" && o.img && (
             <>

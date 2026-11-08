@@ -69,6 +69,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     await v30.runXAlerts().catch((e) => logErr("cron:xalerts", e));
     await v29.runWinback().catch((e) => logErr("cron:winback", e));
     await v29.xRecord().catch((e) => logErr("cron:xrates", e));
+    const v31 = await import("@/lib/v31");
+    await v31.runInvReminders().catch((e) => logErr("cron:invrem", e));
+    await v31.runDigests().catch((e) => logErr("cron:digests", e));
+    await v31.runAdminBrief().catch((e) => logErr("cron:brief", e));
     await errTrim().catch(() => {});
     const adminJobs = await runAdminJobs(s).catch((e) => logErr("cron:adminJobs", e));
     await db().ref("stats/cron_at").set(Date.now()).catch(() => {});

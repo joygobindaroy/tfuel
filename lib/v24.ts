@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { ServerValue } from "firebase-admin/database";
 import { db } from "./firebase";
 import { HttpError } from "./auth";
@@ -38,14 +39,23 @@ export async function merchantLink(uid: string) {
   const base = (await getSettings()).referral_link;
   return base ? `${base.replace(/\?.*$/, "")}?startapp=mer_${await getRefCode(uid)}` : "";
 }
+/** Signed picture of the shop's payment poster; the look (dark, light, neon, gold) is added by the app */
+export function merchantPosterUrl(name: string, link: string) {
+  const n = clean(name, 30);
+  const s = crypto.createHmac("sha256", crypto.createHash("sha256").update("card:" + (process.env.BOT_TOKEN || "dev")).digest("hex")).update(`sq|${n}|${link}`).digest("hex").slice(0, 20);
+  return link && n ? `/api/shopqr?n=${encodeURIComponent(n)}&d=${encodeURIComponent(link)}&s=${s}` : "";
+}
 /** Called after every completed transfer: if the receiver is an open merchant, record a sale */
 export async function merchantSale(toUid: string, fromName: string, asset: "tfuel" | "usdt", amount: number, txid: string, note: string, fromUid = "") {
   const m = await val(`merchants/${toUid}/on`);
   if (!m) return;
   const day = dayKey();
   const cpn = await import("./v30").then((M) => M.cpnApplied(toUid, note)).catch(() => "");
+  const sid = sortableId();
+  const shop = String((await val(`merchants/${toUid}/name`)) || "Shop");
   await db().ref().update({
-    [`merchant_sales/${toUid}/${sortableId()}`]: { at: Date.now(), a: asset, amt: amount, who: clean(fromName, 20).replace(/^(.).*$/, (s) => s.slice(0, 1) + "***" + (s.length > 4 ? s.slice(-1) : "")), tx: txid, n: clean(note, 40), ...(fromUid ? { fu: fromUid } : {}), ...(cpn ? { cpn } : {}) },
+    ...(fromUid ? { [`user_purchases/${fromUid}/${sid}`]: { at: Date.now(), a: asset, amt: amount, s: clean(shop, 30), n: clean(note, 40), tx: txid } } : {}),
+    [`merchant_sales/${toUid}/${sid}`]: { at: Date.now(), a: asset, amt: amount, who: clean(fromName, 20).replace(/^(.).*$/, (s) => s.slice(0, 1) + "***" + (s.length > 4 ? s.slice(-1) : "")), tx: txid, n: clean(note, 40), ...(fromUid ? { fu: fromUid } : {}), ...(cpn ? { cpn } : {}) },
     [`merchant_tot/${toUid}/${day}/${asset}`]: ServerValue.increment(amount),
     [`merchant_tot/${toUid}/${day}/n`]: ServerValue.increment(1),
     [`merchant_tot/${toUid}/all/${asset}`]: ServerValue.increment(amount),

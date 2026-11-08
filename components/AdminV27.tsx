@@ -5,7 +5,24 @@ const when = (t: number) => (t ? new Date(t).toLocaleString() : "—");
 const m2 = (n: number) => (Number(n) || 0).toLocaleString("en-US", { maximumFractionDigits: 2 });
 
 /** Admin → Exchange: buy/sell queue + one-page user summary */
+function AdminChat({ id, call }: { id: string; call: Call }) {
+  const [open, setOpen] = useState(false);
+  const [msgs, setMsgs] = useState<any[]>([]);
+  const [t, setT] = useState("");
+  useEffect(() => { if (open) call<any>({ action: "v27Chat", id }).then((r) => r && setMsgs(r.msgs)); }, [open]); // eslint-disable-line
+  const send = async () => { const r = await call<any>({ action: "v27ChatSend", id, text: t }, "Sent"); if (r) { setMsgs(r.msgs); setT(""); } };
+  if (!open) return <button className="btn sec sm" onClick={() => setOpen(true)}>Chat</button>;
+  return (
+    <div style={{ width: "100%" }}>
+      {msgs.map((m, i) => <div key={i} className="xs" style={{ margin: "4px 0" }}><b>{m.f === "a" ? "You" : "User"}:</b> {m.t}</div>)}
+      <div style={{ display: "flex", gap: 6 }}><input style={{ flex: 1 }} maxLength={300} value={t} onChange={(e) => setT(e.target.value)} placeholder="Reply to the user" /><button className="btn sm" disabled={!t.trim()} onClick={send}>Send</button></div>
+    </div>
+  );
+}
 export default function AdminV27({ call }: { call: Call }) {
+  const [wait, setWait] = useState<string[]>([]);
+  useEffect(() => { call<any>({ action: "v27Waiting" }).then((r) => r && setWait(r.ids || [])); }, [call]);
+  const exportCsv = async () => { const r = await call<any>({ action: "v27Csv", days: 90 }); if (!r) return; const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([r.csv], { type: "text/csv" })); a.download = "exchange-orders.csv"; a.click(); };
   const [view, setView] = useState("open");
   const [list, setList] = useState<any[]>([]);
   const [q, setQ] = useState("");
@@ -32,7 +49,7 @@ export default function AdminV27({ call }: { call: Call }) {
   return (
     <>
       {rt && <div className="card"><div className="sub" style={{ margin: 0 }}>Rates users see now{rt.auto ? " (automatic)" : ""}: buy <b>{m2(rt.rate_buy)}</b> · sell <b>{m2(rt.rate_sell)}</b> {rt.cur}. Change them in Growth → Exchange.</div></div>}
-      <div className="mhead">Exchange orders</div>
+      <div className="mhead">Exchange orders <button className="btn sec sm" style={{ marginLeft: 8 }} onClick={exportCsv}>Export CSV (90 days)</button></div>
       <div className="chips" style={{ margin: "6px 0" }}>{["open", "done", "rejected", "all"].map((s) => <button key={s} className={`chip ${view === s ? "on" : ""}`} onClick={() => setView(s)}>{s}</button>)}</div>
       <div className="card">
         {!list.length && <div className="sub">No orders.</div>}
@@ -44,6 +61,8 @@ export default function AdminV27({ call }: { call: Call }) {
             {o.kind === "sell" && o.acct && <div className="xs">Pay to: <b>{o.acct}</b></div>}
             {o.kind === "buy" && o.st === "await" && <div className="xs muted">Waiting for the user to pay (until {when(o.lock_until)})</div>}
             <div className="gap" style={{ marginTop: 6 }}>
+              {wait.includes(o.id) && <span className="pill">user wrote</span>}
+              <AdminChat id={o.id} call={call} />
               {o.kind === "sell" && o.st === "pending" && <button className="btn sec sm" onClick={() => set(o.id, "paying")}>I am paying</button>}
               {(o.st === "pending" || o.st === "paying") && <button className="btn sm" onClick={() => set(o.id, "done")}>Mark done</button>}
               {["await", "pending", "paying"].includes(o.st) && <button className="btn danger sm" onClick={() => set(o.id, "reject")}>Reject</button>}

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { CopyBtn, Empty, ConfirmSheet, SkelList, AmtInput, OfflineBar, usePullRefresh, PullIndicator, confetti } from "@/components/Ui";
-import { api, cachedApi, errText, fmtTf, fmtUsd, openLink, openTgLink, tg, haptic, tick, getUi } from "@/lib/client";
+import { api, cachedApi, errText, fmtTf, fmtUsd, openLink, openTgLink, tg, haptic, tick, getUi, copyText } from "@/lib/client";
 import { ReceiptSheet, NextReward } from "@/components/Extras";
 import { ClanPage, RigsPage, PuzzlePage, CollectPage } from "@/components/Games";
 import { MiniPage, VipPage } from "@/components/Mini";
@@ -21,6 +21,7 @@ import { IdleGuard, PrefsCard, QuickBar } from "@/components/Prefs";
 import { TipPageBanner } from "@/components/V26";
 import { VaultCard, PanicCard } from "@/components/V29";
 import { PacketPage, PacketSheet, CatalogEditor } from "@/components/V30";
+import { PurchasesPage, RecapCard } from "@/components/V31";
 import { ExchangePage, PendingPage, LowBalCard, SpendingCard, setXl } from "@/components/V27";
 import { InvoicesCard, TipPageCard, LearnCard, RecoveryCard, KycCard, ScheduleCard, ThemeSchedule } from "@/components/V26";
 import { ComboCard, LifeCard, LimitsCard } from "@/components/V25";
@@ -705,7 +706,7 @@ function Tasks({ me, cpt, say, reload }: { me: Me; cpt: number; say: Say; reload
 }
 
 /** Profile: balance in TFUEL + USDT value, shortcuts, optional legacy payout methods, history */
-type Page = null | "rewards" | "send" | "deposit" | "deposits" | "withdraw" | "payouts" | "assets" | "history" | "settings" | "other" | "shops" | "support" | "invite" | "clan" | "rigs" | "puzzle" | "mini" | "vip" | "collect" | "report" | "cosmetics" | "ads" | "perks" | "exchange" | "pending" | "packet";
+type Page = null | "rewards" | "send" | "deposit" | "deposits" | "withdraw" | "payouts" | "assets" | "history" | "settings" | "other" | "shops" | "support" | "invite" | "clan" | "rigs" | "puzzle" | "mini" | "vip" | "collect" | "report" | "cosmetics" | "ads" | "perks" | "exchange" | "pending" | "packet" | "purchases";
 
 function Profile({ initPage, me, cpt, balance, go, say, reload, onCur }: { initPage?: Page; me: Me; cpt: number; balance: number; go: (t: Tab, sub?: string) => void; say: Say; reload: () => void; onCur: (c: "tfuel" | "usdt") => void }) {
   const [page, setPage] = useState<Page>(initPage || null);
@@ -731,6 +732,7 @@ function Profile({ initPage, me, cpt, balance, go, say, reload, onCur }: { initP
   if (page === "perks") return <PerksPage eng={me.eng} say={say} onBack={back} cpt={cpt} reload={refresh} />;
   if (page === "exchange") return <ExchangePage say={say} onBack={back} price={me.price || 0} reload={refresh} />;
   if (page === "packet") return <PacketPage say={say} onBack={back} cpt={cpt ?? 1000} reload={refresh} />;
+  if (page === "purchases") return <PurchasesPage say={say} onBack={back} />;
   if (page === "pending") return <PendingPage say={say} onBack={back} />;
   if (page === "ads") return <AdsPage say={say} onBack={back} reload={refresh} />;
   if (page === "cosmetics") return <CosmeticsPage say={say} onBack={back} cpt={cpt} reload={refresh} />;
@@ -770,7 +772,7 @@ function Profile({ initPage, me, cpt, balance, go, say, reload, onCur }: { initP
     <>
       <div className="section">
         <h2 style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{me.user.name || "Profile"}</h2>
-        <button type="button" className="pill" aria-label="Copy my unique ID" style={{ display: "inline-flex", alignItems: "center", gap: 5 }} onClick={() => { try { navigator.clipboard.writeText(me.user.code || ""); say("Your unique ID was copied", true); } catch {} }}>ID {me.user.code || "…"} <Icon name="copy" size={12} /></button>
+        <button type="button" className="pill" aria-label="Copy my unique ID" style={{ display: "inline-flex", alignItems: "center", gap: 5 }} onClick={() => { copyText(me.user.code || "").then((ok) => say(ok ? "Your unique ID was copied" : "Could not copy. Hold the ID to copy it.", ok)); }}>ID {me.user.code || "…"} <Icon name="copy" size={12} /></button>
         <LevelPill ret={me.ret} />
       </div>
 
@@ -819,6 +821,7 @@ function Profile({ initPage, me, cpt, balance, go, say, reload, onCur }: { initP
         <Row icon="wallet" t="Portfolio & assets" s="Balances, value and where your TFUEL came from" onClick={() => nav("assets")} />
         {me.xl && <Row icon="wallet" t="Exchange" s="Buy or sell USDT for local money, with a calculator" onClick={() => nav("exchange")} />}
         <Row icon="gift" t="Red packet" s="Share one amount with several friends" onClick={() => nav("packet")} />
+        <Row icon="receipt" t="My purchases" s="Everything you paid to shops, with receipts" onClick={() => nav("purchases")} />
         <Row icon="clock" t="Pending items" s="What is waiting, and why" onClick={() => nav("pending")} />
         <Row icon="clock" t="Transaction history" s="Everything that moved in your wallet" onClick={() => nav("history")} />
         {me.cfg.send && <Row icon="send" t="Send TFUEL" s="Send to a friend with their transfer code" onClick={() => nav("send")} />}
@@ -909,7 +912,7 @@ function SettingsPage({ say, onBack, userId, onCur, brand, cpt, reload }: { say:
     <>
       <PageHead title="Settings" onBack={onBack} />
       <SettingsPanel say={say} onCur={onCur} notify={<NotifyToggle />} account={
-        <><InviteCard say={say} /><LooksCard say={say} part="rcpt" /><PrefsCard say={say} /><BioCard say={say} /><TipPageCard say={say} /><InvoicesCard say={say} cpt={cpt ?? 1000} /><KycCard say={say} /><SpendingCard cpt={cpt ?? 1000} /><VaultCard say={say} reload={reload} /><LowBalCard say={say} /><RecoveryCard say={say} /><PanicCard say={say} reload={reload} /><ScheduleCard /><LifeCard say={say} /><LimitsCard say={say} /><MerchantCard say={say} cpt={cpt ?? 1000} /><CatalogEditor say={say} /><V22Settings say={say} /><AccountTools say={say} /><BrandLinks pages={brand?.pages || []} contact={brand?.contact || null} /><div className="row" style={{ marginTop: 14 }}>
+        <><InviteCard say={say} /><LooksCard say={say} part="rcpt" /><PrefsCard say={say} /><BioCard say={say} /><TipPageCard say={say} /><InvoicesCard say={say} cpt={cpt ?? 1000} /><KycCard say={say} /><RecapCard say={say} /><SpendingCard cpt={cpt ?? 1000} /><VaultCard say={say} reload={reload} /><LowBalCard say={say} /><RecoveryCard say={say} /><PanicCard say={say} reload={reload} /><ScheduleCard /><LifeCard say={say} /><LimitsCard say={say} /><MerchantCard say={say} cpt={cpt ?? 1000} /><CatalogEditor say={say} /><V22Settings say={say} /><AccountTools say={say} /><BrandLinks pages={brand?.pages || []} contact={brand?.contact || null} /><div className="row" style={{ marginTop: 14 }}>
           <div><div className="title">Your ID</div><div className="sub num">{userId}</div></div>
           <CopyBtn text={userId} />
         </div></>
